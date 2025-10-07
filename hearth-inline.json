@@ -1,0 +1,16 @@
+{
+  "Version":"2012-10-17",
+  "Statement":[
+    {"Effect":"Allow","Action":["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],"Resource":"*"},
+    {"Effect":"Allow","Action":["es:ESHttp*"],"Resource":"*"},
+    {"Effect":"Allow","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::demo-hearth-data/*"},
+    {"Effect":"Allow","Action":["rekognition:DetectLabels"],"Resource":"*"},
+    {"Effect":"Allow","Action":["bedrock:InvokeModel","bedrock:InvokeModelWithResponseStream"],"Resource":"*"},
+    {"Effect":"Allow","Action":["lambda:InvokeFunction"],
+     "Resource":[
+       "arn:aws:lambda:us-east-1:692859949078:function:hearth-upload-listings",
+       "arn:aws:lambda:us-east-1:692859949078:function:hearth-upload-listings:*"
+     ]
+    }
+  ]
+}

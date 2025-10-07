@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# AWS Lambda deployment packages
+*.zip
+build/
+
+# Test/debug response files
+response*.json
+search_*.json
+upload_*.json
+test_*.json
+recreate_*.json
+debug_*.json
+payload.json
+out.json
+final_test.json
+
+# Logs
+*.log
+upload_progress.log
+
+# SSH Keys
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# Temporary files
+temp/
+tmp/

@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hearth Search - Test UI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .search-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .search-box {
+            margin-bottom: 20px;
+        }
+
+        .search-box input[type="text"] {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            transition: border-color 0.3s;
+        }
+
+        .search-box input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .filter-group input {
+            padding: 10px;
+            font-size: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            transition: border-color 0.3s;
+        }
+
+        .filter-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .search-button {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .search-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .search-button:active {
+            transform: translateY(0);
+        }
+
+        .search-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .results-header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .results-header h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .must-have-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag {
+            background: #667eea;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .listing-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .listing-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+
+        .listing-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+
+        .listing-title {
+            flex: 1;
+        }
+
+        .listing-title h3 {
+            color: #333;
+            font-size: 1.4em;
+            margin-bottom: 5px;
+        }
+
+        .listing-location {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .listing-score {
+            background: #f0f0f0;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .listing-score.boosted {
+            background: #ffd700;
+            color: #333;
+        }
+
+        .listing-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .detail-item {
+            text-align: center;
+        }
+
+        .detail-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .listing-description {
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .listing-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 15px;
+        }
+
+        .listing-tag {
+            background: #e9ecef;
+            color: #495057;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        .zillow-link {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #006aff;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .zillow-link:hover {
+            background: #0056d6;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #ff4444;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 12px;
+            color: #666;
+        }
+
+        .no-results h3 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏠 Hearth Search</h1>
+            <p>Test the natural language property search backend</p>
+        </div>
+
+        <div class="search-card">
+            <div class="search-box">
+                <input
+                    type="text"
+                    id="searchQuery"
+                    placeholder="Try: 3 bedroom house with pool under 500k"
+                    value="3 bedroom house with pool"
+                />
+            </div>
+
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Min Price</label>
+                    <input type="number" id="priceMin" placeholder="e.g. 200000">
+                </div>
+                <div class="filter-group">
+                    <label>Max Price</label>
+                    <input type="number" id="priceMax" placeholder="e.g. 500000">
+                </div>
+                <div class="filter-group">
+                    <label>Min Bedrooms</label>
+                    <input type="number" id="bedsMin" placeholder="e.g. 3">
+                </div>
+                <div class="filter-group">
+                    <label>Min Bathrooms</label>
+                    <input type="number" id="bathsMin" placeholder="e.g. 2">
+                </div>
+            </div>
+
+            <button class="search-button" onclick="performSearch()">
+                Search Properties
+            </button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        async function performSearch() {
+            const query = document.getElementById('searchQuery').value.trim();
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">Searching...</div>';
+
+            const payload = {
+                q: query,
+                size: 20
+            };
+
+            // Add filters if provided
+            const priceMin = document.getElementById('priceMin').value;
+            const priceMax = document.getElementById('priceMax').value;
+            const bedsMin = document.getElementById('bedsMin').value;
+            const bathsMin = document.getElementById('bathsMin').value;
+
+            if (priceMin) payload.price_min = priceMin;
+            if (priceMax) payload.price_max = priceMax;
+            if (bedsMin) payload.beds_min = bedsMin;
+            if (bathsMin) payload.baths_min = bathsMin;
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    resultsDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                displayResults(data);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+
+            if (!data.results || data.results.length === 0) {
+                resultsDiv.innerHTML = `
+                    <div class="no-results">
+                        <h3>No results found</h3>
+                        <p>Try adjusting your search query or filters</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <div class="results-header">
+                    <h2>Found ${data.total} results</h2>
+                    ${data.must_have && data.must_have.length > 0 ? `
+                        <p style="margin: 10px 0 5px; color: #666; font-size: 14px;">Must-have features:</p>
+                        <div class="must-have-tags">
+                            ${data.must_have.map(tag => `<span class="tag">${tag}</span>`).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            data.results.forEach((listing, index) => {
+                const zillowUrl = `https://www.zillow.com/homedetails/${listing.id}_zpid/`;
+                const allTags = [...(listing.feature_tags || []), ...(listing.image_tags || [])];
+
+                html += `
+                    <div class="listing-card">
+                        <div class="listing-header">
+                            <div class="listing-title">
+                                <h3>${listing.address || 'Address Not Available'}</h3>
+                                <p class="listing-location">
+                                    ${listing.city || 'N/A'}, ${listing.state || 'N/A'} ${listing.zip_code || ''}
+                                </p>
+                            </div>
+                            <div class="listing-score ${listing.boosted ? 'boosted' : ''}">
+                                Score: ${listing.score.toFixed(2)}${listing.boosted ? ' ⭐' : ''}
+                            </div>
+                        </div>
+
+                        <div class="listing-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Price</div>
+                                <div class="detail-value">
+                                    ${listing.price ? '$' + listing.price.toLocaleString() : 'N/A'}
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Beds</div>
+                                <div class="detail-value">${listing.beds || 'N/A'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Baths</div>
+                                <div class="detail-value">${listing.baths || 'N/A'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Lot Size</div>
+                                <div class="detail-value">
+                                    ${listing.acreage ? listing.acreage.toLocaleString() + ' sqft' : 'N/A'}
+                                </div>
+                            </div>
+                        </div>
+
+                        ${listing.description ? `
+                            <div class="listing-description">
+                                ${listing.description.substring(0, 300)}${listing.description.length > 300 ? '...' : ''}
+                            </div>
+                        ` : ''}
+
+                        ${allTags.length > 0 ? `
+                            <div class="listing-tags">
+                                ${allTags.slice(0, 12).map(tag =>
+                                    `<span class="listing-tag">${tag}</span>`
+                                ).join('')}
+                                ${allTags.length > 12 ? `<span class="listing-tag">+${allTags.length - 12} more</span>` : ''}
+                            </div>
+                        ` : ''}
+
+                        <a href="${zillowUrl}" target="_blank" class="zillow-link">
+                            View on Zillow →
+                        </a>
+                    </div>
+                `;
+            });
+
+            resultsDiv.innerHTML = html;
+        }
+
+        // Allow Enter key to trigger search
+        document.getElementById('searchQuery').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+    </script>
+</body>
+</html>
