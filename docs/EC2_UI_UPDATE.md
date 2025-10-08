@@ -2,12 +2,16 @@
 
 ## Current Status
 
-**EC2 Instance**: `i-046852330992c2005`
-**Public IP**: `54.234.160.86`
-**URL**: http://54.234.160.86/
+**EC2 Instance**: `i-0fe9543d2f7726bf5` (newly deployed - October 8, 2025)
+**Public IP**: `54.163.59.108`
+**URL**: http://54.163.59.108/
 
-**Current Configuration**: Using direct Lambda invocation (old method)
-**Target Configuration**: Use API Gateway endpoint (production method)
+**Configuration**: ✅ Using API Gateway endpoint (production method)
+**Previous Instance**: `i-046852330992c2005` (terminated)
+
+---
+
+**Note**: The EC2 instance has been redeployed with the latest configuration. The information below is kept for reference in case you need to update future instances.
 
 ## Why Update?
 

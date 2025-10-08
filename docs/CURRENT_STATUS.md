@@ -1,6 +1,6 @@
 # Hearth Backend - Current Status
 
-**Last Updated**: October 8, 2025 6:18 PM
+**Last Updated**: October 8, 2025 6:30 PM
 
 ## 🚀 System Status: OPERATIONAL with Re-indexing In Progress
 
@@ -8,6 +8,12 @@
 - **Endpoint**: `https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search`
 - **Status**: ✅ Live and accepting requests
 - **Response Time**: ~200-400ms average
+
+### EC2 Demo UI
+- **URL**: http://54.163.59.108/
+- **Instance**: i-0fe9543d2f7726bf5 (newly deployed)
+- **Status**: ✅ Running with API Gateway endpoint
+- **Configuration**: Uses latest backend features automatically
 
 ### Current Activity
 **Re-indexing in progress**: 283/1588 listings processed (10%)
