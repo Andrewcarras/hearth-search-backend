@@ -23,11 +23,13 @@ cd /opt/hearth-ui
 # Create Flask app
 cat > app.py << 'EOF'
 from flask import Flask, render_template, request, jsonify
-import boto3
+import requests
 import json
 
 app = Flask(__name__)
-lambda_client = boto3.client('lambda', region_name='us-east-1')
+
+# Use API Gateway endpoint (production, always up-to-date)
+API_ENDPOINT = 'https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search'
 
 @app.route('/')
 def index():
@@ -54,13 +56,17 @@ def search():
         payload['filters'] = filters
 
     try:
-        response = lambda_client.invoke(
-            FunctionName='hearth-search',
-            Payload=json.dumps(payload)
+        # Use API Gateway endpoint for latest backend features
+        response = requests.post(
+            API_ENDPOINT,
+            json=payload,
+            headers={'Content-Type': 'application/json'},
+            timeout=30
         )
-        result = json.loads(response['Payload'].read())
-        body = json.loads(result['body'])
-        return jsonify(body)
+        response.raise_for_status()
+        return jsonify(response.json())
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': str(e)}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -305,7 +311,7 @@ cat > templates/index.html << 'HTMLEOF'
 HTMLEOF
 
 # Install Python dependencies
-python3.11 -m pip install flask boto3
+python3.11 -m pip install flask requests
 
 # Create systemd service
 cat > /etc/systemd/system/hearth-ui.service << 'SERVICEEOF'
