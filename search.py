@@ -33,7 +33,7 @@ from typing import Any, Dict, List
 
 from common import (
     os_client, OS_INDEX, embed_text,
-    extract_query_constraints
+    extract_query_constraints, geocode_location
 )
 
 logger = logging.getLogger(__name__)
@@ -216,6 +216,8 @@ def handler(event, context):
     constraints = extract_query_constraints(q)
     hard_filters = constraints.get("hard_filters", {})
     must_tags = set(constraints.get("must_have", []))
+    architecture_style = constraints.get("architecture_style")
+    proximity = constraints.get("proximity")
     logger.info("Extracted constraints: %s", constraints)
 
     # Merge explicit filters from payload
@@ -223,8 +225,53 @@ def handler(event, context):
         hard_filters.update(payload["filters"])
         logger.info("Applied additional filters from payload: %s", payload["filters"])
 
+    # Add architecture style as a filter if detected
+    if architecture_style:
+        logger.info("Filtering by architecture style: %s", architecture_style)
+
     q_vec = embed_text(q)
     filter_clauses = _filters_to_bool(hard_filters)["bool"]["filter"]  # This is a list of filter dicts
+
+    # Add architecture style filter
+    if architecture_style:
+        filter_clauses.append({"term": {"architecture_style": architecture_style}})
+
+    # Add proximity filter if location/POI requirement detected
+    if proximity:
+        poi_type = proximity.get("poi_type")
+        max_distance_km = proximity.get("max_distance_km")
+        max_drive_time_min = proximity.get("max_drive_time_min")
+
+        logger.info("Proximity requirement detected: poi_type=%s, max_distance_km=%s, max_drive_time_min=%s",
+                   poi_type, max_distance_km, max_drive_time_min)
+
+        # Geocode the POI type (e.g., "school" -> lat/lon of nearest school)
+        poi_location = geocode_location(poi_type)
+
+        if poi_location:
+            # Estimate distance from drive time (if specified): ~40km in 10 minutes = 4km/min average
+            if max_drive_time_min and not max_distance_km:
+                max_distance_km = max_drive_time_min * 4  # Conservative estimate
+
+            # Default to 5km if not specified
+            if not max_distance_km:
+                max_distance_km = 5
+
+            logger.info("Using POI location: %s, max_distance: %s km", poi_location, max_distance_km)
+
+            # Add geo_distance filter (uses "geo" field from listings)
+            filter_clauses.append({
+                "geo_distance": {
+                    "distance": f"{max_distance_km}km",
+                    "geo": {
+                        "lat": poi_location["lat"],
+                        "lon": poi_location["lon"]
+                    }
+                }
+            })
+        else:
+            logger.warning("Could not geocode POI: %s - skipping proximity filter", poi_type)
+
     logger.info("Filter clauses: %s", json.dumps(filter_clauses))
     topK = max(100, size * 3)
 
@@ -340,6 +387,8 @@ def handler(event, context):
                 "llm_profile": src.get("llm_profile"),
                 "feature_tags": src.get("feature_tags"),
                 "image_tags": src.get("image_tags"),
+                "architecture_style": src.get("architecture_style"),
+                "geo": src.get("geo"),  # Include geo coordinates for debugging
             }
         ))
 
@@ -347,4 +396,16 @@ def handler(event, context):
     results = [x[1] for x in final[:size]]
 
     logger.info("Returning %d final results", len(results))
-    return {"statusCode": 200, "body": json.dumps({"ok": True, "results": results, "total": len(results), "must_have": list(must_tags)})}
+
+    response_data = {
+        "ok": True,
+        "results": results,
+        "total": len(results),
+        "must_have": list(must_tags)
+    }
+
+    # Include architecture_style filter in response if it was used
+    if architecture_style:
+        response_data["architecture_style"] = architecture_style
+
+    return {"statusCode": 200, "body": json.dumps(response_data)}

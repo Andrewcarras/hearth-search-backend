@@ -35,7 +35,8 @@ from common import (
     AWS_REGION, OS_INDEX, MAX_IMAGES,
     create_index_if_needed, bulk_upsert,
     embed_text, embed_image_bytes, detect_labels,
-    extract_zillow_images, vec_mean, llm_feature_profile
+    extract_zillow_images, vec_mean, llm_feature_profile,
+    classify_architecture_style_vision
 )
 
 logger = logging.getLogger(__name__)
@@ -123,9 +124,9 @@ def _extract_core_fields(lst: Dict[str, Any]) -> Dict[str, Any]:
     price = _num(lst.get("price") or lst.get("listPrice") or lst.get("unformattedPrice"))
 
     # Extract location components (try top-level first, then nested address object)
-    city  = lst.get("city") or lst.get("addressCity")
+    city = lst.get("city") or lst.get("addressCity")
     state = lst.get("state") or lst.get("addressState")
-    zipc  = lst.get("zipcode") or lst.get("postalCode")
+    zipc = lst.get("zipcode") or lst.get("postalCode")
 
     # Fallback: check nested address object
     if not city or not state or not zipc:
@@ -211,10 +212,10 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
         Complete document ready for OpenSearch indexing with all embeddings,
         tags, and metadata
     """
-    # Step 1: Extract structured features using Claude LLM
-    llm_profile, feature_tags = "", []
+    # Step 1: Extract structured features using Claude LLM (including architecture style from text)
+    llm_profile, feature_tags, style_from_text = "", [], None
     try:
-        llm_profile, feature_tags = llm_feature_profile(base["description"])
+        llm_profile, feature_tags, style_from_text = llm_feature_profile(base["description"])
     except Exception as e:
         logger.warning("LLM profile extraction failed for zpid=%s: %s", base.get("zpid"), e)
 
@@ -242,6 +243,16 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
     # Deduplicate images by computing hash to avoid processing duplicates
     image_vecs, img_tags = [], set()
     seen_hashes = set()
+    style_from_vision = None
+    best_exterior_image = None  # Store best exterior image for architecture classification
+    best_exterior_score = 0
+
+    # Keywords that indicate exterior/facade views
+    EXTERIOR_KEYWORDS = {'house', 'building', 'home', 'exterior', 'facade', 'front', 'architecture',
+                         'roof', 'siding', 'porch', 'deck', 'yard', 'lawn', 'driveway', 'garage'}
+    # Keywords that indicate interior/detail views (to avoid)
+    INTERIOR_KEYWORDS = {'room', 'kitchen', 'bathroom', 'bedroom', 'living', 'dining', 'closet',
+                         'interior', 'furniture', 'appliance', 'cabinet', 'counter'}
 
     if MAX_IMAGES and MAX_IMAGES > 0 and image_urls:
         count = 0
@@ -267,15 +278,68 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
                         image_vecs.append(img_vec)
                 except Exception as e:
                     logger.warning("Image embedding failed for zpid=%s, url=%s: %s", base.get("zpid"), u, e)
-                try:
-                    labels = detect_labels(bb)
-                    for t in labels:
-                        img_tags.add(t)
-                except Exception as e:
-                    logger.warning("Image label detection failed for zpid=%s: %s", base.get("zpid"), e)
+
+                # COST OPTIMIZATION: Only use Rekognition for first image to detect exterior vs interior
+                # Claude Vision will do comprehensive analysis later on the best exterior image
+                # This reduces Rekognition calls from 6 per property to 1-2 per property
+                if count == 0:
+                    # Get labels ONLY for first image to identify if it's exterior
+                    try:
+                        labels = detect_labels(bb)
+                        for t in labels:
+                            img_tags.add(t)
+
+                        # Score this image for architecture classification
+                        # Higher score = better exterior shot
+                        exterior_score = 0
+                        label_set = set(l.lower() for l in labels)
+
+                        # Add points for exterior indicators
+                        exterior_score += sum(3 for kw in EXTERIOR_KEYWORDS if kw in label_set)
+                        # Subtract points for interior indicators
+                        exterior_score -= sum(2 for kw in INTERIOR_KEYWORDS if kw in label_set)
+
+                        # If this is the best exterior image so far, save it
+                        if exterior_score > best_exterior_score:
+                            best_exterior_score = exterior_score
+                            best_exterior_image = bb
+                            logger.debug("Found better exterior image for zpid=%s (score: %d, labels: %s)",
+                                       base.get("zpid"), exterior_score, labels[:5])
+
+                    except Exception as e:
+                        logger.warning("Image label detection failed for zpid=%s: %s", base.get("zpid"), e)
+                else:
+                    # For subsequent images, just use the first one as exterior candidate
+                    # This saves 5 Rekognition calls per property (83% cost reduction)
+                    if count == 1 and not best_exterior_image:
+                        best_exterior_image = bb
+                        best_exterior_score = 1
+
                 count += 1
             except Exception as e:
                 logger.warning("Image fetch failed for zpid=%s, url=%s: %s", base.get("zpid"), u, e)
+
+    # Classify architecture style using vision LLM on best exterior image
+    if best_exterior_image:
+        try:
+            style_data = classify_architecture_style_vision(best_exterior_image)
+            style_from_vision = style_data.get("primary_style")
+
+            # Add exterior color and materials to image tags if present
+            if style_data.get("exterior_color"):
+                img_tags.add(f"{style_data['exterior_color']}_exterior")
+            for material in style_data.get("materials", []):
+                img_tags.add(material)
+
+            # Add visual features (balcony, porch, fence, etc.) to image tags
+            for feature in style_data.get("visual_features", []):
+                img_tags.add(feature)
+
+            logger.info("Classified architecture style for zpid=%s: %s (confidence: %s, exterior_score: %d, features: %s)",
+                       base.get("zpid"), style_from_vision, style_data.get("confidence"),
+                       best_exterior_score, style_data.get("visual_features", [])[:5])
+        except Exception as e:
+            logger.warning("Vision-based style classification failed for zpid=%s: %s", base.get("zpid"), e)
 
     vec_image = vec_mean(image_vecs, target_dim=len(vec_text)) if image_vecs else [0.0] * len(vec_text)
 
@@ -288,6 +352,9 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
         logger.warning("Document zpid=%s has NO valid embeddings (text_valid=%s, image_valid=%s)",
                       base.get("zpid"), has_valid_text_embedding, has_valid_image_embedding)
 
+    # Determine final architecture style (vision takes priority over text)
+    architecture_style = style_from_vision or style_from_text
+
     # Build document - only include vectors if they're valid (non-zero)
     # This prevents indexing errors with cosinesimil space_type
     doc = {
@@ -299,6 +366,10 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
         "status": "active",
         "indexed_at": int(__import__("time").time()),
     }
+
+    # Add architecture style if detected
+    if architecture_style:
+        doc["architecture_style"] = architecture_style
 
     # Only add vector fields if they're valid (OpenSearch cosinesimil doesn't support zero vectors)
     if has_valid_text_embedding:

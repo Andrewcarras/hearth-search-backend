@@ -4,36 +4,58 @@ __pycache__/
 *$py.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 .venv/
 venv/
 ENV/
-env/
 
-# AWS Lambda deployment packages
+# AWS
+*.pem
 *.zip
-build/
+*.log
 
-# Test/debug response files
+# Test/Debug files
+test_*.json
+*_test*.json
+*_response*.json
+debug_*.json
+debug_*.py
 response*.json
+out.json
+payload.json
+final_test.json
 search_*.json
 upload_*.json
-test_*.json
 recreate_*.json
-debug_*.json
-payload.json
-out.json
-final_test.json
+delete_*.json
+*_payload.json
+check_*.py
+count_*.py
 
-# Logs
-*.log
-upload_progress.log
-
-# SSH Keys
-*.pem
+# Temporary build artifacts
+build_search/
+hearth_*.zip
+search_*.zip
+upload_*.zip
+recreate_*.zip
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
@@ -42,9 +64,13 @@ upload_progress.log
 .DS_Store
 Thumbs.db
 
-# Claude Code
-.claude/
+# Logs
+*.log
+*progress*.sh
+*_progress.sh
+monitor*.sh
 
-# Temporary files
-temp/
-tmp/
+# Old/backup files
+*.bak
+*.old
+*.backup

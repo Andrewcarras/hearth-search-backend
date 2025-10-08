@@ -21,7 +21,7 @@ import logging
 import os
 import time
 import random
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import boto3
@@ -320,6 +320,7 @@ def create_index_if_needed():
                 "llm_profile": {"type": "text"},  # LLM-normalized description
                 "feature_tags": {"type": "keyword"},  # Extracted features (pool, garage, etc.)
                 "image_tags": {"type": "keyword"},  # Rekognition labels (kitchen, brick, etc.)
+                "architecture_style": {"type": "keyword"},  # Architecture style (modern, craftsman, etc.)
 
                 # Vector embeddings for semantic search
                 "vector_text": {
@@ -518,36 +519,169 @@ def extract_zillow_images(listing: Dict[str, Any]) -> List[str]:
     return list(urls)
 
 
-def llm_feature_profile(description: str) -> Tuple[str, List[str]]:
+def classify_architecture_style_vision(image_bytes: bytes) -> Dict[str, Any]:
+    """
+    Use Claude 3 Sonnet with vision to classify architecture style and extract visual features.
+
+    Analyzes image to identify architectural style, exterior features, colors, materials,
+    and structural elements like balconies, porches, fences, etc.
+
+    Args:
+        image_bytes: Raw image data (JPEG/PNG)
+
+    Returns:
+        Dictionary with keys:
+        - primary_style: Main architecture style (e.g., "modern", "craftsman")
+        - secondary_styles: List of additional applicable styles
+        - exterior_color: Primary exterior color
+        - roof_type: Type of roof (flat, gabled, hipped, etc.)
+        - materials: List of visible exterior materials
+        - visual_features: List of structural features (balcony, porch, fence, deck, etc.)
+        - confidence: Classification confidence (high/medium/low)
+    """
+    try:
+        b64_image = base64.b64encode(image_bytes).decode('utf-8')
+
+        prompt = """Analyze this home's exterior architecture and identify:
+
+1. Primary architecture style - choose ONE most fitting style from:
+   modern, contemporary, craftsman, victorian, colonial, ranch, mediterranean, tudor, cape_cod,
+   farmhouse, mid_century_modern, traditional, transitional, industrial, spanish, french_country,
+   greek_revival, bungalow, cottage, split_level, dutch_colonial, georgian, italianate, prairie,
+   art_deco, southwestern
+
+2. Secondary styles (if home blends multiple styles)
+
+3. Primary exterior color (be specific: white, blue, gray, beige, brown, red, yellow, green, etc.)
+
+4. Roof type (flat, gabled, hipped, mansard, gambrel, shed, etc.)
+
+5. Visible exterior materials (brick, stucco, siding, stone, wood, vinyl, metal, etc.)
+
+6. Visual features - identify ALL visible structural elements:
+   - balcony, porch, deck, patio
+   - fence (specify if visible: white_fence, wood_fence, metal_fence, chain_link_fence)
+   - garage (attached, detached, carport)
+   - driveway, walkway
+   - windows (large_windows, bay_windows, picture_windows)
+   - columns, pillars
+   - shutters
+   - chimney
+   - dormer
+   - awning
+   - landscaping features (if prominent)
+
+7. Confidence in classification (high if clear style, medium if mixed, low if unclear)
+
+Return STRICT JSON only:
+{
+  "primary_style": "...",
+  "secondary_styles": [],
+  "exterior_color": "...",
+  "roof_type": "...",
+  "materials": [],
+  "visual_features": [],
+  "confidence": "high"
+}"""
+
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 600,
+            "temperature": 0,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": b64_image
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]
+            }]
+        }
+
+        # Use Claude 3 Sonnet with vision capabilities
+        resp = brt.invoke_model(
+            modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+            body=json.dumps(body)
+        )
+
+        result = json.loads(resp["body"].read().decode("utf-8"))
+        content = result["content"][0]["text"]
+
+        # Parse JSON response
+        style_data = json.loads(content)
+
+        # Normalize style to snake_case
+        if "primary_style" in style_data:
+            style_data["primary_style"] = style_data["primary_style"].lower().replace(" ", "_")
+
+        # Normalize visual features to snake_case
+        if "visual_features" in style_data:
+            style_data["visual_features"] = [
+                feat.lower().replace(" ", "_") for feat in style_data.get("visual_features", [])
+            ]
+
+        return style_data
+
+    except Exception as e:
+        logger.warning("Vision-based architecture classification failed: %s", e)
+        return {
+            "primary_style": None,
+            "secondary_styles": [],
+            "exterior_color": None,
+            "roof_type": None,
+            "materials": [],
+            "visual_features": [],
+            "confidence": "low"
+        }
+
+
+def llm_feature_profile(description: str) -> Tuple[str, List[str], Optional[str]]:
     """
     Use Claude LLM to extract structured property features from free-text description.
 
     This normalizes messy real estate descriptions into:
     - A concise, standardized summary (profile)
     - A list of snake_case feature tags (pool, granite_counters, etc.)
+    - Architecture style (if mentioned in text)
 
     The LLM uses a controlled vocabulary to ensure consistent tagging across
     all listings, making features searchable and filterable.
 
     Example:
-        Input: "Beautiful home with swimming pool and granite countertops"
-        Output: ("Modern home with pool and granite finishes", ["pool", "granite_counters"])
+        Input: "Beautiful modern home with swimming pool and granite countertops"
+        Output: ("Modern home with pool and granite finishes", ["pool", "granite_counters"], "modern")
 
     Args:
         description: Raw listing description text
 
     Returns:
-        Tuple of (profile_text, feature_tags_list)
+        Tuple of (profile_text, feature_tags_list, architecture_style_or_none)
     """
     if not description:
-        return "", []
+        return "", [], None
 
     # Prompt Claude to extract features in strict JSON format
     prompt = f"""
 You are extracting property features from a real estate listing description.
-Return STRICT JSON with fields: profile (string, concise normalized summary) and tags (array of short snake_case tags).
-Use a controlled vocabulary when possible, e.g.:
-["pool","backyard","kitchen_island","fireplace","brick","fenced_yard","garage","finished_basement","open_floorplan","granite_counters","walk_in_closet","waterfront","mountain_view","hardwood_floors","new_construction"]
+Return STRICT JSON with fields:
+- profile: string, concise normalized summary
+- tags: array of short snake_case feature tags
+- architecture_style: ONE style from the list below, or null if not mentioned
+
+Architecture styles: modern, contemporary, craftsman, victorian, colonial, ranch, mediterranean, tudor, cape_cod, farmhouse, mid_century_modern, traditional, transitional, industrial, spanish, french_country, greek_revival, bungalow, cottage, split_level, dutch_colonial, georgian, italianate, prairie, art_deco, southwestern
+
+Feature tags vocabulary:
+["pool","backyard","kitchen_island","fireplace","brick_exterior","fenced_yard","garage","finished_basement","open_floorplan","granite_counters","walk_in_closet","waterfront","mountain_view","hardwood_floors","new_construction","white_exterior","stone_facade","stucco_exterior","wood_siding"]
+
 Text:
 \"\"\"{description.strip()[:4000]}\"\"\"
 JSON only:
@@ -579,22 +713,31 @@ JSON only:
             if t2:
                 norm.append(t2)
 
-        return profile, norm
+        # Extract architecture style if present
+        arch_style = j.get("architecture_style")
+        if arch_style:
+            arch_style = str(arch_style).lower().replace(" ", "_")
+        else:
+            arch_style = None
+
+        return profile, norm, arch_style
 
     except Exception as e:
         logger.warning("LLM profile extraction failed: %s", e)
-        return "", []  # Graceful fallback
+        return "", [], None  # Graceful fallback
 
 
 def extract_query_constraints(query_text: str) -> Dict[str, Any]:
     """
     Parse structured constraints from natural language search query using Claude LLM.
 
-    This extracts three types of constraints from queries like
-    "3 bedroom house with pool under $500k":
-    - must_have: Required feature tags (e.g., ["pool"])
+    This extracts multiple types of constraints from queries like
+    "3 bedroom modern house with pool under $500k near a school":
+    - must_have: Required feature tags (e.g., ["pool", "balcony", "blue_exterior"])
     - nice_to_have: Preferred features (e.g., ["garage"])
     - hard_filters: Numeric constraints (e.g., {"beds_min": 3, "price_max": 500000})
+    - architecture_style: Architecture style if mentioned (e.g., "modern", "craftsman")
+    - proximity: Location-based requirements (e.g., {"poi_type": "school", "max_distance_km": 5})
 
     The LLM intelligently interprets natural language and converts it to
     structured filters that OpenSearch can use.
@@ -603,20 +746,45 @@ def extract_query_constraints(query_text: str) -> Dict[str, Any]:
         query_text: Natural language search query from user
 
     Returns:
-        Dictionary with keys: must_have (list), nice_to_have (list), hard_filters (dict)
+        Dictionary with keys: must_have (list), nice_to_have (list), hard_filters (dict),
+        architecture_style (str or null), proximity (dict or null)
     """
     try:
         prompt = f"""
 From the user's search query, extract:
-- must_have: tags (snake_case) that MUST be present (e.g., pool, kitchen_island, fenced_yard)
-- nice_to_have: additional tags (snake_case)
-- hard_filters: numeric constraints like price/beds/baths/acreage (use keys: price_min, price_max, beds_min, baths_min, acreage_min, acreage_max)
-Return strict JSON with those keys. Query: "{query_text}"
+
+1. must_have: Feature tags (snake_case) that MUST be present. Include visual features like:
+   - Structural features: balcony, porch, deck, patio, fence, white_fence, pool, garage
+   - Exterior colors: white_exterior, blue_exterior, gray_exterior, brick_exterior, stone_exterior
+   - Interior features: kitchen_island, fireplace, open_floorplan, hardwood_floors
+   - Outdoor features: backyard, fenced_yard, large_yard
+
+2. nice_to_have: Additional preferred tags (snake_case)
+
+3. hard_filters: Numeric constraints (keys: price_min, price_max, beds_min, baths_min, acreage_min, acreage_max)
+
+4. architecture_style: ONE style if mentioned, or null:
+   modern, contemporary, craftsman, victorian, colonial, ranch, mediterranean, tudor, cape_cod,
+   farmhouse, mid_century_modern, traditional, transitional, industrial, spanish, french_country,
+   greek_revival, bungalow, cottage, split_level, dutch_colonial, georgian, italianate, prairie,
+   art_deco, southwestern
+
+5. proximity: If query mentions location/POI, extract:
+   {{
+     "poi_type": "school" | "grocery_store" | "gym" | "park" | "hospital" | "office" | "downtown" | etc,
+     "max_distance_km": number (optional, estimate from "near" = 5km, "close to" = 3km),
+     "max_drive_time_min": number (optional, extract from "X minute drive")
+   }}
+   If no proximity mentioned, return null.
+
+Return strict JSON with keys: must_have, nice_to_have, hard_filters, architecture_style, proximity
+
+Query: "{query_text}"
 """
 
         body = {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 256,
+            "max_tokens": 512,
             "temperature": 0,  # Deterministic parsing
             "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
         }
@@ -628,17 +796,171 @@ Return strict JSON with those keys. Query: "{query_text}"
         text = parsed["content"][0]["text"]
         j = json.loads(text)  # Parse JSON from Claude's response
 
+        # Normalize architecture style
+        arch_style = j.get("architecture_style")
+        if arch_style:
+            arch_style = str(arch_style).lower().replace(" ", "_")
+
+        # Get proximity
+        proximity = j.get("proximity")
+
         return {
             "must_have": [t.strip().lower() for t in j.get("must_have", [])],
             "nice_to_have": [t.strip().lower() for t in j.get("nice_to_have", [])],
             "hard_filters": j.get("hard_filters", {}),
+            "architecture_style": arch_style,
+            "proximity": proximity,
         }
 
-    except Exception:
+    except Exception as e:
+        logger.warning("LLM constraint extraction failed: %s", e)
         # Fallback: simple keyword matching if LLM fails
         q = (query_text or "").lower()
         must = []
         if "pool" in q: must.append("pool")
         if "kitchen island" in q or "island" in q: must.append("kitchen_island")
         if "backyard" in q: must.append("backyard")
-        return {"must_have": list(set(must)), "nice_to_have": [], "hard_filters": {}}
+        if "balcony" in q: must.append("balcony")
+        if "fence" in q: must.append("fence")
+
+        # Extract architecture style from common keywords
+        arch_style = None
+        if "mid century modern" in q or "mid-century modern" in q:
+            arch_style = "mid_century_modern"
+        elif "modern" in q:
+            arch_style = "modern"
+        elif "craftsman" in q:
+            arch_style = "craftsman"
+        elif "victorian" in q:
+            arch_style = "victorian"
+        elif "colonial" in q:
+            arch_style = "colonial"
+        elif "ranch" in q:
+            arch_style = "ranch"
+        elif "contemporary" in q:
+            arch_style = "contemporary"
+
+        # Extract proximity from common keywords
+        proximity = None
+        if "near" in q or "close to" in q or "within" in q or "from" in q:
+            poi_type = None
+            if "school" in q:
+                poi_type = "elementary_school" if "elementary" in q else "school"
+            elif "grocery" in q or "supermarket" in q:
+                poi_type = "grocery_store"
+            elif "gym" in q or "fitness" in q:
+                poi_type = "gym"
+            elif "park" in q:
+                poi_type = "park"
+            elif "office" in q:
+                poi_type = "office"
+
+            if poi_type:
+                proximity = {"poi_type": poi_type}
+                # Try to extract drive time
+                import re
+                drive_match = re.search(r'(\d+)\s*minute', q)
+                if drive_match:
+                    proximity["max_drive_time_min"] = int(drive_match.group(1))
+
+        return {
+            "must_have": list(set(must)),
+            "nice_to_have": [],
+            "hard_filters": {},
+            "architecture_style": arch_style,
+            "proximity": proximity,
+        }
+
+
+def geocode_location(poi_type: str, reference_location: Optional[Dict[str, float]] = None) -> Optional[Dict[str, float]]:
+    """
+    Geocode a point of interest (POI) type to get its coordinates.
+
+    This implementation uses OpenStreetMap's Nominatim service as a fallback.
+    For production, consider using AWS Location Service or Google Maps API.
+
+    Args:
+        poi_type: Type of POI (e.g., "school", "grocery_store", "park", "hospital")
+        reference_location: Optional reference point {"lat": ..., "lon": ...} to search near
+
+    Returns:
+        Dictionary with 'lat' and 'lon' keys, or None if geocoding fails
+
+    Example:
+        >>> geocode_location("elementary_school")
+        {"lat": 37.7749, "lon": -122.4194}
+    """
+    try:
+        # For "office" or user-specific locations, we need a reference point
+        # In production, this should come from user profile or be specified in the query
+        if poi_type == "office" and not reference_location:
+            logger.warning("geocode_location: 'office' requires reference_location - skipping")
+            return None
+
+        # Map POI types to Nominatim amenity types
+        poi_mapping = {
+            "school": "school",
+            "elementary_school": "school",
+            "high_school": "school",
+            "grocery_store": "supermarket",
+            "supermarket": "supermarket",
+            "gym": "gym",
+            "fitness": "gym",
+            "park": "park",
+            "hospital": "hospital",
+            "pharmacy": "pharmacy",
+            "restaurant": "restaurant",
+            "cafe": "cafe",
+            "bank": "bank",
+            "library": "library",
+            "downtown": "city_centre",
+        }
+
+        amenity = poi_mapping.get(poi_type, poi_type)
+
+        # Use OpenStreetMap Nominatim (free geocoding service)
+        # For production, replace with AWS Location Service or paid API
+        base_url = "https://nominatim.openstreetmap.org/search"
+
+        # Build query
+        if reference_location:
+            # Search near reference point
+            params = {
+                "q": amenity,
+                "format": "json",
+                "limit": 1,
+                "lat": reference_location["lat"],
+                "lon": reference_location["lon"],
+            }
+        else:
+            # Generic search - this will return first result (may not be relevant)
+            # In production, you should always use a reference location or city bounds
+            params = {
+                "q": amenity,
+                "format": "json",
+                "limit": 1,
+            }
+
+        headers = {
+            "User-Agent": "HearthRealEstateSearch/1.0"  # Nominatim requires user agent
+        }
+
+        response = requests.get(base_url, params=params, headers=headers, timeout=5)
+        response.raise_for_status()
+        results = response.json()
+
+        if results and len(results) > 0:
+            result = results[0]
+            location = {
+                "lat": float(result["lat"]),
+                "lon": float(result["lon"])
+            }
+            logger.info("Geocoded POI '%s' to %s", poi_type, location)
+            return location
+        else:
+            logger.warning("No geocoding results for POI type: %s", poi_type)
+            return None
+
+    except Exception as e:
+        logger.warning("geocode_location failed for '%s': %s", poi_type, e)
+        return None

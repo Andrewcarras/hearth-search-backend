@@ -1,59 +1,61 @@
-# Hearth Search Test UI
+# Hearth Frontend - Setup Guide
 
-A simple Flask web interface to test the Hearth natural language property search backend.
+Quick setup guide for the Hearth real estate search UI.
 
-## Quick Start
+## Prerequisites
+
+- Node.js 16+ and npm
+- Access to Hearth search API endpoint
+
+## Installation
 
 ```bash
-./run_ui.sh
+# Install dependencies
+npm install
+
+# Configure API endpoint
+# Edit src/config.js and set SEARCH_API_URL
+
+# Start development server
+npm start
 ```
 
-Then open your browser to: **http://localhost:5000**
+## Environment Configuration
+
+Create `.env` file:
+
+```
+REACT_APP_API_URL=https://your-api-gateway-url.amazonaws.com
+REACT_APP_REGION=us-east-1
+```
+
+## Building for Production
+
+```bash
+npm run build
+```
+
+Outputs to `build/` directory ready for deployment to S3/CloudFront.
 
 ## Features
 
-✅ **Natural Language Search**
-- Enter queries like "3 bedroom house with pool under 500k"
-- The LLM automatically extracts must-have features (pool, garage, etc.)
-- Hybrid search combines BM25, kNN text, and kNN image vectors
+- Natural language search input
+- Real-time search results
+- Property cards with images
+- Architecture style filtering
+- Map view with proximity search
+- Responsive design
 
-✅ **Filters**
-- Min/Max Price
-- Min Bedrooms
-- Min Bathrooms
+## Deployment
 
-✅ **Results Display**
-- Shows all matching properties with scores
-- Highlights boosted results (matching must-have tags)
-- Direct links to Zillow listings
-- Property details: price, beds, baths, lot size
-- Feature tags extracted by LLM
-- Property descriptions
+```bash
+# Deploy to S3
+aws s3 sync build/ s3://your-frontend-bucket/ --delete
 
-## Example Queries
-
-```
-3 bedroom house with pool under 500k
-modern home with mountain views
-house with garage and large backyard
-luxury home with 5 bedrooms in Holladay
-property with hardwood floors and granite counters
+# Invalidate CloudFront cache
+aws cloudfront create-invalidation \
+  --distribution-id YOUR_DIST_ID \
+  --paths "/*"
 ```
 
-## Technical Details
-
-- **Backend**: AWS Lambda (hearth-search function)
-- **Search Engine**: Amazon OpenSearch with kNN vectors
-- **Embeddings**: Bedrock Titan (text & image)
-- **LLM**: Claude 3 Haiku for feature extraction
-- **Database**: Currently ~270+ properties indexed (upload in progress)
-
-## Files
-
-- `app.py` - Flask backend
-- `templates/index.html` - UI frontend
-- `run_ui.sh` - Startup script
-
-## Stopping the Server
-
-Press `Ctrl+C` in the terminal where the server is running.
+For detailed documentation, see [README.md](README.md).
