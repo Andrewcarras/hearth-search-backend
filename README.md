@@ -2,6 +2,29 @@
 
 An advanced real estate search system that combines natural language processing, computer vision, and semantic search to enable intuitive property discovery.
 
+## 🚀 Quick Start for Frontend Developers
+
+**Production API Endpoint:** `https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod`
+
+```javascript
+// Search for homes
+const response = await fetch(
+  'https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ q: "homes with a pool", size: 20 })
+  }
+);
+const data = await response.json();
+console.log(data.results); // Array of matching homes
+```
+
+**📚 Documentation:**
+- **[Quick Start Guide](docs/QUICKSTART.md)** - Get started in 1 minute
+- **[Complete API Documentation](docs/API.md)** - Full reference with examples
+- **[API Configuration](docs/api-gateway-config.json)** - Technical details
+
 ## Features
 
 ### 🏠 Natural Language Search
@@ -168,9 +191,15 @@ aws lambda invoke \
 
 ## Documentation
 
-- [docs/DEPLOYMENT_SUMMARY.md](docs/DEPLOYMENT_SUMMARY.md) - Deployment guide
-- [docs/IMPLEMENTATION_SUMMARY.md](docs/IMPLEMENTATION_SUMMARY.md) - Technical details
-- [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md) - Architecture deep dive
+### For Frontend Developers
+- **[Quick Start Guide](docs/QUICKSTART.md)** - 1-minute integration guide
+- **[API Documentation](docs/API.md)** - Complete REST API reference
+- **[API Configuration](docs/api-gateway-config.json)** - Gateway setup details
+
+### For Backend Developers
+- [Deployment Guide](docs/DEPLOYMENT_SUMMARY.md) - AWS deployment instructions
+- [Implementation Details](docs/IMPLEMENTATION_SUMMARY.md) - Technical architecture
+- [Technical Deep Dive](docs/TECHNICAL_DOCUMENTATION.md) - Detailed system design
 
 ## Development
 
