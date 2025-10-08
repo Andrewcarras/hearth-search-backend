@@ -34,6 +34,7 @@ https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod
       "id": "2059116964",
       "score": 13.055,
       "boosted": false,
+      "zpid": "2059116964",
       "address": "3883 S Komenda Ct #1",
       "city": "Salt Lake City",
       "state": "UT",
@@ -46,13 +47,24 @@ https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod
       "llm_profile": "Beautiful 3-level condo with...",
       "feature_tags": ["fireplace", "garage", "mountain_view"],
       "image_tags": [],
+      "images": [
+        "https://photos.zillowstatic.com/fp/abc123.jpg",
+        "https://photos.zillowstatic.com/fp/def456.jpg",
+        "https://photos.zillowstatic.com/fp/ghi789.jpg"
+      ],
       "architecture_style": "modern",
       "geo": {
         "lat": 40.68745,
         "lon": -111.85004
-      }
+      },
+      "has_description": true,
+      "has_valid_embeddings": true,
+      "status": "active",
+      "indexed_at": 1728409500
     }
-  ]
+  ],
+  "total": 1,
+  "must_have": ["balcony"]
 }
 ```
 
@@ -60,6 +72,7 @@ https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod
 - `ok` (boolean): Success indicator
 - `results` (array): Array of matching listings
   - `id` (string): Zillow property ID (zpid)
+  - `zpid` (string): Zillow property ID (same as id)
   - `score` (number): Relevance score
   - `boosted` (boolean): Whether result was boosted for having required features
   - `address`, `city`, `state`, `zip_code`: Property location
@@ -70,8 +83,15 @@ https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod
   - `llm_profile` (string): AI-generated concise summary
   - `feature_tags` (array): Extracted features (fireplace, garage, pool, etc.)
   - `image_tags` (array): Visual features from image analysis
+  - `images` (array): Array of image URLs for property photos
   - `architecture_style` (string|null): Detected architecture style
-  - `geo` (object): Geographic coordinates
+  - `geo` (object): Geographic coordinates (lat, lon)
+  - `has_description` (boolean): Whether listing has original description
+  - `has_valid_embeddings` (boolean): Whether listing has valid vector embeddings
+  - `status` (string): Listing status (usually "active")
+  - `indexed_at` (number): Unix timestamp of when listing was indexed
+- `total` (number): Number of results returned
+- `must_have` (array): Required features extracted from query
 
 **Example Queries:**
 ```javascript
@@ -235,6 +255,7 @@ const API_BASE = 'https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod';
 
 export interface SearchResult {
   id: string;
+  zpid: string;
   score: number;
   boosted: boolean;
   address: string;
@@ -249,11 +270,16 @@ export interface SearchResult {
   llm_profile: string;
   feature_tags: string[];
   image_tags: string[];
+  images: string[];  // Array of image URLs
   architecture_style: string | null;
   geo: {
     lat: number;
     lon: number;
   };
+  has_description: boolean;
+  has_valid_embeddings: boolean;
+  status: string;
+  indexed_at: number;
 }
 
 export interface SearchResponse {

@@ -369,28 +369,16 @@ def handler(event, context):
         tags = set((src.get("feature_tags") or []) + (src.get("image_tags") or []))
         satisfied = must_tags.issubset(tags) if must_tags else True
         boost = 1.0 + (0.5 if satisfied and must_tags else 0.0)
-        final.append((
-            (h.get("_score", 0.0) * boost),
-            {
-                "id": h["_id"],
-                "score": h.get("_score", 0.0),
-                "boosted": boost > 1.0,
-                "address": src.get("address"),
-                "city": src.get("city"),
-                "state": src.get("state"),
-                "zip_code": src.get("zip_code"),
-                "price": src.get("price"),
-                "beds": src.get("beds"),
-                "baths": src.get("baths"),
-                "acreage": src.get("acreage"),
-                "description": src.get("description"),
-                "llm_profile": src.get("llm_profile"),
-                "feature_tags": src.get("feature_tags"),
-                "image_tags": src.get("image_tags"),
-                "architecture_style": src.get("architecture_style"),
-                "geo": src.get("geo"),  # Include geo coordinates for debugging
-            }
-        ))
+
+        # Return ALL fields from the source document (excluding internal vectors)
+        result = {
+            "id": h["_id"],
+            "score": h.get("_score", 0.0),
+            "boosted": boost > 1.0,
+            **{k: v for k, v in src.items() if k not in ("vector_text", "vector_image")}
+        }
+
+        final.append((h.get("_score", 0.0) * boost, result))
 
     final.sort(key=lambda x: x[0], reverse=True)
     results = [x[1] for x in final[:size]]

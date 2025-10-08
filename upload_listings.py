@@ -362,6 +362,7 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
         "llm_profile": llm_profile,
         "feature_tags": sorted(set(feature_tags)),
         "image_tags": sorted(img_tags),
+        "images": image_urls,  # Store all image URLs for frontend display
         "has_valid_embeddings": has_valid_embeddings,
         "status": "active",
         "indexed_at": int(__import__("time").time()),
