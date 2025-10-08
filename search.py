@@ -245,8 +245,10 @@ def handler(event, context):
         logger.info("Proximity requirement detected: poi_type=%s, max_distance_km=%s, max_drive_time_min=%s",
                    poi_type, max_distance_km, max_drive_time_min)
 
-        # Geocode the POI type (e.g., "school" -> lat/lon of nearest school)
-        poi_location = geocode_location(poi_type)
+        # Geocode the POI type using Salt Lake City as reference
+        # This ensures we find businesses near the listings, not in other states
+        slc_center = {"lat": 40.7608, "lon": -111.891}
+        poi_location = geocode_location(poi_type, reference_location=slc_center)
 
         if poi_location:
             # Estimate distance from drive time (if specified): ~40km in 10 minutes = 4km/min average
