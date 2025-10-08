@@ -2,6 +2,8 @@
 
 An advanced real estate search system that combines natural language processing, computer vision, and semantic search to enable intuitive property discovery.
 
+**📊 System Status**: ✅ Operational (Re-indexing in progress) - See [Current Status](docs/CURRENT_STATUS.md)
+
 ## 🚀 Quick Start for Frontend Developers
 
 **Production API Endpoint:** `https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod`
@@ -200,6 +202,12 @@ aws lambda invoke \
 - [Deployment Guide](docs/DEPLOYMENT_SUMMARY.md) - AWS deployment instructions
 - [Implementation Details](docs/IMPLEMENTATION_SUMMARY.md) - Technical architecture
 - [Technical Deep Dive](docs/TECHNICAL_DOCUMENTATION.md) - Detailed system design
+- [Example Queries](docs/EXAMPLE_QUERIES.md) - 100 real-world search queries
+
+### Operations & Monitoring
+- [Current Status](docs/CURRENT_STATUS.md) - Real-time system status and metrics
+- [Re-indexing Status](docs/REINDEX_STATUS.md) - Indexing progress and monitoring
+- [Rekognition Cost Analysis](docs/REKOGNITION_COST_ANALYSIS.md) - Cost breakdown and safeguards
 
 ## Development
 
@@ -221,6 +229,9 @@ aws logs tail /aws/lambda/hearth-search --follow
 
 # Watch upload logs
 aws logs tail /aws/lambda/hearth-upload-listings --follow
+
+# Monitor re-indexing progress
+./watch_reindex_progress.sh
 ```
 
 ## License
