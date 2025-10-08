@@ -279,39 +279,35 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
                 except Exception as e:
                     logger.warning("Image embedding failed for zpid=%s, url=%s: %s", base.get("zpid"), u, e)
 
-                # COST OPTIMIZATION: Only use Rekognition for first image to detect exterior vs interior
-                # Claude Vision will do comprehensive analysis later on the best exterior image
-                # This reduces Rekognition calls from 6 per property to 1-2 per property
-                if count == 0:
-                    # Get labels ONLY for first image to identify if it's exterior
-                    try:
-                        labels = detect_labels(bb)
-                        for t in labels:
-                            img_tags.add(t)
+                # Use Rekognition on ALL images for flooring/interior feature detection
+                # This is necessary to detect carpet, hardwood, tile, etc across multiple interior photos
+                # Rekognition is cheap (~$0.001 per image) and fast
+                try:
+                    labels = detect_labels(bb)
+                    for t in labels:
+                        img_tags.add(t)
 
-                        # Score this image for architecture classification
-                        # Higher score = better exterior shot
-                        exterior_score = 0
-                        label_set = set(l.lower() for l in labels)
+                    # Score this image for architecture classification (first pass for exterior detection)
+                    # Higher score = better exterior shot
+                    exterior_score = 0
+                    label_set = set(l.lower() for l in labels)
 
-                        # Add points for exterior indicators
-                        exterior_score += sum(3 for kw in EXTERIOR_KEYWORDS if kw in label_set)
-                        # Subtract points for interior indicators
-                        exterior_score -= sum(2 for kw in INTERIOR_KEYWORDS if kw in label_set)
+                    # Add points for exterior indicators
+                    exterior_score += sum(3 for kw in EXTERIOR_KEYWORDS if kw in label_set)
+                    # Subtract points for interior indicators
+                    exterior_score -= sum(2 for kw in INTERIOR_KEYWORDS if kw in label_set)
 
-                        # If this is the best exterior image so far, save it
-                        if exterior_score > best_exterior_score:
-                            best_exterior_score = exterior_score
-                            best_exterior_image = bb
-                            logger.debug("Found better exterior image for zpid=%s (score: %d, labels: %s)",
-                                       base.get("zpid"), exterior_score, labels[:5])
+                    # If this is the best exterior image so far, save it for Claude Vision analysis
+                    if exterior_score > best_exterior_score:
+                        best_exterior_score = exterior_score
+                        best_exterior_image = bb
+                        logger.debug("Found better exterior image for zpid=%s (score: %d, labels: %s)",
+                                   base.get("zpid"), exterior_score, labels[:5])
 
-                    except Exception as e:
-                        logger.warning("Image label detection failed for zpid=%s: %s", base.get("zpid"), e)
-                else:
-                    # For subsequent images, just use the first one as exterior candidate
-                    # This saves 5 Rekognition calls per property (83% cost reduction)
-                    if count == 1 and not best_exterior_image:
+                except Exception as e:
+                    logger.warning("Image label detection failed for zpid=%s: %s", base.get("zpid"), e)
+                    # Fallback: use first image as exterior candidate if no Rekognition data
+                    if count == 0 and not best_exterior_image:
                         best_exterior_image = bb
                         best_exterior_score = 1
 

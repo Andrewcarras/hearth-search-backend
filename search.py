@@ -253,9 +253,9 @@ def handler(event, context):
             if max_drive_time_min and not max_distance_km:
                 max_distance_km = max_drive_time_min * 4  # Conservative estimate
 
-            # Default to 5km if not specified
+            # Default to 10km if not specified (reasonable for suburban "near")
             if not max_distance_km:
-                max_distance_km = 5
+                max_distance_km = 10
 
             logger.info("Using POI location: %s, max_distance: %s km", poi_location, max_distance_km)
 

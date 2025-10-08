@@ -926,19 +926,21 @@ def geocode_location(poi_type: str, reference_location: Optional[Dict[str, float
         if reference_location:
             # Search near reference point
             params = {
-                "q": amenity,
+                "q": f"{amenity}, Salt Lake City, Utah",
                 "format": "json",
                 "limit": 1,
                 "lat": reference_location["lat"],
                 "lon": reference_location["lon"],
             }
         else:
-            # Generic search - this will return first result (may not be relevant)
-            # In production, you should always use a reference location or city bounds
+            # Default to Salt Lake City area (where listings are located)
+            # This prevents finding random POIs in other countries
             params = {
-                "q": amenity,
+                "q": f"{amenity}, Salt Lake City, Utah",
                 "format": "json",
                 "limit": 1,
+                "bounded": 1,
+                "viewbox": "-112.1,40.9,-111.7,40.5",  # SLC bounding box
             }
 
         headers = {
