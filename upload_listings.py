@@ -452,6 +452,11 @@ def handler(event, context):
             core = _extract_core_fields(lst)
             images = extract_zillow_images(lst)
             doc = _build_doc(core, images)
+
+            # Store original listing data for frontend use
+            # This preserves all Zillow fields (responsivePhotos, address, etc.)
+            doc["original_listing"] = lst
+
             actions.append({"_id": core["zpid"], "_source": doc})
 
             if len(actions) >= 200:  # OK with backoff; lower to 150 if cluster is busy

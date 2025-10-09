@@ -18,9 +18,15 @@ fi
 
 # Create app directory
 mkdir -p /opt/hearth-ui
+mkdir -p /opt/hearth-ui/templates
 cd /opt/hearth-ui
 
-# Create Flask app
+# Download app files from S3 (updated UI with Zillow-style cards)
+aws s3 cp s3://demo-hearth-data/ui/app.py app.py
+aws s3 cp s3://demo-hearth-data/ui/index.html templates/index.html
+
+# Fallback: Create Flask app (if S3 download fails)
+if [ ! -f app.py ]; then
 cat > app.py << 'EOF'
 from flask import Flask, render_template, request, jsonify
 import requests
@@ -73,9 +79,10 @@ def search():
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=80, debug=False)
 EOF
+fi
 
-# Create templates directory and HTML
-mkdir -p templates
+# Fallback: Create HTML template (if S3 download fails)
+if [ ! -f templates/index.html ]; then
 cat > templates/index.html << 'HTMLEOF'
 <!DOCTYPE html>
 <html lang="en">
@@ -309,6 +316,7 @@ cat > templates/index.html << 'HTMLEOF'
 </body>
 </html>
 HTMLEOF
+fi
 
 # Install Python dependencies
 python3.11 -m pip install flask requests

@@ -288,7 +288,7 @@ def create_index_if_needed():
     The index uses HNSW (Hierarchical Navigable Small World) algorithm for
     fast approximate nearest neighbor search on high-dimensional vectors.
     """
-    if os_client.indices.exists(OS_INDEX):
+    if os_client.indices.exists(index=OS_INDEX):
         return  # Index already exists
 
     logger.info("Creating OpenSearch index %s", OS_INDEX)
@@ -753,11 +753,14 @@ def extract_query_constraints(query_text: str) -> Dict[str, Any]:
         prompt = f"""
 From the user's search query, extract:
 
-1. must_have: Feature tags (snake_case) that MUST be present. Include visual features like:
-   - Structural features: balcony, porch, deck, patio, fence, white_fence, pool, garage
-   - Exterior colors: white_exterior, blue_exterior, gray_exterior, brick_exterior, stone_exterior
-   - Interior features: kitchen_island, fireplace, open_floorplan, hardwood_floors
-   - Outdoor features: backyard, fenced_yard, large_yard
+1. must_have: ONLY property features explicitly mentioned (snake_case). Examples:
+   - Structural: balcony, porch, deck, patio, fence, white_fence, pool, garage
+   - Exterior: white_exterior, blue_exterior, gray_exterior, brick_exterior, stone_exterior
+   - Interior: kitchen_island, fireplace, open_floorplan, hardwood_floors
+   - Outdoor: backyard, fenced_yard, large_yard
+
+   IMPORTANT: If query is ONLY about location (e.g., "homes near X"), leave must_have EMPTY.
+   Do NOT infer features that aren't explicitly mentioned in the query.
 
 2. nice_to_have: Additional preferred tags (snake_case)
 
@@ -771,10 +774,11 @@ From the user's search query, extract:
 
 5. proximity: If query mentions location/POI, extract:
    {{
-     "poi_type": "school" | "grocery_store" | "gym" | "park" | "hospital" | "office" | "downtown" | etc,
-     "max_distance_km": number (optional, estimate from "near" = 5km, "close to" = 3km),
-     "max_drive_time_min": number (optional, extract from "X minute drive")
+     "poi_type": "school" | "grocery_store" | "gym" | "fitness_center" | "park" | "hospital" | "office" | "downtown" | etc,
+     "max_distance_km": number (estimate: "near"=5, "close to"=3, "within X miles"=X*1.6),
+     "max_drive_time_min": number (only if explicit like "10 minute drive")
    }}
+   Keywords: "near", "close to", "by", "next to", "within X miles/km of"
    If no proximity mentioned, return null.
 
 Return strict JSON with keys: must_have, nice_to_have, hard_filters, architecture_style, proximity
@@ -874,38 +878,116 @@ Query: "{query_text}"
 
 def geocode_location(poi_type: str, reference_location: Optional[Dict[str, float]] = None) -> Optional[Dict[str, float]]:
     """
-    Geocode a point of interest (POI) type to get its coordinates.
+    Geocode a point of interest (POI) type to get its coordinates using Google Maps Places API.
 
-    This implementation uses OpenStreetMap's Nominatim service as a fallback.
-    For production, consider using AWS Location Service or Google Maps API.
+    Uses Google Places API to find businesses and amenities near listings.
+    This provides accurate, real-world locations for gyms, stores, restaurants, etc.
 
     Args:
-        poi_type: Type of POI (e.g., "school", "grocery_store", "park", "hospital")
+        poi_type: Type of POI (e.g., "gym", "grocery_store", "park", "hospital")
         reference_location: Optional reference point {"lat": ..., "lon": ...} to search near
+                           If not provided, defaults to Salt Lake City center
 
     Returns:
         Dictionary with 'lat' and 'lon' keys, or None if geocoding fails
 
     Example:
-        >>> geocode_location("elementary_school")
-        {"lat": 37.7749, "lon": -122.4194}
+        >>> geocode_location("gym", {"lat": 40.7608, "lon": -111.891})
+        {"lat": 40.7386668, "lon": -111.8263901}
     """
     try:
-        # For "office" or user-specific locations, we need a reference point
-        # In production, this should come from user profile or be specified in the query
-        if poi_type == "office" and not reference_location:
-            logger.warning("geocode_location: 'office' requires reference_location - skipping")
-            return None
+        # Get API key from environment
+        google_api_key = os.getenv("GOOGLE_MAPS_API_KEY")
 
-        # Map POI types to Nominatim amenity types
+        if not google_api_key:
+            logger.warning("GOOGLE_MAPS_API_KEY not set - falling back to Nominatim")
+            return _geocode_location_nominatim(poi_type, reference_location)
+
+        # Default to Salt Lake City center if no reference location
+        if not reference_location:
+            reference_location = {"lat": 40.7608, "lon": -111.891}  # SLC downtown
+
+        # Map POI types to Google Places types
+        # https://developers.google.com/maps/documentation/places/web-service/supported_types
         poi_mapping = {
-            "school": "school",
-            "elementary_school": "school",
-            "high_school": "school",
-            "grocery_store": "supermarket",
-            "supermarket": "supermarket",
             "gym": "gym",
             "fitness": "gym",
+            "fitness_center": "gym",
+            "school": "school",
+            "elementary_school": "primary_school",
+            "high_school": "secondary_school",
+            "grocery_store": "supermarket",
+            "supermarket": "supermarket",
+            "park": "park",
+            "hospital": "hospital",
+            "pharmacy": "pharmacy",
+            "restaurant": "restaurant",
+            "cafe": "cafe",
+            "coffee_shop": "cafe",
+            "bank": "bank",
+            "library": "library",
+            "shopping": "shopping_mall",
+            "mall": "shopping_mall",
+            "downtown": "neighborhood",
+            "airport": "airport",
+            "office": "office",
+        }
+
+        place_type = poi_mapping.get(poi_type, poi_type)
+
+        # Use Google Places Nearby Search API
+        # https://developers.google.com/maps/documentation/places/web-service/search-nearby
+        base_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+
+        params = {
+            "location": f"{reference_location['lat']},{reference_location['lon']}",
+            "radius": 5000,  # Search within 5km
+            "type": place_type,
+            "key": google_api_key,
+        }
+
+        response = requests.get(base_url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        if data.get("status") == "OK" and data.get("results"):
+            # Get the first (closest) result
+            result = data["results"][0]
+            location = result["geometry"]["location"]
+
+            geocoded = {
+                "lat": float(location["lat"]),
+                "lon": float(location["lng"])
+            }
+
+            logger.info("Geocoded POI '%s' to %s (name: %s)",
+                       poi_type, geocoded, result.get("name", "Unknown"))
+            return geocoded
+        else:
+            logger.warning("No Google Places results for POI type '%s': %s",
+                          poi_type, data.get("status"))
+            return None
+
+    except Exception as e:
+        logger.warning("geocode_location failed for '%s': %s", poi_type, e)
+        return None
+
+
+def _geocode_location_nominatim(poi_type: str, reference_location: Optional[Dict[str, float]] = None) -> Optional[Dict[str, float]]:
+    """
+    Fallback geocoding using OpenStreetMap Nominatim (free but limited).
+
+    Only used when Google Maps API key is not available.
+    """
+    try:
+        if poi_type == "office" and not reference_location:
+            return None
+
+        poi_mapping = {
+            "school": "school",
+            "gym": "gym",
+            "fitness": "gym",
+            "grocery_store": "supermarket",
             "park": "park",
             "hospital": "hospital",
             "pharmacy": "pharmacy",
@@ -913,18 +995,12 @@ def geocode_location(poi_type: str, reference_location: Optional[Dict[str, float
             "cafe": "cafe",
             "bank": "bank",
             "library": "library",
-            "downtown": "city_centre",
         }
 
         amenity = poi_mapping.get(poi_type, poi_type)
-
-        # Use OpenStreetMap Nominatim (free geocoding service)
-        # For production, replace with AWS Location Service or paid API
         base_url = "https://nominatim.openstreetmap.org/search"
 
-        # Build query
         if reference_location:
-            # Search near reference point
             params = {
                 "q": f"{amenity}, Salt Lake City, Utah",
                 "format": "json",
@@ -933,36 +1009,24 @@ def geocode_location(poi_type: str, reference_location: Optional[Dict[str, float
                 "lon": reference_location["lon"],
             }
         else:
-            # Default to Salt Lake City area (where listings are located)
-            # This prevents finding random POIs in other countries
             params = {
                 "q": f"{amenity}, Salt Lake City, Utah",
                 "format": "json",
                 "limit": 1,
                 "bounded": 1,
-                "viewbox": "-112.1,40.9,-111.7,40.5",  # SLC bounding box
+                "viewbox": "-112.1,40.9,-111.7,40.5",
             }
 
-        headers = {
-            "User-Agent": "HearthRealEstateSearch/1.0"  # Nominatim requires user agent
-        }
-
+        headers = {"User-Agent": "HearthRealEstateSearch/1.0"}
         response = requests.get(base_url, params=params, headers=headers, timeout=5)
         response.raise_for_status()
         results = response.json()
 
         if results and len(results) > 0:
             result = results[0]
-            location = {
-                "lat": float(result["lat"]),
-                "lon": float(result["lon"])
-            }
-            logger.info("Geocoded POI '%s' to %s", poi_type, location)
-            return location
-        else:
-            logger.warning("No geocoding results for POI type: %s", poi_type)
-            return None
+            return {"lat": float(result["lat"]), "lon": float(result["lon"])}
+        return None
 
     except Exception as e:
-        logger.warning("geocode_location failed for '%s': %s", poi_type, e)
+        logger.warning("Nominatim geocoding failed: %s", e)
         return None

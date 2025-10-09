@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hearth Search - Property Search Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Open Sans', sans-serif;
+            background: #f7f8fa;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #006aff 0%, #0056cc 100%);
+            color: white;
+            padding: 25px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header h1 { font-size: 2em; margin-bottom: 8px; }
+        .header p { font-size: 1em; opacity: 0.95; }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        .search-card {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        .search-box input[type="text"] {
+            width: 100%;
+            padding: 14px 18px;
+            font-size: 15px;
+            border: 2px solid #d8d8d8;
+            border-radius: 6px;
+            transition: border-color 0.2s;
+        }
+        .search-box input[type="text"]:focus {
+            outline: none;
+            border-color: #006aff;
+        }
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin: 18px 0;
+        }
+        .filter-group label {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 5px;
+            display: block;
+            font-weight: 500;
+        }
+        .filter-group input {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            border: 1px solid #d8d8d8;
+            border-radius: 4px;
+        }
+        .search-button {
+            width: 100%;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            color: white;
+            background: #006aff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .search-button:hover { background: #0056cc; }
+        .search-button:active { transform: translateY(1px); }
+
+        .results-summary {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+        .results-summary h2 { font-size: 1.5em; color: #2a2a2a; margin-bottom: 10px; }
+        .tag {
+            background: #e3f2ff;
+            color: #006aff;
+            padding: 6px 14px;
+            border-radius: 16px;
+            font-size: 13px;
+            margin: 4px 4px 4px 0;
+            display: inline-block;
+            font-weight: 500;
+        }
+
+        .property-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 20px;
+        }
+
+        .property-card {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+        .property-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        .property-image {
+            width: 100%;
+            height: 240px;
+            object-fit: cover;
+            background: #f0f0f0;
+        }
+        .property-info {
+            padding: 18px;
+        }
+        .property-price {
+            font-size: 1.6em;
+            font-weight: 700;
+            color: #2a2a2a;
+            margin-bottom: 8px;
+        }
+        .property-address {
+            font-size: 0.95em;
+            color: #555;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        .property-stats {
+            display: flex;
+            gap: 16px;
+            padding: 12px 0;
+            border-top: 1px solid #f0f0f0;
+            border-bottom: 1px solid #f0f0f0;
+            margin-bottom: 12px;
+        }
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9em;
+            color: #2a2a2a;
+        }
+        .stat-value { font-weight: 600; }
+        .property-score {
+            display: inline-block;
+            background: #f0f0f0;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #555;
+        }
+        .property-score.boosted {
+            background: #ffd700;
+            color: #2a2a2a;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.8);
+            animation: fadeIn 0.2s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: 2% auto;
+            max-width: 1100px;
+            border-radius: 8px;
+            overflow: hidden;
+            animation: slideIn 0.3s;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-header {
+            background: #2a2a2a;
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 { font-size: 1.8em; }
+        .close {
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .close:hover { color: #ccc; }
+
+        .modal-body {
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        /* Image Gallery */
+        .image-gallery {
+            position: relative;
+            background: #000;
+        }
+        .gallery-main {
+            width: 100%;
+            height: 500px;
+            object-fit: contain;
+            background: #000;
+        }
+        .gallery-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0,0,0,0.5);
+            color: white;
+            border: none;
+            font-size: 32px;
+            padding: 20px 15px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .gallery-nav:hover { background: rgba(0,0,0,0.8); }
+        .gallery-prev { left: 0; }
+        .gallery-next { right: 0; }
+        .gallery-counter {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        .gallery-thumbnails {
+            display: flex;
+            gap: 8px;
+            padding: 15px;
+            background: #f7f8fa;
+            overflow-x: auto;
+        }
+        .gallery-thumb {
+            width: 80px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .gallery-thumb:hover { border-color: #006aff; }
+        .gallery-thumb.active { border-color: #006aff; }
+
+        .detail-section {
+            padding: 30px;
+        }
+        .detail-section h3 {
+            font-size: 1.4em;
+            color: #2a2a2a;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .detail-item {
+            background: #f7f8fa;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .detail-label {
+            font-size: 12px;
+            color: #777;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+        .detail-value {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #2a2a2a;
+        }
+        .description {
+            line-height: 1.7;
+            color: #555;
+            margin: 15px 0;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .feature-tag {
+            background: #e3f2ff;
+            color: #006aff;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            text-align: center;
+        }
+        .zillow-btn {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 14px 28px;
+            background: #006aff;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 15px;
+            transition: background 0.2s;
+        }
+        .zillow-btn:hover { background: #0056cc; }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #555;
+            font-size: 1.2em;
+        }
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .no-results h3 { color: #555; font-size: 1.5em; }
+
+        @media (max-width: 768px) {
+            .property-grid {
+                grid-template-columns: 1fr;
+            }
+            .modal-content {
+                margin: 0;
+                max-width: 100%;
+                border-radius: 0;
+            }
+            .gallery-main {
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>🏠 Hearth Search</h1>
+            <p>AI-powered natural language property search</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="search-card">
+            <div class="search-box">
+                <input type="text" id="searchQuery" placeholder="Try: modern home with mountain views" value="modern homes">
+            </div>
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Min Price</label>
+                    <input type="number" id="priceMin" placeholder="e.g. 200000">
+                </div>
+                <div class="filter-group">
+                    <label>Max Price</label>
+                    <input type="number" id="priceMax" placeholder="e.g. 2000000">
+                </div>
+                <div class="filter-group">
+                    <label>Min Bedrooms</label>
+                    <input type="number" id="bedsMin" placeholder="e.g. 3">
+                </div>
+                <div class="filter-group">
+                    <label>Min Bathrooms</label>
+                    <input type="number" id="bathsMin" placeholder="e.g. 2">
+                </div>
+            </div>
+            <button class="search-button" onclick="performSearch()">Search Properties</button>
+        </div>
+        <div id="results"></div>
+    </div>
+
+    <!-- Property Detail Modal -->
+    <div id="propertyModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalAddress">Property Details</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="image-gallery">
+                    <img id="modalMainImage" class="gallery-main" src="" alt="Property image">
+                    <button class="gallery-nav gallery-prev" onclick="previousImage()">‹</button>
+                    <button class="gallery-nav gallery-next" onclick="nextImage()">›</button>
+                    <div class="gallery-counter" id="imageCounter">1 / 1</div>
+                </div>
+                <div class="gallery-thumbnails" id="thumbnails"></div>
+                <div class="detail-section">
+                    <div class="detail-grid" id="modalStats"></div>
+                    <h3>Description</h3>
+                    <div class="description" id="modalDescription"></div>
+                    <div id="modalFeatures"></div>
+                    <div id="modalActions"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentProperty = null;
+        let currentImageIndex = 0;
+
+        async function performSearch() {
+            const query = document.getElementById('searchQuery').value.trim();
+            if (!query) { alert('Please enter a search query'); return; }
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">🔍 Searching properties...</div>';
+
+            const payload = { q: query, size: 30 };
+            const priceMin = document.getElementById('priceMin').value;
+            const priceMax = document.getElementById('priceMax').value;
+            const bedsMin = document.getElementById('bedsMin').value;
+            const bathsMin = document.getElementById('bathsMin').value;
+
+            if (priceMin) payload.price_min = priceMin;
+            if (priceMax) payload.price_max = priceMax;
+            if (bedsMin) payload.beds_min = bedsMin;
+            if (bathsMin) payload.baths_min = bathsMin;
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.error) {
+                    resultsDiv.innerHTML = '<div class="no-results"><h3>Error: ' + data.error + '</h3></div>';
+                    return;
+                }
+                displayResults(data);
+            } catch (error) {
+                resultsDiv.innerHTML = '<div class="no-results"><h3>Error: ' + error.message + '</h3></div>';
+            }
+        }
+
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            if (!data.results || data.results.length === 0) {
+                resultsDiv.innerHTML = '<div class="no-results"><h3>No properties found</h3><p>Try adjusting your search criteria</p></div>';
+                return;
+            }
+
+            let html = '<div class="results-summary"><h2>Found ' + data.total + ' properties</h2>';
+            if (data.must_have && data.must_have.length > 0) {
+                html += '<p style="margin:10px 0;color:#555;">Must-have features:</p>';
+                data.must_have.forEach(tag => html += '<span class="tag">' + tag.replace(/_/g, ' ') + '</span>');
+            }
+            html += '</div><div class="property-grid">';
+
+            data.results.forEach((listing, index) => {
+                // Get the first image (prefer responsivePhotos from Zillow data, fallback to our images array)
+                let imageUrl = '//:0'; // blank image placeholder
+                if (listing.responsivePhotos && listing.responsivePhotos.length > 0) {
+                    imageUrl = listing.responsivePhotos[0].mixedSources?.jpeg?.[0]?.url || imageUrl;
+                } else if (listing.images && listing.images.length > 0) {
+                    imageUrl = listing.images[0];
+                }
+
+                // Use Zillow data structure if available, fallback to our indexed data
+                const bedrooms = listing.bedrooms || listing.beds || 'N/A';
+                const bathrooms = listing.bathrooms || listing.baths || 'N/A';
+                const price = listing.price || 'N/A';
+                const address = listing.address?.streetAddress || listing.address || 'Address not available';
+                const city = listing.address?.city || listing.city || '';
+                const state = listing.address?.state || listing.state || '';
+                const zipcode = listing.address?.zipcode || listing.zip_code || '';
+
+                html += `
+                    <div class="property-card" onclick="showPropertyDetails(${index})">
+                        <img class="property-image" src="${imageUrl}" alt="Property" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22%3E%3Crect fill=%22%23f0f0f0%22 width=%22400%22 height=%22300%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22%3ENo Image%3C/text%3E%3C/svg%3E'">
+                        <div class="property-info">
+                            <div class="property-price">$${price.toLocaleString ? price.toLocaleString() : price}</div>
+                            <div class="property-address">
+                                ${address}<br>
+                                ${city}${city && state ? ', ' : ''}${state} ${zipcode}
+                            </div>
+                            <div class="property-stats">
+                                <div class="stat">
+                                    <span class="stat-value">${bedrooms}</span> beds
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-value">${bathrooms}</span> baths
+                                </div>
+                                ${listing.acreage ? `<div class="stat"><span class="stat-value">${listing.acreage.toLocaleString()}</span> sqft</div>` : ''}
+                            </div>
+                            <span class="property-score ${listing.boosted ? 'boosted' : ''}">
+                                Match Score: ${listing.score.toFixed(2)}${listing.boosted ? ' ⭐' : ''}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+
+            // Store results for modal access
+            window.searchResults = data.results;
+        }
+
+        function showPropertyDetails(index) {
+            currentProperty = window.searchResults[index];
+            currentImageIndex = 0;
+
+            const modal = document.getElementById('propertyModal');
+
+            // Set address
+            const address = currentProperty.address?.streetAddress || currentProperty.address || 'Property Details';
+            document.getElementById('modalAddress').textContent = address;
+
+            // Build images array
+            let images = [];
+            if (currentProperty.responsivePhotos && currentProperty.responsivePhotos.length > 0) {
+                images = currentProperty.responsivePhotos.map(photo =>
+                    photo.mixedSources?.jpeg?.[0]?.url || ''
+                ).filter(url => url);
+            } else if (currentProperty.images && currentProperty.images.length > 0) {
+                images = currentProperty.images;
+            }
+
+            if (images.length === 0) {
+                images = ['data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22%3E%3Crect fill=%22%23f0f0f0%22 width=%22800%22 height=%22600%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2224%22%3ENo Images Available%3C/text%3E%3C/svg%3E'];
+            }
+
+            window.currentImages = images;
+            updateModalImage();
+
+            // Build thumbnails
+            const thumbsHtml = images.map((img, i) =>
+                `<img src="${img}" class="gallery-thumb ${i === 0 ? 'active' : ''}" onclick="setImageIndex(${i})" alt="Thumbnail ${i+1}">`
+            ).join('');
+            document.getElementById('thumbnails').innerHTML = thumbsHtml;
+
+            // Stats
+            const bedrooms = currentProperty.bedrooms || currentProperty.beds || 'N/A';
+            const bathrooms = currentProperty.bathrooms || currentProperty.baths || 'N/A';
+            const price = currentProperty.price || 'N/A';
+            const acreage = currentProperty.livingArea || currentProperty.acreage || 'N/A';
+            const yearBuilt = currentProperty.yearBuilt || 'N/A';
+
+            document.getElementById('modalStats').innerHTML = `
+                <div class="detail-item">
+                    <div class="detail-label">Price</div>
+                    <div class="detail-value">$${price.toLocaleString ? price.toLocaleString() : price}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Bedrooms</div>
+                    <div class="detail-value">${bedrooms}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Bathrooms</div>
+                    <div class="detail-value">${bathrooms}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Square Feet</div>
+                    <div class="detail-value">${acreage.toLocaleString ? acreage.toLocaleString() : acreage}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Year Built</div>
+                    <div class="detail-value">${yearBuilt}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Match Score</div>
+                    <div class="detail-value">${currentProperty.score.toFixed(2)}${currentProperty.boosted ? ' ⭐' : ''}</div>
+                </div>
+            `;
+
+            // Description
+            const description = currentProperty.description || 'No description available.';
+            document.getElementById('modalDescription').textContent = description;
+
+            // Features
+            let featuresHtml = '';
+            if (currentProperty.feature_tags && currentProperty.feature_tags.length > 0) {
+                featuresHtml = '<h3>Features</h3><div class="features-grid">';
+                currentProperty.feature_tags.forEach(tag => {
+                    featuresHtml += '<div class="feature-tag">' + tag.replace(/_/g, ' ') + '</div>';
+                });
+                featuresHtml += '</div>';
+            }
+            if (currentProperty.architecture_style) {
+                if (!featuresHtml) featuresHtml = '<h3>Additional Info</h3>';
+                featuresHtml += '<p style="margin-top:15px;"><strong>Architecture Style:</strong> ' +
+                    currentProperty.architecture_style.replace(/_/g, ' ') + '</p>';
+            }
+            document.getElementById('modalFeatures').innerHTML = featuresHtml;
+
+            // Zillow link
+            const zillowUrl = currentProperty.hdpUrl ?
+                'https://www.zillow.com' + currentProperty.hdpUrl :
+                'https://www.zillow.com/homedetails/' + currentProperty.zpid + '_zpid/';
+            document.getElementById('modalActions').innerHTML =
+                `<a href="${zillowUrl}" target="_blank" class="zillow-btn">View Full Details on Zillow →</a>`;
+
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function updateModalImage() {
+            const img = document.getElementById('modalMainImage');
+            img.src = window.currentImages[currentImageIndex];
+            document.getElementById('imageCounter').textContent =
+                `${currentImageIndex + 1} / ${window.currentImages.length}`;
+
+            // Update thumbnail active state
+            document.querySelectorAll('.gallery-thumb').forEach((thumb, i) => {
+                thumb.classList.toggle('active', i === currentImageIndex);
+            });
+        }
+
+        function previousImage() {
+            currentImageIndex = (currentImageIndex - 1 + window.currentImages.length) % window.currentImages.length;
+            updateModalImage();
+        }
+
+        function nextImage() {
+            currentImageIndex = (currentImageIndex + 1) % window.currentImages.length;
+            updateModalImage();
+        }
+
+        function setImageIndex(index) {
+            currentImageIndex = index;
+            updateModalImage();
+        }
+
+        function closeModal() {
+            document.getElementById('propertyModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('propertyModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (document.getElementById('propertyModal').style.display === 'block') {
+                if (e.key === 'ArrowLeft') previousImage();
+                if (e.key === 'ArrowRight') nextImage();
+                if (e.key === 'Escape') closeModal();
+            }
+        });
+
+        // Search on Enter key
+        document.getElementById('searchQuery').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') performSearch();
+        });
+    </script>
+</body>
+</html>

@@ -1,113 +1,172 @@
-# Re-indexing Status
+# Re-indexing Guide
 
-## Current Re-indexing: October 8, 2025
+## Monitoring Progress
 
-**Status**: In Progress ✅
+Use the monitoring script to check current status:
 
-### Progress
-- **Listings processed**: 313 / 1588 (10.0%)
-- **Active Lambda instances**: 3
-- **Estimated completion**: ~25-30 minutes from start
+```bash
+./monitor_reindex.sh
+```
 
-### What's Being Updated
+This shows:
+- Number of listings processed
+- Current batch being worked on
+- Active Lambda instances
+- Estimated time to completion
 
-This re-indexing adds critical improvements to all existing listings:
+## What Gets Indexed
+
+The upload Lambda processes each listing with:
 
 1. **Geo Coordinates** (`geo` field)
-   - Enables proximity-based search ("Show me houses near a gym")
-   - Uses latitude/longitude from listing JSON
-   - Required for `geo_distance` filters in OpenSearch
+   - Latitude/longitude from Zillow data
+   - Required for proximity-based search ("homes near a gym")
+   - Enables `geo_distance` filters in OpenSearch
 
-2. **Comprehensive Feature Detection** (All images processed)
-   - Rekognition on ALL images (not just first)
-   - Detects carpet, hardwood, tile, vinyl, laminate flooring
-   - Identifies outdoor features across multiple photos
-   - Improves accuracy of "no carpet", "all hardwood" queries
+2. **Visual Feature Detection** (Rekognition + Claude Vision)
+   - Architecture style classification (modern, craftsman, ranch, etc.)
+   - Visual features: balconies, porches, fences, garages
+   - Exterior colors and materials
+   - Interior features from multiple images
 
-3. **Architecture Style Classification** (Claude Vision)
-   - High-quality classification using Claude 3 Sonnet
-   - Detects: modern, craftsman, ranch, contemporary, traditional, victorian, etc.
-   - Visual feature tagging: balconies, porches, fences, garages
+3. **Text Embeddings** (Titan)
+   - 1024-dim vector embeddings for semantic search
+   - Generated from property descriptions
 
-### Monitoring Progress
+4. **Image Embeddings** (Titan)
+   - 1024-dim vector embeddings for visual search
+   - Averaged from all property photos
 
-Use the monitoring script to check status:
+## Triggering Re-indexing
 
-```bash
-./watch_reindex_progress.sh
-```
+### Full Re-index
 
-Or manually check logs:
+Re-process all 1,588 listings:
 
-```bash
-aws logs tail /aws/lambda/hearth-upload-listings --follow
-```
-
-### Cost Estimate
-
-**Total cost for re-indexing 1588 listings**: ~$15 one-time
-
-- Rekognition: $9.53 (6 images × 1588 listings × $0.001)
-- Claude Vision: $4.76 (1 image × 1588 listings × $0.003)
-- Bedrock Titan: $1.21 (embeddings + text processing)
-- Lambda: $0.03 (compute time)
-
-This is a **one-time cost** - the system does NOT auto-re-index or loop.
-
-### Why This Works (No $200 Bill)
-
-✅ **Proper termination logic**: Lambda only self-invokes if `has_more = true`
-✅ **Start/limit tracking**: Each invocation processes a specific batch
-✅ **Zpid-based upsert**: Re-running won't duplicate costs
-✅ **Manual trigger only**: No auto-triggers from S3/schedules
-
-See [REKOGNITION_COST_ANALYSIS.md](REKOGNITION_COST_ANALYSIS.md) for details.
-
-### Testing After Completion
-
-Once re-indexing completes (313/1588 → 1588/1588), test these queries:
-
-```bash
-# Geolocation search
-curl -X POST "https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search" \
-  -H "Content-Type: application/json" \
-  -d '{"q": "Show me houses near a gym", "size": 5}'
-
-# Flooring search
-curl -X POST "https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search" \
-  -H "Content-Type: application/json" \
-  -d '{"q": "Show me houses with all hardwood floors and no carpet", "size": 5}'
-
-# Combined search
-curl -X POST "https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search" \
-  -H "Content-Type: application/json" \
-  -d '{"q": "modern homes with a balcony within 5 miles of a gym", "size": 3}'
-```
-
-### Triggered By
-
-Lambda invocation:
 ```bash
 aws lambda invoke \
   --function-name hearth-upload-listings \
-  --cli-binary-format raw-in-base64-out \
-  --payload '{"bucket": "demo-hearth-data", "key": "murray_listings.json", "start": 0, "limit": 100}' \
   --invocation-type Event \
-  response_reindex.json
+  --payload '{"bucket": "demo-hearth-data", "key": "murray_listings.json", "start": 0, "limit": 100}' \
+  --region us-east-1 \
+  response.json
 ```
 
-The Lambda will self-invoke for batches:
-- Invocation 1: start=0, limit=100 → processes 0-99, invokes start=100
-- Invocation 2: start=100, limit=100 → processes 100-199, invokes start=200
-- ... continues until start >= 1588, then stops
+The Lambda will:
+1. Process 100 listings
+2. Self-invoke for next batch (start=100)
+3. Continue until all listings processed
+4. Stop automatically when complete
 
-### Next Steps
+### Partial Re-index
 
-1. ⏳ Wait for re-indexing to complete (~20-25 more minutes)
-2. ✅ Verify completion: `./watch_reindex_progress.sh` shows 1588/1588
-3. 🧪 Test all query types (proximity, flooring, architecture, combined)
-4. 📊 Verify results include geo coordinates and comprehensive features
+Re-process specific range:
 
-## Recent Re-indexing History
+```bash
+# Process listings 500-600
+aws lambda invoke \
+  --function-name hearth-upload-listings \
+  --invocation-type Event \
+  --payload '{"bucket": "demo-hearth-data", "key": "murray_listings.json", "start": 500, "limit": 100}' \
+  --region us-east-1 \
+  response.json
+```
 
-- **October 8, 2025 6:15 PM**: Started full re-index to add geo coordinates and comprehensive feature detection (In Progress: 10%)
+## Performance
+
+- **Speed**: ~100 listings per 13 minutes
+- **Total time**: ~3.5 hours for all 1,588 listings
+- **Batch size**: 100 listings per Lambda invocation
+- **Timeout**: 15 minutes per invocation (includes safety buffer)
+
+## Checking Logs
+
+### View Recent Activity
+
+```bash
+aws logs tail /aws/lambda/hearth-upload-listings --since 10m --region us-east-1
+```
+
+### Follow Live Progress
+
+```bash
+aws logs tail /aws/lambda/hearth-upload-listings --follow --region us-east-1
+```
+
+### Check for Errors
+
+```bash
+aws logs tail /aws/lambda/hearth-upload-listings --since 1h --region us-east-1 | grep ERROR
+```
+
+## Cost Estimate
+
+**One-time re-indexing cost** (1,588 listings):
+- Rekognition: ~$9.50 (6 images per listing)
+- Claude Vision: ~$4.76 (1 image per listing)
+- Bedrock Titan: ~$1.20 (embeddings)
+- Lambda compute: ~$0.03
+
+**Total**: ~$15 one-time
+
+## Troubleshooting
+
+### Re-indexing Appears Stuck
+
+**Check if still running**:
+```bash
+./monitor_reindex.sh
+```
+
+**Check for Lambda errors**:
+```bash
+aws logs tail /aws/lambda/hearth-upload-listings --since 30m | grep -E "ERROR|Exception"
+```
+
+**Restart from last position**:
+```bash
+# If stuck at listing 400, restart from there
+aws lambda invoke \
+  --function-name hearth-upload-listings \
+  --invocation-type Event \
+  --payload '{"bucket": "demo-hearth-data", "key": "murray_listings.json", "start": 400, "limit": 100}' \
+  response.json
+```
+
+### OpenSearch Returns 429/502 Errors
+
+This is normal during heavy indexing. The Lambda has retry logic with exponential backoff.
+
+**Check logs**:
+```bash
+aws logs tail /aws/lambda/hearth-upload-listings --since 5m | grep "429\|502"
+```
+
+The retries will succeed - no action needed.
+
+### Verify Completion
+
+Check total indexed count:
+
+```bash
+curl -X GET "https://search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com/listings/_count" \
+  --aws-sigv4 "aws:amz:us-east-1:es"
+```
+
+Should show `{"count": 1588}` when complete.
+
+## After Re-indexing
+
+Once complete, all search features will work:
+
+✅ Feature queries ("homes with pool")
+✅ Architecture style ("modern homes")
+✅ Geo-location ("homes near a gym")
+✅ Combined queries ("modern 3 bed homes with pool near gym")
+
+Test with:
+```bash
+curl -X POST "http://54.163.59.108/search" \
+  -H "Content-Type: application/json" \
+  -d '{"q": "modern homes with pool", "size": 10}'
+```

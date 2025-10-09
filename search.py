@@ -44,7 +44,7 @@ logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 # SEARCH HELPER FUNCTIONS
 # ===============================================
 
-def _filters_to_bool(filter_obj: Dict[str, Any]) -> Dict[str, Any]:
+def _filters_to_bool(filter_obj: Dict[str, Any], require_embeddings: bool = True) -> Dict[str, Any]:
     """
     Convert high-level filter dict to OpenSearch bool query filters.
 
@@ -54,6 +54,7 @@ def _filters_to_bool(filter_obj: Dict[str, Any]) -> Dict[str, Any]:
 
     Args:
         filter_obj: Dictionary with filter keys like price_min, price_max, beds_min, etc.
+        require_embeddings: If True, only return documents with valid embeddings (for kNN searches)
 
     Returns:
         OpenSearch bool query dict with filter clause
@@ -98,9 +99,10 @@ def _filters_to_bool(filter_obj: Dict[str, Any]) -> Dict[str, Any]:
         if acreage_filter:  # Only append if not empty
             f.append(acreage_filter)
 
-    # Critical: Only include documents with valid (non-zero) embeddings
-    # This prevents zero-vector documents from polluting results
-    f.append({"term": {"has_valid_embeddings": True}})
+    # Only require embeddings when doing vector/semantic search (kNN)
+    # For geo-distance or pure text queries, listings can be found while still indexing
+    if require_embeddings:
+        f.append({"term": {"has_valid_embeddings": True}})
 
     return {"bool": {"filter": f}}
 
@@ -229,8 +231,24 @@ def handler(event, context):
     if architecture_style:
         logger.info("Filtering by architecture style: %s", architecture_style)
 
+    # Determine if we need vector search (kNN) based on query characteristics
+    # We can skip embeddings requirement if:
+    # 1. Query is primarily location-based (has proximity but no feature requirements)
+    # 2. Query is simple numeric filters (price, beds, baths)
+    # This allows results to show during indexing for geo/filter-only queries
+    is_geo_focused = proximity is not None and not must_tags and not architecture_style
+    needs_semantic_search = bool(must_tags) or bool(architecture_style) or not proximity
+
+    # Only require embeddings when we're doing semantic/vector search
+    require_embeddings = needs_semantic_search
+
+    if is_geo_focused:
+        logger.info("Geo-focused query detected - allowing results without embeddings")
+    else:
+        logger.info("Semantic search required - filtering for valid embeddings")
+
     q_vec = embed_text(q)
-    filter_clauses = _filters_to_bool(hard_filters)["bool"]["filter"]  # This is a list of filter dicts
+    filter_clauses = _filters_to_bool(hard_filters, require_embeddings=require_embeddings)["bool"]["filter"]
 
     # Add architecture style filter
     if architecture_style:
@@ -307,44 +325,18 @@ def handler(event, context):
     bm25_hits = _os_search(bm25_query, size=size * 3)
     logger.info("BM25 returned %d hits", len(bm25_hits))
 
-    # 2) kNN on text vector (OpenSearch kNN query)
-    # When using filters with kNN, we need to use the query parameter inside kNN
-    knn_text_body = {
-        "size": size * 3,
-        "query": {
-            "bool": {
-                "must": [
-                    {
-                        "knn": {
-                            "vector_text": {
-                                "vector": q_vec,
-                                "k": topK
-                            }
-                        }
-                    }
-                ],
-                "filter": filter_clauses  # Use the same filter list
-            }
-        }
-    }
-    try:
-        knn_text_hits = _os_search(knn_text_body, size=size * 3)
-        logger.info("kNN text returned %d hits", len(knn_text_hits))
-    except Exception as e:
-        logger.warning("kNN text search failed: %s", e)
-        knn_text_hits = []
-
-    # 3) kNN on image vector (optional if present)
-    knn_img_hits: List[Dict[str, Any]] = []
-    try:
-        knn_img_body = {
+    # 2) kNN on text vector (only if semantic search is needed)
+    # For geo-focused queries, skip kNN to avoid filtering out partially-indexed docs
+    knn_text_hits: List[Dict[str, Any]] = []
+    if require_embeddings:
+        knn_text_body = {
             "size": size * 3,
             "query": {
                 "bool": {
                     "must": [
                         {
                             "knn": {
-                                "vector_image": {
+                                "vector_text": {
                                     "vector": q_vec,
                                     "k": topK
                                 }
@@ -355,12 +347,44 @@ def handler(event, context):
                 }
             }
         }
-        knn_img_hits = _os_search(knn_img_body, size=size * 3)
-        logger.info("kNN image returned %d hits", len(knn_img_hits))
-    except Exception as e:
-        logger.warning("Image kNN skipped (no mapping or field): %s", e)
+        try:
+            knn_text_hits = _os_search(knn_text_body, size=size * 3)
+            logger.info("kNN text returned %d hits", len(knn_text_hits))
+        except Exception as e:
+            logger.warning("kNN text search failed: %s", e)
+    else:
+        logger.info("Skipping kNN text search (geo-focused query)")
 
-    # Fuse (RRF)
+    # 3) kNN on image vector (only if semantic search is needed)
+    knn_img_hits: List[Dict[str, Any]] = []
+    if require_embeddings:
+        try:
+            knn_img_body = {
+                "size": size * 3,
+                "query": {
+                    "bool": {
+                        "must": [
+                            {
+                                "knn": {
+                                    "vector_image": {
+                                        "vector": q_vec,
+                                        "k": topK
+                                    }
+                                }
+                            }
+                        ],
+                        "filter": filter_clauses  # Use the same filter list
+                    }
+                }
+            }
+            knn_img_hits = _os_search(knn_img_body, size=size * 3)
+            logger.info("kNN image returned %d hits", len(knn_img_hits))
+        except Exception as e:
+            logger.warning("Image kNN skipped (no mapping or field): %s", e)
+    else:
+        logger.info("Skipping kNN image search (geo-focused query)")
+
+    # Fuse results using RRF (only includes non-empty result lists)
     fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, top=size * 3)
     logger.info("RRF fusion produced %d results", len(fused))
 
@@ -372,12 +396,19 @@ def handler(event, context):
         satisfied = must_tags.issubset(tags) if must_tags else True
         boost = 1.0 + (0.5 if satisfied and must_tags else 0.0)
 
-        # Return ALL fields from the source document (excluding internal vectors)
+        # Return original listing data merged with search metadata
+        # original_listing contains all Zillow fields (responsivePhotos, address, etc.)
+        original_listing = src.get("original_listing", {})
+
         result = {
+            # Start with all original Zillow listing fields
+            **original_listing,
+            # Add search metadata (score, boosted, our enrichments)
             "id": h["_id"],
             "score": h.get("_score", 0.0),
             "boosted": boost > 1.0,
-            **{k: v for k, v in src.items() if k not in ("vector_text", "vector_image")}
+            # Add our enriched fields (architecture_style, feature_tags, etc.)
+            **{k: v for k, v in src.items() if k not in ("vector_text", "vector_image", "original_listing")}
         }
 
         final.append((h.get("_score", 0.0) * boost, result))
