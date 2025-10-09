@@ -17,13 +17,30 @@ https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod
 ```json
 {
   "q": "Show me homes with a balcony and modern architecture",
-  "size": 10
+  "size": 10,
+  "filters": {
+    "price_min": 200000,
+    "price_max": 750000,
+    "beds_min": 3,
+    "baths_min": 2,
+    "acreage_min": 0.25,
+    "acreage_max": 5.0
+  }
 }
 ```
 
 **Parameters:**
 - `q` (string, required): Natural language search query
 - `size` (number, optional): Number of results to return (default: 30, max: 100)
+- `filters` (object, optional): Explicit numeric filters to apply
+  - `price_min` (number): Minimum price
+  - `price_max` (number): Maximum price
+  - `beds_min` (number): Minimum bedrooms
+  - `baths_min` (number): Minimum bathrooms
+  - `acreage_min` (number): Minimum lot size in acres
+  - `acreage_max` (number): Maximum lot size in acres
+
+**Note:** The LLM automatically extracts filters from natural language (e.g., "under $500k" → `price_max: 500000`). Explicit `filters` parameter will **merge with** (not replace) LLM-extracted filters.
 
 **Response:**
 ```json
@@ -128,6 +145,25 @@ https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod
   "size": 20
 }
 
+// Natural language with auto-extracted filters
+{
+  "q": "3 bedroom homes under $500k",
+  "size": 10
+  // LLM automatically extracts: beds_min=3, price_max=500000
+}
+
+// Explicit filters (merged with LLM-extracted)
+{
+  "q": "modern homes with a pool",
+  "size": 10,
+  "filters": {
+    "price_min": 300000,
+    "price_max": 750000,
+    "beds_min": 3,
+    "baths_min": 2
+  }
+}
+
 // Feature-based search
 {
   "q": "homes with a pool and mountain views",
@@ -146,10 +182,16 @@ https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod
   "size": 25
 }
 
-// Combined search
+// Filters only (no natural language features)
 {
-  "q": "modern homes with a balcony, white fence, and attached garage under $500k",
-  "size": 10
+  "q": "homes",
+  "size": 20,
+  "filters": {
+    "price_max": 400000,
+    "beds_min": 2,
+    "baths_min": 2,
+    "acreage_min": 0.5
+  }
 }
 ```
 
