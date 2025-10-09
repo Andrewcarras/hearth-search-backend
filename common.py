@@ -345,14 +345,10 @@ def create_index_if_needed():
 
                 # Data quality flags
                 "has_valid_embeddings": {"type": "boolean"},  # True if vectors are non-zero
-                "has_description": {"type": "boolean"},  # True if original description exists
+                "has_description": {"type": "boolean"}  # True if original description exists
 
-                # Store complete original Zillow listing data (not indexed, just stored)
-                # Setting enabled=false prevents type conflicts while still storing data for API responses
-                "original_listing": {
-                    "type": "object",
-                    "enabled": False  # Store but don't index - avoids all type mapping conflicts
-                }
+                # NOTE: Complete Zillow listing data is stored in S3 at: s3://demo-hearth-data/listings/{zpid}.json
+                # OpenSearch only stores search-relevant fields to avoid mapping conflicts
             }
         }
     }

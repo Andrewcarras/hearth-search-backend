@@ -21,10 +21,30 @@ Advanced multimodal real estate search combining natural language processing, co
 | Component | Purpose | Technology |
 |-----------|---------|------------|
 | **Search Lambda** | Natural language search | BM25 + kNN hybrid search |
-| **Upload Lambda** | Index listings with vision analysis | Claude Vision |
-| **OpenSearch** | Vector database | 1024-dim embeddings, geo-distance |
+| **Upload Lambda** | Index listings with vision analysis | Claude Vision + Rekognition |
+| **OpenSearch** | Search index (vectors, filters) | 1024-dim embeddings, geo-distance |
+| **S3** | Complete Zillow listing storage | Individual JSON files per listing |
 | **EC2 UI** | Web interface | Flask (50.17.10.169) |
 | **API Gateway** | Production endpoint | REST API |
+
+### Data Architecture (S3 + OpenSearch Hybrid)
+
+**OpenSearch** stores only search-relevant fields (~20 fields per listing):
+- Embeddings (vector_text, vector_image)
+- Filters (price, beds, baths, geo)
+- Tags (architecture_style, feature_tags, image_tags)
+
+**S3** stores complete Zillow data (166+ fields per listing):
+- All photos with all resolutions (responsivePhotos)
+- Complete address objects, tax history, schools
+- All original Zillow fields preserved
+- Location: `s3://demo-hearth-data/listings/{zpid}.json`
+
+**Why this architecture?**
+- ✅ No OpenSearch mapping conflicts (only indexed fields in OS)
+- ✅ Complete data always available (S3 never loses fields)
+- ✅ Fast search (OpenSearch optimized for vectors)
+- ✅ Scalable (S3 handles unlimited fields/complexity)
 
 ### Search Pipeline
 
@@ -37,7 +57,9 @@ OpenSearch Hybrid Search (BM25 + kNN text + kNN image)
     ↓
 RRF Fusion + Tag Boosting
     ↓
-Filtered Results
+Fetch Complete Data from S3 (merge with OpenSearch results)
+    ↓
+Filtered Results with Complete Zillow Data
 ```
 
 ## Features
@@ -230,23 +252,29 @@ curl -X POST http://54.163.59.108/search \
 
 ## Performance
 
-- **Search latency**: 500-800ms average
-- **Indexing speed**: ~100 listings per 13 minutes
+- **Search latency**: 500-800ms average (includes S3 fetch)
+- **Indexing speed**: ~150 listings per batch (~5 minutes per batch)
 - **Vector dimensions**: 1024-dim (Titan embeddings)
-- **Database size**: ~1588 listings
+- **Dataset**: 1,588 Murray County, UT listings
+- **Images processed**: 6 per listing @ 576px resolution (cost-optimized)
 
 ## Cost Estimate
 
 **Monthly operational costs**:
-- OpenSearch: ~$50 (t3.small.search)
+- OpenSearch: ~$25-30 (t3.small.search, 10GB storage)
+- S3: ~$0.05 (1,588 listing JSONs)
 - Lambda: ~$2 (within free tier)
-- Bedrock: ~$5 (Claude + embeddings)
 - EC2: ~$10 (t3.micro UI)
 - Google Maps: $0 (within free tier)
 
-**Total**: ~$67/month
+**Total**: ~$37-42/month
 
-**One-time indexing cost**: ~$15 (Rekognition + Claude Vision)
+**One-time re-indexing costs** (per full re-index):
+- Bedrock Text Embeddings: ~$0.50 (1,588 descriptions)
+- Bedrock Image Embeddings: ~$0.60 (6 images × 1,588 listings @ 576px)
+- Claude Vision (architecture): ~$4.75 (1 image × 1,588 listings)
+- Rekognition: ~$9.50 (6 images × 1,588 listings)
+- **Total**: ~$15 per re-index (only needed when adding new counties)
 
 ## Troubleshooting
 

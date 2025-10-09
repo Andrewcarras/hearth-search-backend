@@ -31,18 +31,44 @@ import logging
 import os
 from typing import Any, Dict, List
 
+import boto3
+
 from common import (
     os_client, OS_INDEX, embed_text,
-    extract_query_constraints, geocode_location
+    extract_query_constraints, geocode_location, AWS_REGION
 )
 
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
+# S3 client for fetching complete listing data
+s3 = boto3.client("s3", region_name=AWS_REGION)
+
 
 # ===============================================
 # SEARCH HELPER FUNCTIONS
 # ===============================================
+
+def _fetch_listing_from_s3(zpid: str) -> Dict[str, Any]:
+    """
+    Fetch complete Zillow listing JSON from S3.
+
+    Args:
+        zpid: Zillow property ID
+
+    Returns:
+        Complete listing dictionary, or empty dict if not found
+    """
+    try:
+        response = s3.get_object(
+            Bucket="demo-hearth-data",
+            Key=f"listings/{zpid}.json"
+        )
+        return json.loads(response["Body"].read().decode("utf-8"))
+    except Exception as e:
+        logger.warning("Failed to fetch listing %s from S3: %s", zpid, e)
+        return {}
+
 
 def _filters_to_bool(filter_obj: Dict[str, Any], require_embeddings: bool = True) -> Dict[str, Any]:
     """
@@ -396,19 +422,19 @@ def handler(event, context):
         satisfied = must_tags.issubset(tags) if must_tags else True
         boost = 1.0 + (0.5 if satisfied and must_tags else 0.0)
 
-        # Return original listing data merged with search metadata
-        # original_listing contains all Zillow fields (responsivePhotos, address, etc.)
-        original_listing = src.get("original_listing", {})
+        # Fetch complete Zillow listing data from S3
+        zpid = h["_id"]
+        original_listing = _fetch_listing_from_s3(zpid)
 
         result = {
-            # Start with all original Zillow listing fields
+            # Start with all original Zillow listing fields from S3
             **original_listing,
             # Add search metadata (score, boosted, our enrichments)
-            "id": h["_id"],
+            "id": zpid,
             "score": h.get("_score", 0.0),
             "boosted": boost > 1.0,
             # Add our enriched fields (architecture_style, feature_tags, etc.)
-            **{k: v for k, v in src.items() if k not in ("vector_text", "vector_image", "original_listing")}
+            **{k: v for k, v in src.items() if k not in ("vector_text", "vector_image")}
         }
 
         final.append((h.get("_score", 0.0) * boost, result))

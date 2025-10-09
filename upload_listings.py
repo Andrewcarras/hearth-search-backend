@@ -468,9 +468,8 @@ def handler(event, context):
             images = extract_zillow_images(lst, target_width=EMBEDDING_IMAGE_WIDTH)
             doc = _build_doc(core, images)
 
-            # Store original listing data for frontend use
-            # This preserves all Zillow fields (responsivePhotos, address, etc.)
-            doc["original_listing"] = lst
+            # NOTE: Complete Zillow listing JSON is stored in S3 at: s3://demo-hearth-data/listings/{zpid}.json
+            # OpenSearch only stores search-relevant fields to avoid mapping conflicts
 
             actions.append({"_id": core["zpid"], "_source": doc})
 
