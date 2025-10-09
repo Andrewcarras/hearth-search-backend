@@ -4,8 +4,9 @@ Advanced multimodal real estate search combining natural language processing, co
 
 ## Quick Start
 
-**Live UI**: http://98.80.14.166/ (New Zillow-style UI with property cards)
+**Live UI**: http://50.17.10.169/ (Zillow-style UI with property cards)
 **API Endpoint**: https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search
+**API Docs**: [docs/API.md](docs/API.md)
 
 **Search Examples**:
 - "3 bedroom homes under $500k"
@@ -41,23 +42,29 @@ Filtered Results
 
 ## Features
 
-### 1. Natural Language Understanding
+### 1. Complete Zillow Data Returned
+- **All API responses include the complete original Zillow listing JSON**
+- Access to `imgSrc`, `carouselPhotosComposable`, nested `address` objects, `hdpUrl`, and 50+ other Zillow fields
+- Hearth AI enrichments (architecture style, feature tags) are merged with original data
+- No data loss - everything from the source listing is preserved
+
+### 2. Natural Language Understanding
 - Parses complex queries into structured filters
 - Example: "modern 3 bed homes with pool near gym" → `{architecture: "modern", beds_min: 3, must_have: ["pool"], proximity: {poi_type: "gym"}}`
 
-### 2. Hybrid Search (BM25 + kNN)
+### 3. Hybrid Search (BM25 + kNN)
 - **BM25**: Keyword matching on descriptions
 - **kNN Text**: Semantic similarity on text embeddings
 - **kNN Image**: Visual similarity on image embeddings
 - **RRF**: Fuses results from all three searches
 
-### 3. Computer Vision
+### 4. Computer Vision
 - Architecture style classification (25+ styles)
 - Visual feature detection (balcony, porch, fence, etc.)
 - Exterior color identification
-- Uses Claude 3 Sonnet + Rekognition
+- Uses Claude 3 Sonnet for vision analysis
 
-### 4. Geolocation (Google Maps Places API)
+### 5. Geolocation (Google Maps Places API)
 - Find homes near specific businesses/amenities
 - Accurate POI geocoding (gyms, schools, restaurants, etc.)
 - Distance-based filtering (km or drive time)

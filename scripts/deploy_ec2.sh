@@ -76,7 +76,7 @@ INSTANCE_ID=$(aws ec2 run-instances \
     --security-group-ids $SG_ID \
     --region $REGION \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=hearth-demo-ui}]" \
-    --user-data file://ec2_setup.sh \
+    --user-data file://ec2_bootstrap_final.sh \
     --query 'Instances[0].InstanceId' \
     --output text)
 

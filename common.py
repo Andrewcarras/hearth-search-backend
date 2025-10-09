@@ -483,40 +483,83 @@ def bulk_upsert(actions: Iterable[Dict[str, Any]], initial_chunk: int = 100, max
 
 def extract_zillow_images(listing: Dict[str, Any]) -> List[str]:
     """
-    Extract all image URLs from a Zillow listing JSON object.
+    Extract high-resolution image URLs from a Zillow listing JSON object.
 
-    Zillow stores images in multiple possible fields with different structures
-    (responsivePhotos, images, photos, photoUrls), and this function handles
-    all variations to extract unique image URLs.
+    Zillow stores images in carouselPhotosComposable which contains unique photos
+    without duplicate resolutions. Falls back to imgSrc or other fields if carousel
+    data is unavailable.
 
     Args:
         listing: Raw Zillow listing dictionary
 
     Returns:
-        List of unique image URLs (deduplicated)
+        List of unique high-resolution image URLs
     """
-    urls = set()  # Use set to automatically deduplicate
+    urls = []
 
-    # Try various top-level image fields
-    for key in ["responsivePhotos", "images", "photos", "photoUrls"]:
+    # Primary source: carouselPhotosComposable (deduplicated, high-res images)
+    carousel = listing.get("carouselPhotosComposable", [])
+    if carousel:
+        for photo in carousel:
+            # Get the highest resolution URL from this photo
+            if isinstance(photo, dict):
+                # Try to get URL from image field
+                url = photo.get("image") or photo.get("url")
+                if url and isinstance(url, str):
+                    urls.append(url)
+                # Also check mixedSources for highest resolution
+                elif "mixedSources" in photo:
+                    ms = photo["mixedSources"]
+                    # Prefer jpeg over webp for compatibility
+                    jpeg_sources = ms.get("jpeg", [])
+                    if jpeg_sources and isinstance(jpeg_sources, list):
+                        # Get the highest resolution (last item is usually largest)
+                        largest = max(jpeg_sources, key=lambda x: x.get("width", 0) if isinstance(x, dict) else 0)
+                        if isinstance(largest, dict) and "url" in largest:
+                            urls.append(largest["url"])
+
+        if urls:
+            return urls
+
+    # Fallback 1: imgSrc (main thumbnail image)
+    img_src = listing.get("imgSrc")
+    if img_src and isinstance(img_src, str):
+        urls.append(img_src)
+
+    # Fallback 2: responsivePhotos - extract highest resolution from each unique photo
+    responsive = listing.get("responsivePhotos", [])
+    if responsive:
+        seen_photos = set()  # Track photo IDs to avoid duplicates
+        for photo in responsive:
+            if not isinstance(photo, dict):
+                continue
+
+            # Use photo caption/subjectType as unique identifier
+            photo_id = photo.get("caption") or photo.get("subjectType") or len(seen_photos)
+            if photo_id in seen_photos:
+                continue
+            seen_photos.add(photo_id)
+
+            # Extract highest resolution URL
+            ms = photo.get("mixedSources", {})
+            jpeg_sources = ms.get("jpeg", [])
+            if jpeg_sources and isinstance(jpeg_sources, list):
+                # Get the largest resolution
+                largest = max(jpeg_sources, key=lambda x: x.get("width", 0) if isinstance(x, dict) else 0)
+                if isinstance(largest, dict) and "url" in largest:
+                    urls.append(largest["url"])
+
+    # Fallback 3: Simple image arrays
+    for key in ["images", "photos", "photoUrls"]:
         val = listing.get(key)
-        if isinstance(val, list):
+        if isinstance(val, list) and not urls:
             for it in val:
                 if isinstance(it, dict) and "url" in it:
-                    urls.add(it["url"])
+                    urls.append(it["url"])
                 elif isinstance(it, str):
-                    urls.add(it)  # Direct URL string
+                    urls.append(it)
 
-    # Extract from nested responsivePhotos.mixedSources structure
-    for photo in listing.get("responsivePhotos", []):
-        ms = photo.get("mixedSources", {})
-        for arr in ms.values():  # jpeg, webp, etc.
-            if isinstance(arr, list):
-                for obj in arr:
-                    if isinstance(obj, dict) and "url" in obj:
-                        urls.add(obj["url"])
-
-    return list(urls)
+    return urls if urls else []
 
 
 def classify_architecture_style_vision(image_bytes: bytes) -> Dict[str, Any]:

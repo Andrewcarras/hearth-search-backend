@@ -489,10 +489,10 @@
             html += '</div><div class="property-grid">';
 
             data.results.forEach((listing, index) => {
-                // Get the first image (prefer responsivePhotos from Zillow data, fallback to our images array)
+                // Get thumbnail image: prefer imgSrc, fallback to first image in our images array
                 let imageUrl = '//:0'; // blank image placeholder
-                if (listing.responsivePhotos && listing.responsivePhotos.length > 0) {
-                    imageUrl = listing.responsivePhotos[0].mixedSources?.jpeg?.[0]?.url || imageUrl;
+                if (listing.imgSrc) {
+                    imageUrl = listing.imgSrc;
                 } else if (listing.images && listing.images.length > 0) {
                     imageUrl = listing.images[0];
                 }
@@ -549,13 +549,33 @@
             const address = currentProperty.address?.streetAddress || currentProperty.address || 'Property Details';
             document.getElementById('modalAddress').textContent = address;
 
-            // Build images array
+            // Build images array: prefer carouselPhotosComposable, fallback to images array
             let images = [];
-            if (currentProperty.responsivePhotos && currentProperty.responsivePhotos.length > 0) {
-                images = currentProperty.responsivePhotos.map(photo =>
-                    photo.mixedSources?.jpeg?.[0]?.url || ''
-                ).filter(url => url);
-            } else if (currentProperty.images && currentProperty.images.length > 0) {
+
+            // Try carouselPhotosComposable first (Zillow's deduplicated carousel data)
+            if (currentProperty.carouselPhotosComposable && currentProperty.carouselPhotosComposable.length > 0) {
+                images = currentProperty.carouselPhotosComposable.map(photo => {
+                    // Extract URL from carousel photo object
+                    if (typeof photo === 'string') return photo;
+                    if (photo.image) return photo.image;
+                    if (photo.url) return photo.url;
+                    // Try to get highest res from mixedSources
+                    if (photo.mixedSources?.jpeg) {
+                        const jpegSources = photo.mixedSources.jpeg;
+                        if (jpegSources.length > 0) {
+                            // Get largest resolution (last item is usually largest)
+                            const largest = jpegSources.reduce((max, curr) =>
+                                (curr.width || 0) > (max.width || 0) ? curr : max
+                            );
+                            return largest.url;
+                        }
+                    }
+                    return null;
+                }).filter(url => url);
+            }
+
+            // Fallback to images array (our processed array)
+            if (images.length === 0 && currentProperty.images && currentProperty.images.length > 0) {
                 images = currentProperty.images;
             }
 
