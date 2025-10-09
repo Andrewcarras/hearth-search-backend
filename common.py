@@ -301,20 +301,6 @@ def create_index_if_needed():
             }
         },
         "mappings": {
-            "dynamic_templates": [
-                {
-                    # Handle all nested fields in original_listing as flexible types
-                    "original_listing_fields": {
-                        "path_match": "original_listing.*",
-                        "mapping": {
-                            "type": "text",
-                            "fields": {
-                                "keyword": {"type": "keyword", "ignore_above": 256}
-                            }
-                        }
-                    }
-                }
-            ],
             "properties": {
                 # Identifiers and location
                 "zpid": {"type": "keyword"},  # Zillow property ID (exact match)
