@@ -56,6 +56,7 @@ IMAGE_DIM = int(os.getenv("IMAGE_DIM", "1024"))  # Titan Image outputs 1024-dim 
 # Optional features
 USE_REKOGNITION = os.getenv("USE_REKOGNITION", "false").lower() in ("1", "true", "yes")  # Enable image labeling
 MAX_IMAGES = int(os.getenv("MAX_IMAGES", "6"))  # Max images to process per listing
+EMBEDDING_IMAGE_WIDTH = int(os.getenv("EMBEDDING_IMAGE_WIDTH", "576"))  # Target resolution for embeddings (cost optimization)
 
 # Logging configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -481,42 +482,62 @@ def bulk_upsert(actions: Iterable[Dict[str, Any]], initial_chunk: int = 100, max
 # ZILLOW DATA PARSING & LLM FEATURE EXTRACTION
 # ===============================================
 
-def extract_zillow_images(listing: Dict[str, Any]) -> List[str]:
+def extract_zillow_images(listing: Dict[str, Any], target_width: int = 576) -> List[str]:
     """
-    Extract high-resolution image URLs from a Zillow listing JSON object.
+    Extract image URLs from a Zillow listing at optimal resolution for embeddings.
 
-    Zillow stores images in carouselPhotosComposable which contains unique photos
-    without duplicate resolutions. Falls back to imgSrc or other fields if carousel
-    data is unavailable.
+    For cost optimization, extracts medium-resolution images (default 576px) which are
+    sufficient for vision models while being much cheaper to process than high-res.
+    The API returns complete carouselPhotosComposable so frontend can use any resolution.
 
     Args:
         listing: Raw Zillow listing dictionary
+        target_width: Target image width in pixels (default 576px for embeddings)
+                     Common values: 384, 576, 768
 
     Returns:
-        List of unique high-resolution image URLs
+        List of unique image URLs at target resolution
     """
     urls = []
 
-    # Primary source: carouselPhotosComposable (deduplicated, high-res images)
+    # Primary source: carouselPhotosComposable (deduplicated images)
     carousel = listing.get("carouselPhotosComposable", [])
     if carousel:
         for photo in carousel:
-            # Get the highest resolution URL from this photo
+            # Get optimal resolution URL from this photo for embeddings
             if isinstance(photo, dict):
-                # Try to get URL from image field
+                # Try to get URL from image field (usually highest res)
                 url = photo.get("image") or photo.get("url")
-                if url and isinstance(url, str):
-                    urls.append(url)
-                # Also check mixedSources for highest resolution
-                elif "mixedSources" in photo:
+
+                # Check mixedSources for target resolution (cost optimization)
+                if "mixedSources" in photo:
                     ms = photo["mixedSources"]
                     # Prefer jpeg over webp for compatibility
                     jpeg_sources = ms.get("jpeg", [])
                     if jpeg_sources and isinstance(jpeg_sources, list):
-                        # Get the highest resolution (last item is usually largest)
-                        largest = max(jpeg_sources, key=lambda x: x.get("width", 0) if isinstance(x, dict) else 0)
-                        if isinstance(largest, dict) and "url" in largest:
-                            urls.append(largest["url"])
+                        # Find closest resolution to target (prefer exact or slightly larger)
+                        best_match = None
+                        min_diff = float('inf')
+
+                        for source in jpeg_sources:
+                            if isinstance(source, dict) and "width" in source and "url" in source:
+                                width = source.get("width", 0)
+                                # Prefer slightly larger than target over smaller
+                                diff = abs(width - target_width)
+                                if width >= target_width and diff < min_diff:
+                                    best_match = source
+                                    min_diff = diff
+                                elif not best_match:  # Fallback to smaller if no larger available
+                                    best_match = source
+                                    min_diff = diff
+
+                        if best_match:
+                            urls.append(best_match["url"])
+                            continue
+
+                # Fallback to direct URL if no mixedSources
+                if url and isinstance(url, str):
+                    urls.append(url)
 
         if urls:
             return urls

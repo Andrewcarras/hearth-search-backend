@@ -32,7 +32,7 @@ import boto3
 import requests
 
 from common import (
-    AWS_REGION, OS_INDEX, MAX_IMAGES,
+    AWS_REGION, OS_INDEX, MAX_IMAGES, EMBEDDING_IMAGE_WIDTH,
     create_index_if_needed, bulk_upsert,
     embed_text, embed_image_bytes, detect_labels,
     extract_zillow_images, vec_mean, llm_feature_profile,
@@ -439,7 +439,7 @@ def handler(event, context):
     limit = int(payload.get("limit", 500))
     end = min(start + limit, total)
 
-    SAFETY_MS = 6000  # stop ~6s early to allow self-invoke
+    SAFETY_MS = 30000  # stop ~30s early to allow self-invoke
     processed = 0
     actions: List[Dict[str, Any]] = []
 
@@ -450,7 +450,7 @@ def handler(event, context):
         try:
             lst = all_listings[i]
             core = _extract_core_fields(lst)
-            images = extract_zillow_images(lst)
+            images = extract_zillow_images(lst, target_width=EMBEDDING_IMAGE_WIDTH)
             doc = _build_doc(core, images)
 
             # Store original listing data for frontend use
