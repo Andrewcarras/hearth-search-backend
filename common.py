@@ -301,6 +301,20 @@ def create_index_if_needed():
             }
         },
         "mappings": {
+            "dynamic_templates": [
+                {
+                    # Handle all nested fields in original_listing as flexible types
+                    "original_listing_fields": {
+                        "path_match": "original_listing.*",
+                        "mapping": {
+                            "type": "text",
+                            "fields": {
+                                "keyword": {"type": "keyword", "ignore_above": 256}
+                            }
+                        }
+                    }
+                }
+            ],
             "properties": {
                 # Identifiers and location
                 "zpid": {"type": "keyword"},  # Zillow property ID (exact match)
@@ -345,7 +359,13 @@ def create_index_if_needed():
 
                 # Data quality flags
                 "has_valid_embeddings": {"type": "boolean"},  # True if vectors are non-zero
-                "has_description": {"type": "boolean"}  # True if original description exists
+                "has_description": {"type": "boolean"},  # True if original description exists
+
+                # Store complete original Zillow listing data (flexible schema)
+                "original_listing": {
+                    "type": "object",
+                    "enabled": True  # Allow arbitrary nested fields
+                }
             }
         }
     }

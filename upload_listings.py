@@ -426,6 +426,20 @@ def handler(event, context):
     else:
         payload = event if isinstance(event, dict) else {}
 
+    # Handle special operations
+    if payload.get("operation") == "delete_index":
+        from common import os_client, OS_INDEX
+        try:
+            if os_client.indices.exists(index=OS_INDEX):
+                logger.info(f"Deleting index {OS_INDEX}...")
+                os_client.indices.delete(index=OS_INDEX)
+                return {"statusCode": 200, "body": json.dumps({"message": f"Index {OS_INDEX} deleted"})}
+            else:
+                return {"statusCode": 404, "body": json.dumps({"message": f"Index {OS_INDEX} does not exist"})}
+        except Exception as e:
+            logger.exception("Failed to delete index: %s", e)
+            return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+
     # Source of listings
     if "bucket" in payload and "key" in payload:
         all_listings = _load_listings_from_s3(payload["bucket"], payload["key"])
