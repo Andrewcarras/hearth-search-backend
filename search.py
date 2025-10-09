@@ -51,61 +51,23 @@ s3 = boto3.client("s3", region_name=AWS_REGION)
 
 def _fetch_listing_from_s3(zpid: str) -> Dict[str, Any]:
     """
-    Fetch complete Zillow listing JSON from S3 and filter to essential fields.
+    Fetch complete Zillow listing JSON from S3.
 
-    Full Zillow data has 166+ fields which exceeds Lambda's 6MB response limit.
-    We return only the fields needed for frontend display to keep responses small.
+    Returns all 166+ Zillow fields. With reduced page size (15 results),
+    this stays under Lambda's 6MB limit while preserving all data.
 
     Args:
         zpid: Zillow property ID
 
     Returns:
-        Filtered listing dictionary with essential fields only
+        Complete listing dictionary with all Zillow fields
     """
     try:
         response = s3.get_object(
             Bucket="demo-hearth-data",
             Key=f"listings/{zpid}.json"
         )
-        full_listing = json.loads(response["Body"].read().decode("utf-8"))
-
-        # Extract only essential fields for frontend display
-        # This keeps response size under Lambda's 6MB limit
-        essential_fields = {
-            # Core identifiers
-            "zpid": full_listing.get("zpid"),
-
-            # Property details
-            "bedrooms": full_listing.get("bedrooms"),
-            "bathrooms": full_listing.get("bathrooms"),
-            "price": full_listing.get("price"),
-            "yearBuilt": full_listing.get("yearBuilt"),
-            "livingArea": full_listing.get("livingArea"),
-            "lotSize": full_listing.get("lotSize"),
-            "homeType": full_listing.get("homeType"),
-            "homeStatus": full_listing.get("homeStatus"),
-
-            # Location
-            "address": full_listing.get("address"),
-            "city": full_listing.get("city"),
-            "state": full_listing.get("state"),
-            "zipcode": full_listing.get("zipcode"),
-            "streetAddress": full_listing.get("streetAddress"),
-
-            # Images (most important!)
-            "responsivePhotos": full_listing.get("responsivePhotos", []),
-            "imgSrc": full_listing.get("imgSrc"),
-
-            # Description
-            "description": full_listing.get("description"),
-
-            # URL
-            "hdpUrl": full_listing.get("hdpUrl"),
-        }
-
-        # Remove None values to reduce size
-        return {k: v for k, v in essential_fields.items() if v is not None}
-
+        return json.loads(response["Body"].read().decode("utf-8"))
     except Exception as e:
         logger.warning("Failed to fetch listing %s from S3: %s", zpid, e)
         return {}
@@ -278,7 +240,7 @@ def handler(event, context):
     q = (payload.get("q") or "").strip()
     if not q:
         return {"statusCode": 400, "body": json.dumps({"error": "missing 'q'"})}
-    size = int(payload.get("size", 30))
+    size = int(payload.get("size", 15))  # Reduced from 30 to stay under 6MB with full S3 data
 
     logger.info("Search query: '%s', size=%d", q, size)
 
