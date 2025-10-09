@@ -64,11 +64,13 @@ Filtered Results with Complete Zillow Data
 
 ## Features
 
-### 1. Complete Zillow Data Returned
-- **All API responses include the complete original Zillow listing JSON**
-- Access to `imgSrc`, `carouselPhotosComposable`, nested `address` objects, `hdpUrl`, and 50+ other Zillow fields
+### 1. Complete Zillow Data Returned (214 Fields)
+- **All API responses include the complete original Zillow listing JSON from S3**
+- Returns ALL 214 Zillow fields: photos, tax history, price history, schools, building permits, etc.
+- Includes `responsivePhotos` (all resolutions), `taxHistory`, `priceHistory`, `schools`, `resoFacts`
 - Hearth AI enrichments (architecture style, feature tags) are merged with original data
-- No data loss - everything from the source listing is preserved
+- Default page size: 15 results (2.9MB response, under 6MB Lambda limit)
+- No data loss - everything from the source listing is preserved and accessible
 
 ### 2. Natural Language Understanding
 - Parses complex queries into structured filters
@@ -166,7 +168,7 @@ Content-Type: application/json
 }
 ```
 
-**Response**:
+**Response** (15 results by default):
 ```json
 {
   "ok": true,
@@ -175,15 +177,26 @@ Content-Type: application/json
   "results": [
     {
       "id": "12345",
-      "address": "123 Main St",
-      "city": "Salt Lake City",
-      "state": "UT",
+
+      // Complete Zillow data (214 fields from S3)
+      "zpid": "12345",
+      "address": {"streetAddress": "123 Main St", "city": "Salt Lake City", ...},
       "price": 450000,
-      "beds": 3,
-      "baths": 2,
+      "bedrooms": 3,
+      "bathrooms": 2,
+      "responsivePhotos": [...],  // All photos, all resolutions
+      "taxHistory": [...],
+      "priceHistory": [...],
+      "schools": [...],
+      "resoFacts": {...},
+      // ... 200+ more Zillow fields
+
+      // Hearth enrichments (from OpenSearch)
       "feature_tags": ["pool", "garage", "backyard"],
+      "image_tags": ["brick", "hardwood", "tile"],
       "architecture_style": "modern",
-      "geo": {"lat": 40.7608, "lon": -111.891}
+      "score": 0.95,
+      "boosted": false
     }
   ]
 }
@@ -301,15 +314,26 @@ aws logs tail /aws/lambda/hearth-upload-listings --since 10m
 
 ### Search Returns 0 Results
 
-1. Verify listings are indexed:
+**Most common cause:** Re-indexing still in progress or Bedrock throttling
+
+1. Check if listings are indexed:
    ```bash
    curl https://search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com/listings/_count
    ```
 
-2. Check search logs for errors:
+2. Check for Bedrock throttling in upload logs:
+   ```bash
+   aws logs tail /aws/lambda/hearth-upload-listings --since 5m | grep ThrottlingException
+   ```
+
+   If you see "Too many requests" errors, Bedrock is being rate-limited. This is normal during re-indexing and will settle within 1-2 hours.
+
+3. Check search logs for errors:
    ```bash
    aws logs tail /aws/lambda/hearth-search --since 5m
    ```
+
+**Solution:** Wait for re-indexing to complete. Listings without embeddings (due to throttling) aren't searchable yet.
 
 ## Documentation
 
