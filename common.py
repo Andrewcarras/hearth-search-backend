@@ -347,10 +347,11 @@ def create_index_if_needed():
                 "has_valid_embeddings": {"type": "boolean"},  # True if vectors are non-zero
                 "has_description": {"type": "boolean"},  # True if original description exists
 
-                # Store complete original Zillow listing data (flexible schema)
+                # Store complete original Zillow listing data (not indexed, just stored)
+                # Setting enabled=false prevents type conflicts while still storing data for API responses
                 "original_listing": {
                     "type": "object",
-                    "enabled": True  # Allow arbitrary nested fields
+                    "enabled": False  # Store but don't index - avoids all type mapping conflicts
                 }
             }
         }
