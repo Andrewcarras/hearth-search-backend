@@ -213,11 +213,12 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
         tags, and metadata
     """
     # Step 1: Extract structured features using Claude LLM (including architecture style from text)
+    # DISABLED TO REDUCE COSTS - costs $60-80 for full dataset, not needed for basic search
     llm_profile, feature_tags, style_from_text = "", [], None
-    try:
-        llm_profile, feature_tags, style_from_text = llm_feature_profile(base["description"])
-    except Exception as e:
-        logger.warning("LLM profile extraction failed for zpid=%s: %s", base.get("zpid"), e)
+    # try:
+    #     llm_profile, feature_tags, style_from_text = llm_feature_profile(base["description"])
+    # except Exception as e:
+    #     logger.warning("LLM profile extraction failed for zpid=%s: %s", base.get("zpid"), e)
 
     # Text embeddings (resilient)
     vec_text = None
