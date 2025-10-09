@@ -21,9 +21,9 @@ Advanced multimodal real estate search combining natural language processing, co
 | Component | Purpose | Technology |
 |-----------|---------|------------|
 | **Search Lambda** | Natural language search | BM25 + kNN hybrid search |
-| **Upload Lambda** | Index listings with vision analysis | Claude Vision + Rekognition |
+| **Upload Lambda** | Index listings with vision analysis | Claude Vision |
 | **OpenSearch** | Vector database | 1024-dim embeddings, geo-distance |
-| **EC2 UI** | Web interface | Flask (54.163.59.108) |
+| **EC2 UI** | Web interface | Flask (50.17.10.169) |
 | **API Gateway** | Production endpoint | REST API |
 
 ### Search Pipeline
