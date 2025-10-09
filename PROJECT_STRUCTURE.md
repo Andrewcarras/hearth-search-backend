@@ -125,7 +125,7 @@ USE_REKOGNITION=false             # Set to true to enable Rekognition labels
 **Name**: `listings`
 **Shards**: 1
 **Replicas**: 0
-**Documents**: ~22,000 Murray, UT listings
+**Documents**: ~1,588 Murray, UT listings
 
 **Key Fields**:
 - `zpid` (keyword) - Zillow property ID
@@ -171,7 +171,7 @@ USE_REKOGNITION=false             # Set to true to enable Rekognition labels
 
 ### S3 Storage
 - **Bucket**: demo-hearth-data
-- **Listings**: murray_listings.json (~22,000 properties, 279 MB)
+- **Listings**: murray_listings.json (1,588 properties, 279 MB)
 
 ## Deployment
 
@@ -227,7 +227,7 @@ cd scripts
 
 - Total code: ~60KB (Python + HTML)
 - Lambda package: ~45 MB (with dependencies)
-- OpenSearch index: ~8 GB (22,000 listings with embeddings)
+- OpenSearch index: ~600 MB (1,588 listings with embeddings)
 - UI instance: Embedded in EC2 bootstrap script (9.5 KB compressed)
 
 ## Cost Optimization
