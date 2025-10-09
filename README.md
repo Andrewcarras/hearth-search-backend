@@ -4,7 +4,7 @@ Advanced multimodal real estate search combining natural language processing, co
 
 ## Quick Start
 
-**Live UI**: http://3.87.169.144/
+**Live UI**: http://98.80.14.166/ (New Zillow-style UI with property cards)
 **API Endpoint**: https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search
 
 **Search Examples**:

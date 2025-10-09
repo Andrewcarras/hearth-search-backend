@@ -22,8 +22,12 @@ mkdir -p /opt/hearth-ui/templates
 cd /opt/hearth-ui
 
 # Download app files from S3 (updated UI with Zillow-style cards)
-aws s3 cp s3://demo-hearth-data/ui/app.py app.py
-aws s3 cp s3://demo-hearth-data/ui/index.html templates/index.html
+# Try AWS CLI first, fallback to curl if it fails
+aws s3 cp s3://demo-hearth-data/ui/app.py app.py 2>/dev/null || \
+    curl -s https://demo-hearth-data.s3.amazonaws.com/ui/app.py > app.py
+
+aws s3 cp s3://demo-hearth-data/ui/index.html templates/index.html 2>/dev/null || \
+    curl -s https://demo-hearth-data.s3.amazonaws.com/ui/index.html > templates/index.html
 
 # Fallback: Create Flask app (if S3 download fails)
 if [ ! -f app.py ]; then
