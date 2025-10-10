@@ -44,6 +44,122 @@ logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 # S3 client for fetching complete listing data
 s3 = boto3.client("s3", region_name=AWS_REGION)
 
+# DynamoDB client for geolocation caching
+dynamodb = boto3.client("dynamodb", region_name=AWS_REGION)
+GEOLOCATION_CACHE_TABLE = "hearth-geolocation-cache"
+
+# Google Places API configuration (set via Lambda environment variable)
+GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
+
+
+# ===============================================
+# ON-DEMAND GEOLOCATION ENRICHMENT
+# ===============================================
+
+def _get_location_key(lat: float, lon: float, radius_meters: int = 1000) -> str:
+    """
+    Create cache key for geolocation lookup.
+    Rounds coordinates to ~100m precision to improve cache hit rate.
+    """
+    # Round to 3 decimal places = ~111m precision
+    lat_rounded = round(lat, 3)
+    lon_rounded = round(lon, 3)
+    return f"{lat_rounded},{lon_rounded},{radius_meters}"
+
+
+def _get_cached_nearby_places(location_key: str) -> List[Dict[str, Any]]:
+    """Check DynamoDB cache for nearby places."""
+    try:
+        response = dynamodb.get_item(
+            TableName=GEOLOCATION_CACHE_TABLE,
+            Key={"location_key": {"S": location_key}}
+        )
+        if "Item" in response and "places" in response["Item"]:
+            return json.loads(response["Item"]["places"]["S"])
+    except Exception as e:
+        logger.warning(f"Geolocation cache read failed: {e}")
+    return None
+
+
+def _cache_nearby_places(location_key: str, places: List[Dict[str, Any]]):
+    """Store nearby places in DynamoDB cache."""
+    try:
+        dynamodb.put_item(
+            TableName=GEOLOCATION_CACHE_TABLE,
+            Item={
+                "location_key": {"S": location_key},
+                "places": {"S": json.dumps(places)},
+                "cached_at": {"N": str(int(__import__('time').time()))}
+            }
+        )
+    except Exception as e:
+        logger.warning(f"Geolocation cache write failed: {e}")
+
+
+def enrich_with_nearby_places(listing: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Enrich a single listing with nearby places from Google Places API.
+    Uses DynamoDB cache to avoid duplicate API calls.
+
+    Cost: ~$0.017 per cache miss (first time seeing this location)
+          $0 per cache hit (subsequent lookups)
+    """
+    if not GOOGLE_PLACES_API_KEY:
+        return listing  # API key not configured
+
+    # Extract coordinates from Zillow JSON
+    latitude = listing.get("latitude")
+    longitude = listing.get("longitude")
+
+    if not latitude or not longitude:
+        return listing  # No coordinates available
+
+    # Check cache first
+    location_key = _get_location_key(latitude, longitude, radius_meters=1000)
+    cached_places = _get_cached_nearby_places(location_key)
+
+    if cached_places is not None:
+        logger.debug(f"✓ Geolocation cache hit for {location_key}")
+        listing["nearby_places"] = cached_places
+        return listing
+
+    # Cache miss - call Google Places API
+    try:
+        import requests
+
+        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+        params = {
+            "location": f"{latitude},{longitude}",
+            "radius": 1000,  # 1km radius
+            "key": GOOGLE_PLACES_API_KEY
+        }
+
+        response = requests.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+
+        if data.get("status") == "OK":
+            # Extract relevant place info
+            places = []
+            for place in data.get("results", [])[:10]:  # Top 10 places
+                places.append({
+                    "name": place.get("name"),
+                    "types": place.get("types", []),
+                    "distance_meters": None  # Could calculate if needed
+                })
+
+            # Cache the results
+            _cache_nearby_places(location_key, places)
+            listing["nearby_places"] = places
+            logger.info(f"✓ Fetched {len(places)} nearby places for {listing.get('zpid')}")
+        else:
+            logger.warning(f"Google Places API error: {data.get('status')}")
+
+    except Exception as e:
+        logger.warning(f"Failed to fetch nearby places: {e}")
+
+    return listing
+
 
 # ===============================================
 # SEARCH HELPER FUNCTIONS
@@ -428,6 +544,9 @@ def handler(event, context):
         # Fetch complete Zillow listing data from S3
         zpid = h["_id"]
         original_listing = _fetch_listing_from_s3(zpid)
+
+        # Enrich with nearby places on-demand (cached in DynamoDB)
+        original_listing = enrich_with_nearby_places(original_listing)
 
         result = {
             # Start with all original Zillow listing fields from S3
