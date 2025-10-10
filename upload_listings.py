@@ -420,6 +420,8 @@ def handler(event, context):
     Returns:
         Response dict with status, processed count, and next_start if has_more
     """
+    from common import os_client, OS_INDEX
+
     # Ensure index exists with correct mappings
     create_index_if_needed()
 
@@ -435,7 +437,6 @@ def handler(event, context):
 
     # Handle special operations
     if payload.get("operation") == "delete_index":
-        from common import os_client, OS_INDEX
         try:
             if os_client.indices.exists(index=OS_INDEX):
                 logger.info(f"Deleting index {OS_INDEX}...")
