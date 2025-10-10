@@ -94,8 +94,12 @@ os_client = OpenSearch(
 # Bedrock Runtime client for model invocations (embeddings + LLM)
 brt = session.client("bedrock-runtime", config=Config(read_timeout=30, retries={"max_attempts": 2}))
 
-# Rekognition client for image label detection (optional)
-rekog = session.client("rekognition") if USE_REKOGNITION else None
+# DynamoDB client for image analysis caching
+dynamodb = session.client("dynamodb")
+CACHE_TABLE = "hearth-image-cache"
+
+# Rekognition client for image label detection (DEPRECATED - replaced by Claude Haiku)
+rekog = None  # Disabled to reduce costs
 
 # ===============================================
 # EMBEDDING GENERATION FUNCTIONS
@@ -242,33 +246,109 @@ def vec_mean(vectors: List[List[float]], target_dim: int) -> List[float]:
     return [s / len(vectors) for s in sums]
 
 
-def detect_labels(img_bytes: bytes, max_labels: int = 15) -> List[str]:
-    """
-    Detect objects and features in an image using AWS Rekognition.
+def _get_cached_labels(image_url: str) -> Optional[List[str]]:
+    """Check DynamoDB cache for previously analyzed image labels."""
+    try:
+        response = dynamodb.get_item(
+            TableName=CACHE_TABLE,
+            Key={"image_url": {"S": image_url}}
+        )
+        if "Item" in response and "labels" in response["Item"]:
+            return json.loads(response["Item"]["labels"]["S"])
+    except Exception as e:
+        logger.warning(f"Cache read failed for {image_url}: {e}")
+    return None
 
-    This extracts semantic labels like "pool", "kitchen", "brick", etc.
-    from property images, which are used as searchable tags.
+
+def _cache_labels(image_url: str, labels: List[str]):
+    """Store analyzed image labels in DynamoDB cache."""
+    try:
+        dynamodb.put_item(
+            TableName=CACHE_TABLE,
+            Item={
+                "image_url": {"S": image_url},
+                "labels": {"S": json.dumps(labels)},
+                "analyzed_at": {"N": str(int(time.time()))}
+            }
+        )
+    except Exception as e:
+        logger.warning(f"Cache write failed for {image_url}: {e}")
+
+
+def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 15) -> List[str]:
+    """
+    Detect objects and features in an image using Claude 3 Haiku Vision (via Bedrock).
+
+    This replaces AWS Rekognition with a 75% cheaper alternative that provides
+    better context understanding. Results are cached in DynamoDB to prevent
+    re-analyzing the same images.
+
+    Cost: ~$0.00025 per image (vs $0.001 for Rekognition)
 
     Args:
         img_bytes: Raw image bytes
+        image_url: URL of the image (used for caching)
         max_labels: Maximum number of labels to return
 
     Returns:
-        List of lowercase label strings (e.g., ["pool", "kitchen", "hardwood"])
-        Only returns labels with >=80% confidence
+        List of lowercase label strings (e.g., ["pool", "granite countertops", "hardwood floors"])
     """
-    if not rekog:
-        return []  # Rekognition disabled
+    # Check cache first
+    if image_url:
+        cached = _get_cached_labels(image_url)
+        if cached is not None:
+            logger.debug(f"✓ Cache hit for {image_url}")
+            return cached
 
-    resp = rekog.detect_labels(Image={"Bytes": img_bytes}, MaxLabels=max_labels)
+    # Analyze with Claude Haiku
+    try:
+        b64_image = base64.b64encode(img_bytes).decode("utf-8")
 
-    # Filter for high-confidence labels and normalize to lowercase
-    labels = [
-        l["Name"].lower()
-        for l in resp.get("Labels", [])
-        if l.get("Confidence", 0) >= 80.0
-    ]
-    return labels
+        payload = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 300,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": b64_image
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": f"Analyze this property image and list up to {max_labels} visible features, materials, and rooms. Examples: pool, granite countertops, hardwood floors, brick exterior, modern kitchen, fireplace. Return ONLY a comma-separated list of features, nothing else."
+                        }
+                    ]
+                }
+            ]
+        }
+
+        response = brt.invoke_model(
+            modelId=LLM_MODEL_ID,  # Claude 3 Haiku
+            body=json.dumps(payload)
+        )
+
+        result = json.loads(response["body"].read())
+        text = result["content"][0]["text"].strip()
+
+        # Parse comma-separated labels
+        labels = [label.strip().lower() for label in text.split(",") if label.strip()]
+        labels = labels[:max_labels]
+
+        # Cache the result
+        if image_url:
+            _cache_labels(image_url, labels)
+
+        return labels
+
+    except Exception as e:
+        logger.warning(f"Vision analysis failed for {image_url}: {e}")
+        return []
 
 # ===============================================
 # OPENSEARCH INDEX MANAGEMENT

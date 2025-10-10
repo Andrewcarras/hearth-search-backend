@@ -280,11 +280,11 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
                 except Exception as e:
                     logger.warning("Image embedding failed for zpid=%s, url=%s: %s", base.get("zpid"), u, e)
 
-                # Use Rekognition on ALL images for flooring/interior feature detection
-                # This is necessary to detect carpet, hardwood, tile, etc across multiple interior photos
-                # Rekognition is cheap (~$0.001 per image) and fast
+                # Use Claude Haiku Vision for feature detection (75% cheaper than Rekognition)
+                # Detects flooring, materials, rooms, etc. Results are cached in DynamoDB
+                # Cost: ~$0.00025 per image (vs $0.001 for Rekognition)
                 try:
-                    labels = detect_labels(bb)
+                    labels = detect_labels(bb, image_url=u)  # Pass URL for caching
                     for t in labels:
                         img_tags.add(t)
 
