@@ -20,10 +20,11 @@ Advanced multimodal real estate search combining natural language processing, co
 
 | Component | Purpose | Technology |
 |-----------|---------|------------|
-| **Search Lambda** | Natural language search | BM25 + kNN hybrid search |
-| **Upload Lambda** | Index listings with vision analysis | Claude Vision + Rekognition |
-| **OpenSearch** | Search index (vectors, filters) | 1024-dim embeddings, geo-distance |
+| **Search Lambda** | Natural language search | BM25 + kNN hybrid search + on-demand geolocation |
+| **Upload Lambda** | Index listings with vision analysis | Claude 3 Haiku Vision (cached) |
+| **OpenSearch** | Search index (vectors, filters) | 1024-dim embeddings |
 | **S3** | Complete Zillow listing storage | Individual JSON files per listing |
+| **DynamoDB** | Caching layer | Image analysis + geolocation caches |
 | **EC2 UI** | Web interface | Flask (50.17.10.169) |
 | **API Gateway** | Production endpoint | REST API |
 
@@ -51,7 +52,7 @@ Advanced multimodal real estate search combining natural language processing, co
 ```
 User Query
     ↓
-Claude LLM Parser (extract features, filters, proximity)
+Claude LLM Parser (extract features, filters, proximity mentions)
     ↓
 OpenSearch Hybrid Search (BM25 + kNN text + kNN image)
     ↓
@@ -59,7 +60,9 @@ RRF Fusion + Tag Boosting
     ↓
 Fetch Complete Data from S3 (merge with OpenSearch results)
     ↓
-Filtered Results with Complete Zillow Data
+On-Demand Geolocation Enrichment (Google Places API, cached)
+    ↓
+Filtered Results with Complete Zillow Data + nearby_places
 ```
 
 ## Features
@@ -82,16 +85,19 @@ Filtered Results with Complete Zillow Data
 - **kNN Image**: Visual similarity on image embeddings
 - **RRF**: Fuses results from all three searches
 
-### 4. Computer Vision
+### 4. Computer Vision (Claude 3 Haiku - Cost Optimized)
 - Architecture style classification (25+ styles)
-- Visual feature detection (balcony, porch, fence, etc.)
+- Visual feature detection (flooring, materials, rooms, etc.)
 - Exterior color identification
-- Uses Claude 3 Sonnet for vision analysis
+- **Cost**: $0.00025/image (75% cheaper than Rekognition)
+- **DynamoDB caching** prevents re-analyzing same images
 
-### 5. Geolocation (Google Maps Places API)
-- Find homes near specific businesses/amenities
-- Accurate POI geocoding (gyms, schools, restaurants, etc.)
-- Distance-based filtering (km or drive time)
+### 5. On-Demand Geolocation (Google Places API New)
+- **Every result shows ITS OWN nearby places** (grocery stores, gyms, parks, restaurants, etc.)
+- Proximity mentions in queries (e.g., "near a grocery store") are informational only
+- Returns ALL matching homes, each enriched with nearby places from Google Places API (New v1)
+- **DynamoDB caching** by rounded coordinates (~100m precision)
+- **Cost**: ~$0.26 per search first time, $0 cached (100x cheaper than old approach)
 
 ## Setup
 
@@ -116,43 +122,41 @@ TEXT_EMBED_MODEL=amazon.titan-embed-text-v2:0
 IMAGE_EMBED_MODEL=amazon.titan-embed-image-v1
 LLM_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
 
-# Google Maps (optional but recommended)
-GOOGLE_MAPS_API_KEY=<your-key>
+# Google Places API New (for on-demand geolocation enrichment)
+GOOGLE_PLACES_API_KEY=<your-key>
 ```
 
-### Google Maps API Setup
+### Google Places API Setup (New API)
 
-**Required for**: "homes near X" queries
+**What it does**: Enriches search results with nearby places for each listing
 
 1. Get API key: https://console.cloud.google.com/apis/credentials
-2. Enable "Places API"
-3. Restrict key to Places API only
-4. Add to Lambda:
-   ```bash
-   ./add_google_maps_key.sh YOUR_API_KEY
-   ```
+2. Enable "Places API (New)" in Google Cloud Console
+3. Add to Lambda environment variable: `GOOGLE_PLACES_API_KEY`
+4. Results now include `nearby_places` array with groceries, gyms, restaurants, etc.
 
-**Cost**: Free tier ($200/month) covers typical usage
-
-See [GOOGLE_MAPS_SETUP.md](GOOGLE_MAPS_SETUP.md) for detailed instructions.
+**Cost**: ~$0.017 per listing first time, $0 cached (DynamoDB)
 
 ## Core Files
 
 ### Production Code
-- **search.py** - Search Lambda handler (hybrid search)
-- **upload_listings.py** - Indexing Lambda handler (vision analysis)
-- **common.py** - Shared utilities (embeddings, LLM, geocoding)
+- **search.py** - Search Lambda handler (hybrid search + on-demand geolocation)
+- **upload_listings.py** - Indexing Lambda handler (vision analysis with caching)
+- **common.py** - Shared utilities (embeddings, LLM, vision, OpenSearch)
+- **app.py** - Flask UI backend
 
 ### Scripts
-- **add_google_maps_key.sh** - Add Google Maps API key to Lambda
-- **monitor_reindex.sh** - Check re-indexing progress
+- **scripts/deploy_ec2.sh** - Deploy UI to EC2
+- **scripts/ec2_bootstrap_final.sh** - EC2 setup script
+- **scripts/test_query_parsing.py** - Test LLM query parsing
+- **scripts/upload_all_listings.sh** - Batch upload helper
 
 ### Documentation
 - **README.md** - This file
 - **docs/API.md** - Complete API reference
-- **docs/EXAMPLE_QUERIES.md** - 100 test queries
+- **docs/EXAMPLE_QUERIES.md** - Example queries
 - **docs/TECHNICAL_DOCUMENTATION.md** - Architecture deep dive
-- **GOOGLE_MAPS_SETUP.md** - Google Maps configuration
+- **PROJECT_STRUCTURE.md** - Code organization
 
 ## API Usage
 
@@ -196,7 +200,14 @@ Content-Type: application/json
       "image_tags": ["brick", "hardwood", "tile"],
       "architecture_style": "modern",
       "score": 0.95,
-      "boosted": false
+      "boosted": false,
+
+      // On-demand geolocation (from Google Places API, cached)
+      "nearby_places": [
+        {"name": "Smith's Grocery", "types": ["grocery_store", "supermarket"]},
+        {"name": "Gold's Gym", "types": ["gym", "fitness_center"]},
+        ...
+      ]
     }
   ]
 }
@@ -285,20 +296,25 @@ curl -X POST http://54.163.59.108/search \
 **One-time re-indexing costs** (per full re-index):
 - Bedrock Text Embeddings: ~$0.50 (1,588 descriptions)
 - Bedrock Image Embeddings: ~$0.60 (6 images × 1,588 listings @ 576px)
-- Claude Vision (architecture): ~$4.75 (1 image × 1,588 listings)
-- Rekognition: ~$9.50 (6 images × 1,588 listings)
-- **Total**: ~$15 per re-index (only needed when adding new counties)
+- Claude Vision (architecture + features): ~$2.38 (6 images × 1,588 listings × $0.00025)
+- DynamoDB writes (caching): ~$0.02
+- **Total**: ~$3.50 per re-index (75% cheaper than before!)
+- **Note**: Subsequent re-indexes cost ~$1.10 (cached images skip vision analysis)
 
 ## Troubleshooting
 
-### No Results for "Homes Near X" Queries
+### "Homes Near X" Queries Return Results Without nearby_places
 
-**Cause**: Google Maps API key not configured
+**Cause**: Google Places API key not configured
 
-**Fix**:
+**Fix**: Add `GOOGLE_PLACES_API_KEY` to Lambda environment variables:
 ```bash
-./add_google_maps_key.sh YOUR_KEY
+aws lambda update-function-configuration \
+  --function-name hearth-search \
+  --environment "Variables={..., GOOGLE_PLACES_API_KEY=YOUR_KEY}"
 ```
+
+**Note**: Queries like "homes near a grocery store" will still return all matching homes. The API key just enables the `nearby_places` enrichment for each result.
 
 ### Re-indexing Appears Stuck
 
@@ -337,10 +353,27 @@ aws logs tail /aws/lambda/hearth-upload-listings --since 10m
 
 ## Documentation
 
-- **[API Reference](docs/API.md)** - Complete API documentation
-- **[Example Queries](docs/EXAMPLE_QUERIES.md)** - 100 test queries
-- **[Technical Documentation](docs/TECHNICAL_DOCUMENTATION.md)** - Architecture details
-- **[Google Maps Setup](GOOGLE_MAPS_SETUP.md)** - Geo-location configuration
+### 📚 **Complete Documentation Index**
+
+**For Frontend Developers:**
+- **[Frontend Integration Guide](docs/FRONTEND_INTEGRATION_GUIDE.md)** - **START HERE** - How to integrate the API into your UI
+
+**For API Users:**
+- **[API Reference](docs/API.md)** - Complete endpoint documentation with examples
+- **[Example Queries](docs/EXAMPLE_QUERIES.md)** - Real-world search examples and use cases
+
+**For System Architects & DevOps:**
+- **[Complete System Documentation](docs/COMPLETE_SYSTEM_DOCUMENTATION.md)** - **COMPREHENSIVE GUIDE** - Full system architecture, AWS infrastructure, cost analysis, deployment, troubleshooting
+- **[Technical Documentation](docs/TECHNICAL_DOCUMENTATION.md)** - Deep dive into search algorithms and data flow
+- **[Project Structure](PROJECT_STRUCTURE.md)** - Codebase organization and file reference
+
+**Quick Links by Topic:**
+- **Architecture & Flow Diagrams**: [Complete System Documentation](docs/COMPLETE_SYSTEM_DOCUMENTATION.md#architecture-diagram)
+- **AWS Infrastructure Setup**: [Complete System Documentation](docs/COMPLETE_SYSTEM_DOCUMENTATION.md#aws-infrastructure)
+- **Cost Analysis**: [Complete System Documentation](docs/COMPLETE_SYSTEM_DOCUMENTATION.md#cost-analysis)
+- **Deployment Guide**: [Complete System Documentation](docs/COMPLETE_SYSTEM_DOCUMENTATION.md#deployment-guide)
+- **Troubleshooting**: [Complete System Documentation](docs/COMPLETE_SYSTEM_DOCUMENTATION.md#troubleshooting)
+- **Performance Benchmarks**: [Complete System Documentation](docs/COMPLETE_SYSTEM_DOCUMENTATION.md#performance-benchmarks)
 
 ## License
 

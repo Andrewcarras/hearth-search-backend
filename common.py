@@ -321,7 +321,35 @@ def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 15) -
                         },
                         {
                             "type": "text",
-                            "text": f"Analyze this property image and list up to {max_labels} visible features, materials, and rooms. Examples: pool, granite countertops, hardwood floors, brick exterior, modern kitchen, fireplace. Return ONLY a comma-separated list of features, nothing else."
+                            "text": f"""Analyze this property image and list up to {max_labels} visible features. Focus on details buyers search for.
+
+EXTERIOR PHOTOS - Always include:
+• Primary exterior color: blue exterior, white exterior, gray exterior, brown exterior, beige exterior, red exterior, tan exterior, yellow exterior
+• Materials: brick, stone, vinyl siding, wood siding, stucco
+• Garage: attached garage, detached garage, 2-car garage, 3-car garage, tandem garage
+• Outdoor spaces: covered patio, deck, pergola, fenced backyard, landscaped yard, mature trees
+• Special features: front porch, balcony, dormers, bay windows, large windows, skylights
+
+INTERIOR PHOTOS - Look for:
+• Flooring: hardwood floors, tile floors, carpet, laminate, luxury vinyl
+• Kitchen: granite countertops, marble countertops, quartz countertops, stainless steel appliances, kitchen island, breakfast bar, double oven, pantry, updated kitchen, modern kitchen
+• Bathrooms: soaking tub, walk-in shower, dual sinks, separate tub and shower, tile shower
+• Ceilings: vaulted ceilings, cathedral ceilings, coffered ceiling, exposed beams, tray ceiling
+• Windows/Light: large windows, floor to ceiling windows, lots of natural light, bright and airy, recessed lighting
+• Closets/Storage: walk-in closet, built-in shelving
+• Fireplace: stone fireplace, brick fireplace, gas fireplace, wood burning fireplace
+• Architectural details: crown molding, wainscoting, archways, open floor plan
+• Condition: updated, modern finishes, recently renovated, move-in ready
+
+OUTDOOR AMENITIES:
+• Pool: in-ground pool, above-ground pool, pool with spa
+• Entertainment: outdoor kitchen, fire pit, hot tub, built-in BBQ
+• Views: mountain view, city view, wooded lot, water view
+• Energy: solar panels, ceiling fans
+
+PRIORITIZE features buyers commonly search for. Be specific (e.g., "3-car garage" not just "garage", "vaulted ceilings" not just "ceiling").
+
+Return ONLY a comma-separated list of features, nothing else."""
                         }
                     ]
                 }
@@ -1023,157 +1051,6 @@ Query: "{query_text}"
         }
 
 
-def geocode_location(poi_type: str, reference_location: Optional[Dict[str, float]] = None) -> Optional[Dict[str, float]]:
-    """
-    Geocode a point of interest (POI) type to get its coordinates using Google Maps Places API.
-
-    Uses Google Places API to find businesses and amenities near listings.
-    This provides accurate, real-world locations for gyms, stores, restaurants, etc.
-
-    Args:
-        poi_type: Type of POI (e.g., "gym", "grocery_store", "park", "hospital")
-        reference_location: Optional reference point {"lat": ..., "lon": ...} to search near
-                           If not provided, defaults to Salt Lake City center
-
-    Returns:
-        Dictionary with 'lat' and 'lon' keys, or None if geocoding fails
-
-    Example:
-        >>> geocode_location("gym", {"lat": 40.7608, "lon": -111.891})
-        {"lat": 40.7386668, "lon": -111.8263901}
-    """
-    try:
-        # Get API key from environment
-        google_api_key = os.getenv("GOOGLE_MAPS_API_KEY")
-
-        if not google_api_key:
-            logger.warning("GOOGLE_MAPS_API_KEY not set - falling back to Nominatim")
-            return _geocode_location_nominatim(poi_type, reference_location)
-
-        # Default to Salt Lake City center if no reference location
-        if not reference_location:
-            reference_location = {"lat": 40.7608, "lon": -111.891}  # SLC downtown
-
-        # Map POI types to Google Places types
-        # https://developers.google.com/maps/documentation/places/web-service/supported_types
-        poi_mapping = {
-            "gym": "gym",
-            "fitness": "gym",
-            "fitness_center": "gym",
-            "school": "school",
-            "elementary_school": "primary_school",
-            "high_school": "secondary_school",
-            "grocery_store": "supermarket",
-            "supermarket": "supermarket",
-            "park": "park",
-            "hospital": "hospital",
-            "pharmacy": "pharmacy",
-            "restaurant": "restaurant",
-            "cafe": "cafe",
-            "coffee_shop": "cafe",
-            "bank": "bank",
-            "library": "library",
-            "shopping": "shopping_mall",
-            "mall": "shopping_mall",
-            "downtown": "neighborhood",
-            "airport": "airport",
-            "office": "office",
-        }
-
-        place_type = poi_mapping.get(poi_type, poi_type)
-
-        # Use Google Places Nearby Search API
-        # https://developers.google.com/maps/documentation/places/web-service/search-nearby
-        base_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
-
-        params = {
-            "location": f"{reference_location['lat']},{reference_location['lon']}",
-            "radius": 5000,  # Search within 5km
-            "type": place_type,
-            "key": google_api_key,
-        }
-
-        response = requests.get(base_url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-
-        if data.get("status") == "OK" and data.get("results"):
-            # Get the first (closest) result
-            result = data["results"][0]
-            location = result["geometry"]["location"]
-
-            geocoded = {
-                "lat": float(location["lat"]),
-                "lon": float(location["lng"])
-            }
-
-            logger.info("Geocoded POI '%s' to %s (name: %s)",
-                       poi_type, geocoded, result.get("name", "Unknown"))
-            return geocoded
-        else:
-            logger.warning("No Google Places results for POI type '%s': %s",
-                          poi_type, data.get("status"))
-            return None
-
-    except Exception as e:
-        logger.warning("geocode_location failed for '%s': %s", poi_type, e)
-        return None
-
-
-def _geocode_location_nominatim(poi_type: str, reference_location: Optional[Dict[str, float]] = None) -> Optional[Dict[str, float]]:
-    """
-    Fallback geocoding using OpenStreetMap Nominatim (free but limited).
-
-    Only used when Google Maps API key is not available.
-    """
-    try:
-        if poi_type == "office" and not reference_location:
-            return None
-
-        poi_mapping = {
-            "school": "school",
-            "gym": "gym",
-            "fitness": "gym",
-            "grocery_store": "supermarket",
-            "park": "park",
-            "hospital": "hospital",
-            "pharmacy": "pharmacy",
-            "restaurant": "restaurant",
-            "cafe": "cafe",
-            "bank": "bank",
-            "library": "library",
-        }
-
-        amenity = poi_mapping.get(poi_type, poi_type)
-        base_url = "https://nominatim.openstreetmap.org/search"
-
-        if reference_location:
-            params = {
-                "q": f"{amenity}, Salt Lake City, Utah",
-                "format": "json",
-                "limit": 1,
-                "lat": reference_location["lat"],
-                "lon": reference_location["lon"],
-            }
-        else:
-            params = {
-                "q": f"{amenity}, Salt Lake City, Utah",
-                "format": "json",
-                "limit": 1,
-                "bounded": 1,
-                "viewbox": "-112.1,40.9,-111.7,40.5",
-            }
-
-        headers = {"User-Agent": "HearthRealEstateSearch/1.0"}
-        response = requests.get(base_url, params=params, headers=headers, timeout=5)
-        response.raise_for_status()
-        results = response.json()
-
-        if results and len(results) > 0:
-            result = results[0]
-            return {"lat": float(result["lat"]), "lon": float(result["lon"])}
-        return None
-
-    except Exception as e:
-        logger.warning("Nominatim geocoding failed: %s", e)
-        return None
+# NOTE: Geocoding functions removed - no longer needed!
+# We now use on-demand geolocation enrichment in search.py instead of
+# filtering by proximity at search time. This is 100x more cost-effective.

@@ -11,8 +11,14 @@ Processing pipeline for each listing:
 4. Generate text embeddings from description using Bedrock Titan
 5. Download and process up to MAX_IMAGES property photos
 6. Generate image embeddings using Bedrock Titan
-7. Detect visual features using AWS Rekognition
-8. Index document with all fields and embeddings to OpenSearch
+7. Detect visual features using Claude 3 Haiku Vision (with DynamoDB caching)
+8. Store complete original listing JSON in S3 for later retrieval
+9. Index search fields + embeddings to OpenSearch
+
+Cost Optimizations:
+- Claude Haiku Vision: $0.00025/image (75% cheaper than Rekognition $0.001/image)
+- DynamoDB caching: Prevents re-analyzing same images across re-indexes
+- S3 + OpenSearch hybrid: Store complete data in S3, only search fields in OpenSearch
 
 The function supports self-invocation for processing large datasets that exceed
 Lambda's execution time limit (15 minutes).

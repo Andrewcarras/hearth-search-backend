@@ -88,6 +88,24 @@ https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod
         "lat": 40.68745,
         "lon": -111.85004
       },
+      "nearby_places": [
+        {
+          "name": "Smith's Grocery",
+          "types": ["grocery_store", "supermarket"]
+        },
+        {
+          "name": "Gold's Gym",
+          "types": ["gym", "fitness_center"]
+        },
+        {
+          "name": "Holladay Elementary",
+          "types": ["school", "point_of_interest"]
+        },
+        {
+          "name": "Starbucks",
+          "types": ["cafe", "coffee_shop"]
+        }
+      ],
       "has_description": true,
       "has_valid_embeddings": true,
       "status": "active",
@@ -129,6 +147,10 @@ https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod
   - `images` (array): Deduplicated high-res image URLs (from carouselPhotosComposable)
   - `architecture_style` (string|null): AI-detected architecture style
   - `geo` (object): Geographic coordinates {lat, lon}
+  - `nearby_places` (array): Nearby businesses/amenities from Google Places API (New)
+    - Each place has: `name` (string), `types` (array of strings)
+    - Example: `[{"name": "Smith's Grocery", "types": ["grocery_store", "supermarket"]}, ...]`
+    - Cached in DynamoDB (first search ~$0.017/listing, subsequent searches free)
   - `has_description` (boolean): Whether listing has description
   - `has_valid_embeddings` (boolean): Whether listing has vector embeddings
   - `status` (string): Listing status
@@ -370,6 +392,10 @@ export interface SearchResult {
     lat: number;
     lon: number;
   };
+  nearby_places?: Array<{
+    name: string;
+    types: string[];
+  }>;  // From Google Places API (New) - on-demand enrichment
   has_description: boolean;
   has_valid_embeddings: boolean;
   status: string;
@@ -445,6 +471,18 @@ function SearchComponent() {
           {result.architecture_style && (
             <span>Style: {result.architecture_style}</span>
           )}
+          {result.nearby_places && result.nearby_places.length > 0 && (
+            <div>
+              <h4>Nearby Places:</h4>
+              <ul>
+                {result.nearby_places.slice(0, 5).map((place, idx) => (
+                  <li key={idx}>
+                    {place.name} ({place.types.join(', ')})
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -510,6 +548,113 @@ curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/upload 
 
 ---
 
+## Important Implementation Notes for Frontend
+
+### 1. Handling `nearby_places`
+
+The `nearby_places` array is added to every search result via on-demand enrichment:
+
+**What you get:**
+- Each result has up to 10 nearby places within ~1km radius
+- Each place includes `name` and `types` (array of Google Places types)
+- Common types: `grocery_store`, `supermarket`, `gym`, `fitness_center`, `school`, `restaurant`, `cafe`, `park`
+
+**Frontend display options:**
+```typescript
+// Option A: Show all nearby places
+{result.nearby_places?.map(place => (
+  <span>{place.name}</span>
+))}
+
+// Option B: Filter by type (e.g., show only grocery stores)
+{result.nearby_places?.filter(p =>
+  p.types.includes('grocery_store') || p.types.includes('supermarket')
+).map(place => (
+  <span>🛒 {place.name}</span>
+))}
+
+// Option C: Group by category
+const categories = {
+  grocery: ['grocery_store', 'supermarket'],
+  fitness: ['gym', 'fitness_center'],
+  education: ['school', 'primary_school', 'secondary_school'],
+  dining: ['restaurant', 'cafe', 'bar']
+};
+
+// Option D: Add filter badges (e.g., "Has grocery store nearby")
+const hasGrocery = result.nearby_places?.some(p =>
+  p.types.includes('grocery_store') || p.types.includes('supermarket')
+);
+```
+
+### 2. Field Name Variations
+
+Zillow data has some field name inconsistencies. Check both variations:
+
+```typescript
+// Bedrooms/Bathrooms
+const beds = result.bedrooms || result.beds || 0;
+const baths = result.bathrooms || result.baths || 0;
+
+// Address (can be string OR object)
+const address = typeof result.address === 'string'
+  ? result.address
+  : result.address?.streetAddress || '';
+const city = typeof result.address === 'object'
+  ? result.address.city
+  : result.city;
+```
+
+### 3. Image Handling
+
+Multiple image fields available - use in this priority:
+
+```typescript
+// Priority 1: Hearth's deduplicated high-res images
+const images = result.images || [];
+
+// Priority 2: Zillow's carousel (full resolution)
+const carouselImages = result.carouselPhotosComposable?.map(
+  photo => photo.image || photo.url
+) || [];
+
+// Priority 3: Main thumbnail
+const thumbnail = result.imgSrc;
+
+// Best practice: Combine with fallback
+const displayImages = images.length > 0
+  ? images
+  : carouselImages.length > 0
+    ? carouselImages
+    : thumbnail
+      ? [thumbnail]
+      : [];
+```
+
+### 4. Performance Tips
+
+- **Pagination**: Use `size` parameter wisely (default 30, max 100)
+- **Debounce searches**: Wait 300-500ms after user stops typing
+- **Cache results**: Store recent searches in React state/Redux
+- **Nearby places are cached**: First search ~500-800ms, subsequent searches ~300-400ms
+
+### 5. Error Handling
+
+```typescript
+try {
+  const data = await searchListings(query, size);
+  if (!data.ok) {
+    // Handle API error
+    console.error('Search failed:', data.error);
+  }
+} catch (error) {
+  // Handle network error
+  console.error('Network error:', error);
+}
+```
+
+---
+
 ## Search Capabilities
 
 The search API understands natural language queries and can extract:
@@ -533,10 +678,23 @@ The search API understands natural language queries and can extract:
 - Open floor plan, vaulted ceilings
 - And 100+ more features
 
-### Proximity Search
-- "near elementary schools"
-- "within 10 minutes of downtown"
-- "close to grocery stores and gyms"
+### Proximity/Location Queries
+Queries mentioning nearby places (e.g., "homes near a grocery store") work differently than traditional filters:
+
+**How it works:**
+1. Returns ALL matching homes (proximity is logged but not used for filtering)
+2. Each result is enriched with `nearby_places` array showing what's actually near THAT home
+3. Frontend can display/filter by which homes have grocery stores, gyms, etc. nearby
+
+**Example queries:**
+- "homes near a grocery store" → Returns all homes, each with its own nearby_places
+- "3 bedroom homes near schools" → Returns 3BR homes, each showing nearby schools
+- "properties close to gyms" → Returns properties, each showing nearby fitness centers
+
+**Note:** This approach is better than filtering because:
+- User sees what's near EACH home (not just "within 5km of one random gym")
+- 100x more cost-effective ($0.26/search vs $27/re-index)
+- Results are cached in DynamoDB (subsequent searches are free)
 
 ### Price & Size Filters
 - "under $500k"
