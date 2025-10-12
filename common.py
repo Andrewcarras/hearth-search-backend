@@ -16,6 +16,7 @@ Architecture:
 """
 
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -143,6 +144,7 @@ def _parse_embed_response(payload: Dict[str, Any]) -> List[float]:
 def embed_text(text: str) -> List[float]:
     """
     Generate a text embedding vector using Amazon Bedrock Titan Text Embeddings.
+    Results are cached in DynamoDB to avoid re-embedding same text.
 
     Args:
         text: Input text to embed (listing description, search query, etc.)
@@ -153,11 +155,42 @@ def embed_text(text: str) -> List[float]:
     if not text:
         return [0.0] * TEXT_DIM  # Return zero vector for empty text
 
-    # Invoke Titan Text Embeddings model
+    # Check cache first
+    cache_key = f"text:{hashlib.md5(text.encode()).hexdigest()}"
+    try:
+        cached = dynamodb.get_item(
+            TableName=CACHE_TABLE,
+            Key={"cache_key": {"S": cache_key}}
+        )
+        if "Item" in cached and "embedding" in cached["Item"]:
+            vec_str = cached["Item"]["embedding"]["S"]
+            vec = json.loads(vec_str)
+            logger.debug(f"💾 Cache hit for text embedding")
+            return vec
+    except Exception as e:
+        logger.warning(f"Cache read error: {e}")
+
+    # Cache miss - generate embedding
     body = json.dumps({"inputText": text})
     resp = brt.invoke_model(modelId=TEXT_MODEL_ID, body=body)
     out = json.loads(resp["body"].read().decode("utf-8"))
     vec = _parse_embed_response(out)
+
+    # Store in cache
+    try:
+        dynamodb.put_item(
+            TableName=CACHE_TABLE,
+            Item={
+                "cache_key": {"S": cache_key},
+                "embedding": {"S": json.dumps(vec)},
+                "type": {"S": "text"},
+                "created_at": {"N": str(int(time.time()))}
+            }
+        )
+        logger.debug(f"💾 Cached text embedding")
+    except Exception as e:
+        logger.warning(f"Cache write error: {e}")
+
     return vec
 
 
@@ -207,6 +240,7 @@ def embed_image_bytes(img_bytes: bytes) -> List[float]:
 def embed_image_from_url(url: str) -> List[float]:
     """
     Download an image from URL and generate its embedding vector.
+    Results are cached by URL to avoid re-embedding same images.
 
     Args:
         url: Image URL to process
@@ -214,7 +248,42 @@ def embed_image_from_url(url: str) -> List[float]:
     Returns:
         1024-dimensional image embedding vector
     """
-    return embed_image_bytes(_bytes_from_url(url))
+    # Check cache first (keyed by URL since images are immutable at URL)
+    cache_key = f"img:{hashlib.md5(url.encode()).hexdigest()}"
+    try:
+        cached = dynamodb.get_item(
+            TableName=CACHE_TABLE,
+            Key={"cache_key": {"S": cache_key}}
+        )
+        if "Item" in cached and "embedding" in cached["Item"]:
+            vec_str = cached["Item"]["embedding"]["S"]
+            vec = json.loads(vec_str)
+            logger.debug(f"💾 Cache hit for image embedding: {url[:50]}...")
+            return vec
+    except Exception as e:
+        logger.warning(f"Cache read error: {e}")
+
+    # Cache miss - download and embed
+    img_bytes = _bytes_from_url(url)
+    vec = embed_image_bytes(img_bytes)
+
+    # Store in cache
+    try:
+        dynamodb.put_item(
+            TableName=CACHE_TABLE,
+            Item={
+                "cache_key": {"S": cache_key},
+                "embedding": {"S": json.dumps(vec)},
+                "type": {"S": "image"},
+                "url": {"S": url[:1000]},  # Store URL for reference (truncated)
+                "created_at": {"N": str(int(time.time()))}
+            }
+        )
+        logger.debug(f"💾 Cached image embedding")
+    except Exception as e:
+        logger.warning(f"Cache write error: {e}")
+
+    return vec
 
 
 def vec_mean(vectors: List[List[float]], target_dim: int) -> List[float]:
