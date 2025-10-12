@@ -580,17 +580,22 @@ def handler(event, context):
     logger.info(f"📦 Batch {start}-{end}: Processing {len(batch_zpids)} listings")
     logger.info(f"   First 10 zpids: {batch_zpids[:10]}")
     logger.info(f"   Source: bucket={payload.get('bucket', 'N/A')}, key={payload.get('key', 'N/A')}")
+    logger.info(f"   Invocation: {invocation_count}/50, Job ID: {job_id}")
 
     SAFETY_MS = 30000  # stop ~30s early to allow self-invoke
     processed = 0
+    success_count = 0
+    error_count = 0
+    error_details = []
     actions: List[Dict[str, Any]] = []
 
     for i in range(start, end):
         if context.get_remaining_time_in_millis() < SAFETY_MS:
-            logger.info("Nearing timeout; breaking early at i=%d", i)
+            logger.warning(f"⏰ Nearing timeout at listing {i}/{end}; breaking early to self-invoke")
             break
         try:
             lst = all_listings[i]
+            zpid = lst.get('zpid', 'unknown')
             core = _extract_core_fields(lst)
             images = extract_zillow_images(lst, target_width=EMBEDDING_IMAGE_WIDTH)
             doc = _build_doc(core, images)
@@ -605,8 +610,21 @@ def handler(event, context):
                 actions.clear()
 
             processed += 1
+            success_count += 1
+
+            # Log every 10th listing for progress tracking
+            if processed % 10 == 0:
+                logger.info(f"   Progress: {processed}/{len(batch_zpids)} listings processed")
+
         except Exception as e:
-            logger.exception("Failed on listing index %d: %s", i, e)
+            error_count += 1
+            zpid = all_listings[i].get('zpid', 'unknown')
+            error_msg = f"zpid={zpid}, error={str(e)[:100]}"
+            error_details.append(error_msg)
+            logger.error(f"❌ Failed listing {i} (zpid={zpid}): {str(e)[:200]}")
+
+            # Continue processing despite errors (don't break the entire batch)
+            processed += 1
 
     if actions:
         bulk_upsert(actions)
@@ -614,7 +632,17 @@ def handler(event, context):
     # Enhanced logging: Report what was actually processed
     processed_zpids = [str(all_listings[i].get('zpid', 'unknown')) for i in range(start, start + processed)]
     logger.info(f"✅ Batch complete: Processed {processed}/{len(batch_zpids)} listings")
+    logger.info(f"   ✓ Successes: {success_count}")
+    logger.info(f"   ✗ Errors: {error_count}")
     logger.info(f"   Processed zpids: {processed_zpids[:10]}")
+
+    if error_count > 0:
+        logger.error(f"❌ ERRORS IN BATCH: {error_count} listings failed")
+        for detail in error_details[:5]:  # Log first 5 errors
+            logger.error(f"   {detail}")
+        if len(error_details) > 5:
+            logger.error(f"   ... and {len(error_details) - 5} more errors")
+
     if processed < len(batch_zpids):
         skipped = len(batch_zpids) - processed
         logger.warning(f"⚠️  Skipped {skipped} listings (timeout or errors)")
