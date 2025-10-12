@@ -155,12 +155,12 @@ def embed_text(text: str) -> List[float]:
     if not text:
         return [0.0] * TEXT_DIM  # Return zero vector for empty text
 
-    # Check cache first
+    # Check cache first (using image_url as key for compatibility with table schema)
     cache_key = f"text:{hashlib.md5(text.encode()).hexdigest()}"
     try:
         cached = dynamodb.get_item(
             TableName=CACHE_TABLE,
-            Key={"cache_key": {"S": cache_key}}
+            Key={"image_url": {"S": cache_key}}
         )
         if "Item" in cached and "embedding" in cached["Item"]:
             vec_str = cached["Item"]["embedding"]["S"]
@@ -181,7 +181,7 @@ def embed_text(text: str) -> List[float]:
         dynamodb.put_item(
             TableName=CACHE_TABLE,
             Item={
-                "cache_key": {"S": cache_key},
+                "image_url": {"S": cache_key},
                 "embedding": {"S": json.dumps(vec)},
                 "type": {"S": "text"},
                 "created_at": {"N": str(int(time.time()))}
@@ -248,20 +248,19 @@ def embed_image_from_url(url: str) -> List[float]:
     Returns:
         1024-dimensional image embedding vector
     """
-    # Check cache first (keyed by URL since images are immutable at URL)
-    cache_key = f"img:{hashlib.md5(url.encode()).hexdigest()}"
+    # Check cache first (use URL directly as key - it's already unique)
     try:
         cached = dynamodb.get_item(
             TableName=CACHE_TABLE,
-            Key={"cache_key": {"S": cache_key}}
+            Key={"image_url": {"S": url}}
         )
         if "Item" in cached and "embedding" in cached["Item"]:
             vec_str = cached["Item"]["embedding"]["S"]
             vec = json.loads(vec_str)
-            logger.debug(f"💾 Cache hit for image embedding: {url[:50]}...")
+            logger.debug(f"💾 Cache hit for image: {url[:60]}...")
             return vec
     except Exception as e:
-        logger.warning(f"Cache read error: {e}")
+        logger.warning(f"Cache read error for {url[:60]}: {e}")
 
     # Cache miss - download and embed
     img_bytes = _bytes_from_url(url)
@@ -272,14 +271,12 @@ def embed_image_from_url(url: str) -> List[float]:
         dynamodb.put_item(
             TableName=CACHE_TABLE,
             Item={
-                "cache_key": {"S": cache_key},
+                "image_url": {"S": url},
                 "embedding": {"S": json.dumps(vec)},
-                "type": {"S": "image"},
-                "url": {"S": url[:1000]},  # Store URL for reference (truncated)
                 "created_at": {"N": str(int(time.time()))}
             }
         )
-        logger.debug(f"💾 Cached image embedding")
+        logger.debug(f"💾 Cached image: {url[:60]}")
     except Exception as e:
         logger.warning(f"Cache write error: {e}")
 
