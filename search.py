@@ -330,11 +330,11 @@ def _filters_to_bool(filter_obj: Dict[str, Any], require_embeddings: bool = True
 
     # Bedroom minimum
     if "beds_min" in filter_obj and filter_obj["beds_min"] is not None:
-        f.append({"range": {"beds": {"gte": filter_obj["beds_min"]}}})
+        f.append({"range": {"bedrooms": {"gte": filter_obj["beds_min"]}}})
 
     # Bathroom minimum
     if "baths_min" in filter_obj and filter_obj["baths_min"] is not None:
-        f.append({"range": {"baths": {"gte": filter_obj["baths_min"]}}})
+        f.append({"range": {"bathrooms": {"gte": filter_obj["baths_min"]}}})
 
     # Lot size range
     if "acreage_min" in filter_obj or "acreage_max" in filter_obj:
@@ -647,23 +647,23 @@ def handler(event, context):
         satisfied = must_tags.issubset(tags) if must_tags else True
         boost = 1.0 + (0.5 if satisfied and must_tags else 0.0)
 
-        # Fetch complete Zillow listing data from S3
         zpid = h["_id"]
-        original_listing = _fetch_listing_from_s3(zpid)
 
-        # Enrich with nearby places on-demand (cached in DynamoDB)
-        original_listing = enrich_with_nearby_places(original_listing)
-
+        # Build result from OpenSearch data
         result = {
-            # Start with all original Zillow listing fields from S3
-            **original_listing,
-            # Add search metadata (score, boosted, our enrichments)
+            "zpid": zpid,
             "id": zpid,
             "score": h.get("_score", 0.0),
-            "boosted": boost > 1.0,
-            # Add our enriched fields (architecture_style, feature_tags, etc.)
-            **{k: v for k, v in src.items() if k not in ("vector_text", "vector_image")}
+            "boosted": boost > 1.0
         }
+
+        # Add all OpenSearch fields (except vectors)
+        for k, v in src.items():
+            if k not in ("vector_text", "vector_image"):
+                result[k] = v
+
+        # Enrich with nearby places on-demand (cached in DynamoDB)
+        result = enrich_with_nearby_places(result)
 
         final.append((h.get("_score", 0.0) * boost, result))
 

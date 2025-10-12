@@ -412,16 +412,23 @@ def create_index_if_needed():
             "properties": {
                 # Identifiers and location
                 "zpid": {"type": "keyword"},  # Zillow property ID (exact match)
-                "address": {"type": "text"},  # Full-text searchable
+                "address": {  # Nested object for UI compatibility
+                    "properties": {
+                        "streetAddress": {"type": "text"},
+                        "city": {"type": "keyword"},
+                        "state": {"type": "keyword"},
+                        "zipcode": {"type": "keyword"}
+                    }
+                },
                 "city": {"type": "keyword"},  # Exact match for filtering
                 "state": {"type": "keyword"},  # Exact match for filtering
                 "zip_code": {"type": "keyword"},  # Exact match
 
                 # Numeric properties for range filtering
                 "price": {"type": "long"},  # Property price in dollars
-                "beds": {"type": "float"},  # Number of bedrooms
-                "baths": {"type": "float"},  # Number of bathrooms
-                "acreage": {"type": "float"},  # Lot size in acres
+                "bedrooms": {"type": "float"},  # Number of bedrooms (was beds)
+                "bathrooms": {"type": "float"},  # Number of bathrooms (was baths)
+                "livingArea": {"type": "float"},  # Living area in sqft (was acreage)
                 "geo": {"type": "geo_point"},  # Latitude/longitude for radius search
 
                 # Text content for search
@@ -491,18 +498,48 @@ def _send_bulk(chunk_lines: List[str], attempt: int = 0, base_sleep: float = 0.5
     """
     payload = "\n".join(chunk_lines) + "\n"
     try:
-        response = os_client.bulk(body=payload, refresh=False, request_timeout=60)
+        # Changed to refresh=True to make documents immediately searchable
+        response = os_client.bulk(body=payload, refresh=True, request_timeout=60)
+
+        # Enhanced logging: Log full response structure for debugging
+        logger.info(f"🔍 Bulk API response keys: {list(response.keys())}")
+        logger.info(f"   errors={response.get('errors')}, took={response.get('took')}ms, items_count={len(response.get('items', []))}")
+
         # Check for errors in bulk response
         if response.get("errors"):
+            success_count = 0
+            error_count = 0
+            successful_zpids = []
+            failed_zpids = []
             logger.error("Bulk indexing had errors!")
             for item in response.get("items", []):
                 for action, details in item.items():
+                    zpid = details.get("_id")
                     if details.get("error"):
-                        logger.error("Failed to index document %s: %s",
-                                   details.get("_id"), details.get("error"))
+                        error_count += 1
+                        failed_zpids.append(zpid)
+                        logger.error("Failed to index zpid %s: %s", zpid, details.get("error"))
+                    else:
+                        success_count += 1
+                        successful_zpids.append(zpid)
+                        # Log the actual response status for successful items
+                        logger.info(f"   zpid={zpid}: status={details.get('status')}, result={details.get('result')}")
+            logger.info("Bulk result: %d succeeded, %d failed", success_count, error_count)
+            logger.info("   Successful zpids: %s", successful_zpids[:10])
+            logger.error("   Failed zpids: %s", failed_zpids[:10])
             # Still return True to continue processing (partial success)
         else:
-            logger.info("Bulk indexed %d documents successfully", len(response.get("items", [])))
+            item_count = len(response.get("items", []))
+            logger.info("Bulk indexed %d documents successfully", item_count)
+            # Log first few zpids for verification with their status
+            zpids_with_status = []
+            for item in response.get("items", []):
+                for _, details in item.items():
+                    zpid = details.get("_id")
+                    status = details.get("status")
+                    result = details.get("result")
+                    zpids_with_status.append(f"{zpid}(s={status},r={result})")
+            logger.info(f"   Successfully indexed zpids: {zpids_with_status[:10]}")
         return True
     except Exception as e:
         status = getattr(e, "status_code", None)
@@ -555,7 +592,37 @@ def bulk_upsert(actions: Iterable[Dict[str, Any]], initial_chunk: int = 100, max
         if not buf_local:
             return
 
+        # Enhanced logging: Show sample document being indexed
+        if buf_local:
+            sample_doc = buf_local[0]
+            sample_id = sample_doc.get("_id")
+            sample_source = sample_doc.get("_source", {})
+            logger.info(f"🔍 Bulk indexing {len(buf_local)} documents. Sample zpid={sample_id}:")
+            logger.info(f"   has_valid_embeddings={sample_source.get('has_valid_embeddings')}")
+            logger.info(f"   price={sample_source.get('price')}")
+            logger.info(f"   city={sample_source.get('city')}")
+
+            # Log field counts to detect issues
+            logger.info(f"   Document field count: {len(sample_source)}")
+            logger.info(f"   Document keys: {list(sample_source.keys())[:15]}")
+
         lines = lines_from_actions(buf_local)
+
+        # Enhanced logging: Show actual bulk payload structure
+        if lines:
+            logger.info(f"📤 Bulk payload: {len(lines)} lines ({len(lines)//2} documents)")
+            # Log first action+doc pair as sample
+            if len(lines) >= 2:
+                action_line = lines[0]
+                doc_line = lines[1]
+                logger.info(f"   Sample action: {action_line[:200]}")
+                logger.info(f"   Sample doc length: {len(doc_line)} chars")
+                # Parse doc to check fields
+                try:
+                    doc_obj = json.loads(doc_line)
+                    logger.info(f"   Sample doc fields: {list(doc_obj.keys())[:15]}")
+                except Exception as e:
+                    logger.error(f"   ERROR parsing sample doc: {e}")
 
         # Try to send with retries
         for attempt in range(max_retries):

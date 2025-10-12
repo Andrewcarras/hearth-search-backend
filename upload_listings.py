@@ -48,9 +48,13 @@ from common import (
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
-# AWS clients for S3 access and self-invocation
+# AWS clients for S3 access, self-invocation, and job tracking
 s3 = boto3.client("s3", region_name=AWS_REGION)
 lambda_client = boto3.client("lambda", region_name=AWS_REGION)
+dynamodb = boto3.client("dynamodb", region_name=AWS_REGION)
+
+# Job tracking table for idempotency
+JOB_TRACKING_TABLE = "hearth-indexing-jobs"
 
 
 # ===============================================
@@ -181,11 +185,16 @@ def _extract_core_fields(lst: Dict[str, Any]) -> Dict[str, Any]:
         "description": str(desc),
         "has_description": has_description,
         "price": int(price) if price is not None else None,
-        "beds": float(beds) if beds is not None else None,
-        "baths": float(baths) if baths is not None else None,
-        "acreage": float(acreage) if acreage is not None else None,
-        "address": addr,
-        "city": city,
+        "bedrooms": float(beds) if beds is not None else None,  # Match UI field name
+        "bathrooms": float(baths) if baths is not None else None,  # Match UI field name
+        "livingArea": float(acreage) if acreage is not None else None,  # For sqft display
+        "address": {  # Nested object for UI compatibility
+            "streetAddress": addr,
+            "city": city,
+            "state": state,
+            "zipcode": zipc
+        },
+        "city": city,  # Keep flat fields for search filters
         "state": state,
         "zip_code": zipc,
         "geo": geo,
@@ -346,10 +355,26 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
 
     vec_image = vec_mean(image_vecs, target_dim=len(vec_text)) if image_vecs else [0.0] * len(vec_text)
 
+    # Enhanced logging: Track embedding generation details
+    zpid = base.get("zpid")
+    logger.info(f"🔍 zpid={zpid}: Embedding details BEFORE validation:")
+    logger.info(f"   text_embed_len={len(vec_text) if vec_text else 0}, text_failed={text_embedding_failed}")
+    logger.info(f"   image_vecs_count={len(image_vecs)}, vec_image_len={len(vec_image) if vec_image else 0}")
+    if vec_text:
+        logger.info(f"   text_embed_sum={sum(abs(v) for v in vec_text):.4f}")
+    if vec_image:
+        logger.info(f"   image_embed_sum={sum(abs(v) for v in vec_image):.4f}")
+
     # Determine if embeddings are valid (non-zero)
     has_valid_text_embedding = not text_embedding_failed and vec_text and sum(abs(v) for v in vec_text) > 0.0
     has_valid_image_embedding = len(image_vecs) > 0 and vec_image and sum(abs(v) for v in vec_image) > 0.0
     has_valid_embeddings = has_valid_text_embedding or has_valid_image_embedding
+
+    # Enhanced logging: Show validation results
+    logger.info(f"✅ zpid={zpid}: Validation results:")
+    logger.info(f"   has_valid_text_embedding={has_valid_text_embedding}")
+    logger.info(f"   has_valid_image_embedding={has_valid_image_embedding}")
+    logger.info(f"   has_valid_embeddings={has_valid_embeddings}")
 
     if not has_valid_embeddings:
         logger.warning("Document zpid=%s has NO valid embeddings (text_valid=%s, image_valid=%s)",
@@ -358,10 +383,11 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
     # Determine final architecture style (vision takes priority over text)
     architecture_style = style_from_vision or style_from_text
 
-    # Build document - only include vectors if they're valid (non-zero)
-    # This prevents indexing errors with cosinesimil space_type
+    # Build document - include ALL fields from base (don't filter out None values)
+    # This is important because numeric fields like price=0 should be preserved
+    # Filtering happens at search time, not index time
     doc = {
-        **{k: v for k, v in base.items() if v not in (None, "")},
+        **base,  # Include all fields from base dict
         "llm_profile": llm_profile,
         "feature_tags": sorted(set(feature_tags)),
         "image_tags": sorted(img_tags),
@@ -435,6 +461,69 @@ def handler(event, context):
     else:
         payload = event if isinstance(event, dict) else {}
 
+    # SAFEGUARD 1: Invocation counter to prevent infinite loops
+    invocation_count = int(payload.get("_invocation_count", 0))
+    max_invocations = int(os.getenv("MAX_INVOCATIONS", "50"))
+
+    if invocation_count >= max_invocations:
+        error_msg = f"🛑 SAFETY LIMIT: Reached max invocations ({max_invocations}). Possible infinite loop detected."
+        logger.error(error_msg)
+        logger.error(f"   Payload: bucket={payload.get('bucket')}, key={payload.get('key')}, start={payload.get('start')}")
+        return {
+            "statusCode": 500,
+            "body": json.dumps({
+                "error": "Max invocations exceeded",
+                "invocation_count": invocation_count,
+                "max_allowed": max_invocations,
+                "message": "Safety limit reached. Check for infinite loop or increase MAX_INVOCATIONS env var."
+            })
+        }
+
+    logger.info(f"🔢 Invocation count: {invocation_count}/{max_invocations}")
+
+    # SAFEGUARD 5: Job idempotency check (prevent duplicate concurrent runs)
+    job_id = payload.get("_job_id")
+    if not job_id and "bucket" in payload and "key" in payload:
+        # Generate job ID from bucket/key for S3-based jobs
+        import hashlib
+        job_id = hashlib.md5(f"{payload['bucket']}/{payload['key']}".encode()).hexdigest()
+        payload["_job_id"] = job_id
+
+    if job_id and invocation_count == 0:  # Only check on first invocation
+        try:
+            response = dynamodb.get_item(
+                TableName=JOB_TRACKING_TABLE,
+                Key={"job_id": {"S": job_id}}
+            )
+            if "Item" in response:
+                status = response["Item"].get("status", {}).get("S", "")
+                if status == "running":
+                    logger.warning(f"⚠️  Job {job_id} is already running. Skipping duplicate invocation.")
+                    return {
+                        "statusCode": 409,
+                        "body": json.dumps({
+                            "error": "Job already running",
+                            "job_id": job_id,
+                            "message": "This job is already in progress. Wait for it to complete."
+                        })
+                    }
+
+            # Mark job as running
+            import time
+            dynamodb.put_item(
+                TableName=JOB_TRACKING_TABLE,
+                Item={
+                    "job_id": {"S": job_id},
+                    "status": {"S": "running"},
+                    "started_at": {"N": str(int(time.time()))},
+                    "bucket": {"S": payload.get("bucket", "")},
+                    "key": {"S": payload.get("key", "")}
+                }
+            )
+            logger.info(f"🔒 Job {job_id} marked as running")
+        except Exception as e:
+            logger.warning(f"Job tracking failed (non-fatal): {e}")
+
     # Handle special operations
     if payload.get("operation") == "delete_index":
         try:
@@ -460,6 +549,37 @@ def handler(event, context):
     start = int(payload.get("start", 0))
     limit = int(payload.get("limit", 500))
     end = min(start + limit, total)
+
+    # SAFEGUARD 2: Validate start is within bounds
+    if start >= total:
+        logger.warning(f"⚠️  start={start} is >= total={total}. No work to do.")
+        return {
+            "statusCode": 200,
+            "body": json.dumps({
+                "ok": True,
+                "message": "start >= total, nothing to process",
+                "start": start,
+                "total": total
+            })
+        }
+
+    # SAFEGUARD 3: Detect if start is not progressing (stuck loop)
+    if invocation_count > 0 and start == 0:
+        error_msg = f"🛑 LOOP DETECTED: Invocation {invocation_count} but start=0. Should be progressing."
+        logger.error(error_msg)
+        return {
+            "statusCode": 500,
+            "body": json.dumps({
+                "error": "Infinite loop detected",
+                "message": "start position not advancing across invocations"
+            })
+        }
+
+    # Enhanced logging: Track zpids in this batch
+    batch_zpids = [str(all_listings[i].get('zpid', 'unknown')) for i in range(start, min(end, total))]
+    logger.info(f"📦 Batch {start}-{end}: Processing {len(batch_zpids)} listings")
+    logger.info(f"   First 10 zpids: {batch_zpids[:10]}")
+    logger.info(f"   Source: bucket={payload.get('bucket', 'N/A')}, key={payload.get('key', 'N/A')}")
 
     SAFETY_MS = 30000  # stop ~30s early to allow self-invoke
     processed = 0
@@ -491,6 +611,14 @@ def handler(event, context):
     if actions:
         bulk_upsert(actions)
 
+    # Enhanced logging: Report what was actually processed
+    processed_zpids = [str(all_listings[i].get('zpid', 'unknown')) for i in range(start, start + processed)]
+    logger.info(f"✅ Batch complete: Processed {processed}/{len(batch_zpids)} listings")
+    logger.info(f"   Processed zpids: {processed_zpids[:10]}")
+    if processed < len(batch_zpids):
+        skipped = len(batch_zpids) - processed
+        logger.warning(f"⚠️  Skipped {skipped} listings (timeout or errors)")
+
     next_start = start + processed
     has_more = next_start < total
 
@@ -498,7 +626,8 @@ def handler(event, context):
     if has_more:
         next_payload = {
             "start": next_start,
-            "limit": limit
+            "limit": limit,
+            "_invocation_count": invocation_count + 1  # SAFEGUARD: Increment counter
         }
         # Pass through bucket/key if this is an S3-based job
         if "bucket" in payload and "key" in payload:
@@ -507,16 +636,52 @@ def handler(event, context):
         # Pass through listings array if this is a direct invocation (DON'T pass empty array)
         elif "listings" in payload:
             next_payload["listings"] = all_listings
+
+        # Pass through job_id for tracking
+        if job_id:
+            next_payload["_job_id"] = job_id
+
+        # SAFEGUARD 4: Validate next_start is actually progressing
+        if next_start <= start:
+            error_msg = f"🛑 SAFETY: next_start={next_start} not > start={start}. Refusing to self-invoke."
+            logger.error(error_msg)
+            return {
+                "statusCode": 500,
+                "body": json.dumps({
+                    "error": "Loop prevention",
+                    "message": "next_start must be greater than start",
+                    "start": start,
+                    "next_start": next_start
+                })
+            }
+
         try:
-            logger.info("Self-invoking %s start=%d limit=%d", context.invoked_function_arn, next_start, limit)
+            logger.info("Self-invoking %s start=%d limit=%d invocation=%d", context.invoked_function_arn, next_start, limit, invocation_count + 1)
             lambda_client.invoke(
                 FunctionName=context.invoked_function_arn,
                 InvocationType="Event",
                 Payload=json.dumps(next_payload).encode("utf-8"),
             )
-            logger.info("Self-invoked for next batch: start=%d limit=%d", next_start, limit)
+            logger.info("✅ Self-invoked for next batch: start=%d limit=%d invocation=%d/%d", next_start, limit, invocation_count + 1, max_invocations)
         except Exception as e:
             logger.exception("Self-invoke failed: %s", e)
+    else:
+        # Job complete - mark as finished in DynamoDB
+        if job_id:
+            try:
+                import time
+                dynamodb.put_item(
+                    TableName=JOB_TRACKING_TABLE,
+                    Item={
+                        "job_id": {"S": job_id},
+                        "status": {"S": "completed"},
+                        "completed_at": {"N": str(int(time.time()))},
+                        "total_processed": {"N": str(start + processed)}
+                    }
+                )
+                logger.info(f"✅ Job {job_id} marked as completed")
+            except Exception as e:
+                logger.warning(f"Job tracking update failed (non-fatal): {e}")
 
     return {
         "statusCode": 200,
@@ -526,6 +691,7 @@ def handler(event, context):
             "batch": {"start": start, "processed": processed, "limit": limit},
             "next_start": next_start if has_more else None,
             "total": total,
+            "job_id": job_id,
             "has_more": has_more
         })
     }
