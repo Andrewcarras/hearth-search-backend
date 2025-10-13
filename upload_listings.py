@@ -261,6 +261,7 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
     seen_hashes = set()
     style_from_vision = None
     best_exterior_image = None  # Store best exterior image for architecture classification
+    best_exterior_url = None  # Store URL of best exterior image for caching
     best_exterior_score = 0
 
     # Keywords that indicate exterior/facade views
@@ -321,6 +322,7 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
                     if exterior_score > best_exterior_score:
                         best_exterior_score = exterior_score
                         best_exterior_image = bb
+                        best_exterior_url = u  # Save URL for caching
                         logger.debug("Found better exterior image for zpid=%s (score: %d, labels: %s)",
                                    base.get("zpid"), exterior_score, labels[:5])
 
@@ -338,7 +340,7 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
     # Classify architecture style using vision LLM on best exterior image
     if best_exterior_image:
         try:
-            style_data = classify_architecture_style_vision(best_exterior_image)
+            style_data = classify_architecture_style_vision(best_exterior_image, image_url=best_exterior_url)
             style_from_vision = style_data.get("primary_style")
 
             # Add exterior color and materials to image tags if present

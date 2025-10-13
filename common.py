@@ -827,15 +827,17 @@ def extract_zillow_images(listing: Dict[str, Any], target_width: int = 576) -> L
     return urls if urls else []
 
 
-def classify_architecture_style_vision(image_bytes: bytes) -> Dict[str, Any]:
+def classify_architecture_style_vision(image_bytes: bytes, image_url: Optional[str] = None) -> Dict[str, Any]:
     """
     Use Claude 3 Sonnet with vision to classify architecture style and extract visual features.
+    Results are cached in DynamoDB by image URL to avoid re-analyzing same images.
 
     Analyzes image to identify architectural style, exterior features, colors, materials,
     and structural elements like balconies, porches, fences, etc.
 
     Args:
         image_bytes: Raw image data (JPEG/PNG)
+        image_url: Optional URL of the image for caching (if not provided, no caching)
 
     Returns:
         Dictionary with keys:
@@ -847,6 +849,21 @@ def classify_architecture_style_vision(image_bytes: bytes) -> Dict[str, Any]:
         - visual_features: List of structural features (balcony, porch, fence, deck, etc.)
         - confidence: Classification confidence (high/medium/low)
     """
+    # Check cache first if URL provided
+    if image_url:
+        try:
+            cached = dynamodb.get_item(
+                TableName=CACHE_TABLE,
+                Key={"image_url": {"S": image_url}}
+            )
+            if "Item" in cached and "architecture_style" in cached["Item"]:
+                style_json = cached["Item"]["architecture_style"]["S"]
+                style_data = json.loads(style_json)
+                logger.debug(f"💾 Cache hit for architecture classification: {image_url[:60]}")
+                return style_data
+        except Exception as e:
+            logger.warning(f"Cache read error for architecture style: {e}")
+
     try:
         b64_image = base64.b64encode(image_bytes).decode('utf-8')
 
@@ -936,6 +953,21 @@ Return STRICT JSON only:
             style_data["visual_features"] = [
                 feat.lower().replace(" ", "_") for feat in style_data.get("visual_features", [])
             ]
+
+        # Cache the result if URL provided
+        if image_url:
+            try:
+                dynamodb.put_item(
+                    TableName=CACHE_TABLE,
+                    Item={
+                        "image_url": {"S": image_url},
+                        "architecture_style": {"S": json.dumps(style_data)},
+                        "classified_at": {"N": str(int(time.time()))}
+                    }
+                )
+                logger.debug(f"💾 Cached architecture classification: {image_url[:60]}")
+            except Exception as e:
+                logger.warning(f"Cache write error for architecture style: {e}")
 
         return style_data
 
