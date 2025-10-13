@@ -15,12 +15,7 @@ Requirements:
     pip install boto3 opensearch-py requests requests-aws4auth
 """
 
-import json
-import sys
-import time
-from upload_listings import handler
-
-# Set environment variables (same as Lambda)
+# MUST set environment variables BEFORE importing (common.py needs them)
 import os
 os.environ['OS_HOST'] = 'search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com'
 os.environ['OS_INDEX'] = 'listings'
@@ -28,6 +23,11 @@ os.environ['MAX_INVOCATIONS'] = '999'  # No limit locally
 os.environ['MAX_IMAGES'] = '10'
 os.environ['EMBEDDING_IMAGE_WIDTH'] = '576'
 os.environ['LOG_LEVEL'] = 'INFO'
+
+import json
+import sys
+import time
+from upload_listings import handler
 
 # Mock Lambda context
 class MockContext:
