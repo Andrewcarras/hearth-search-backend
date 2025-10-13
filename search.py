@@ -442,6 +442,21 @@ def handler(event, context):
     Returns:
         Response dict with results array and metadata
     """
+    # CORS headers for all responses
+    cors_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS"
+    }
+
+    # Handle OPTIONS preflight request
+    if event.get("httpMethod") == "OPTIONS" or event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
+        return {
+            "statusCode": 200,
+            "headers": cors_headers,
+            "body": ""
+        }
+
     body = event.get("body") if isinstance(event, dict) else None
     if body and isinstance(body, str):
         try:
@@ -453,7 +468,7 @@ def handler(event, context):
 
     q = (payload.get("q") or "").strip()
     if not q:
-        return {"statusCode": 400, "body": json.dumps({"error": "missing 'q'"})}
+        return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": "missing 'q'"})}
     size = int(payload.get("size", 15))  # Reduced from 30 to stay under 6MB with full S3 data
 
     logger.info("Search query: '%s', size=%d", q, size)
@@ -683,4 +698,8 @@ def handler(event, context):
     if architecture_style:
         response_data["architecture_style"] = architecture_style
 
-    return {"statusCode": 200, "body": json.dumps(response_data)}
+    return {
+        "statusCode": 200,
+        "headers": cors_headers,
+        "body": json.dumps(response_data)
+    }

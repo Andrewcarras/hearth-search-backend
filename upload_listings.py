@@ -587,6 +587,7 @@ def handler(event, context):
     success_count = 0
     error_count = 0
     error_details = []
+    processed_zpids = []  # Track zpids that were successfully processed
     actions: List[Dict[str, Any]] = []
 
     for i in range(start, end):
@@ -611,6 +612,7 @@ def handler(event, context):
 
             processed += 1
             success_count += 1
+            processed_zpids.append(str(zpid))
 
             # Log every 10th listing for progress tracking
             if processed % 10 == 0:
@@ -652,47 +654,52 @@ def handler(event, context):
 
     # Self-invoke follow-up batch (async)
     if has_more:
-        next_payload = {
-            "start": next_start,
-            "limit": limit,
-            "_invocation_count": invocation_count + 1  # SAFEGUARD: Increment counter
-        }
-        # Pass through bucket/key if this is an S3-based job
-        if "bucket" in payload and "key" in payload:
-            next_payload["bucket"] = payload["bucket"]
-            next_payload["key"] = payload["key"]
-        # Pass through listings array if this is a direct invocation (DON'T pass empty array)
-        elif "listings" in payload:
-            next_payload["listings"] = all_listings
-
-        # Pass through job_id for tracking
-        if job_id:
-            next_payload["_job_id"] = job_id
-
-        # SAFEGUARD 4: Validate next_start is actually progressing
-        if next_start <= start:
-            error_msg = f"🛑 SAFETY: next_start={next_start} not > start={start}. Refusing to self-invoke."
-            logger.error(error_msg)
-            return {
-                "statusCode": 500,
-                "body": json.dumps({
-                    "error": "Loop prevention",
-                    "message": "next_start must be greater than start",
-                    "start": start,
-                    "next_start": next_start
-                })
+        # Check if we've reached max invocations BEFORE attempting to self-invoke
+        if invocation_count + 1 >= max_invocations:
+            logger.warning(f"⏸️  Stopping at invocation {invocation_count}/{max_invocations}. More data available but max invocations reached.")
+            logger.info(f"   Next batch would start at: {next_start}")
+        else:
+            next_payload = {
+                "start": next_start,
+                "limit": limit,
+                "_invocation_count": invocation_count + 1  # SAFEGUARD: Increment counter
             }
+            # Pass through bucket/key if this is an S3-based job
+            if "bucket" in payload and "key" in payload:
+                next_payload["bucket"] = payload["bucket"]
+                next_payload["key"] = payload["key"]
+            # Pass through listings array if this is a direct invocation (DON'T pass empty array)
+            elif "listings" in payload:
+                next_payload["listings"] = all_listings
 
-        try:
-            logger.info("Self-invoking %s start=%d limit=%d invocation=%d", context.invoked_function_arn, next_start, limit, invocation_count + 1)
-            lambda_client.invoke(
-                FunctionName=context.invoked_function_arn,
-                InvocationType="Event",
-                Payload=json.dumps(next_payload).encode("utf-8"),
-            )
-            logger.info("✅ Self-invoked for next batch: start=%d limit=%d invocation=%d/%d", next_start, limit, invocation_count + 1, max_invocations)
-        except Exception as e:
-            logger.exception("Self-invoke failed: %s", e)
+            # Pass through job_id for tracking
+            if job_id:
+                next_payload["_job_id"] = job_id
+
+            # SAFEGUARD 4: Validate next_start is actually progressing
+            if next_start <= start:
+                error_msg = f"🛑 SAFETY: next_start={next_start} not > start={start}. Refusing to self-invoke."
+                logger.error(error_msg)
+                return {
+                    "statusCode": 500,
+                    "body": json.dumps({
+                        "error": "Loop prevention",
+                        "message": "next_start must be greater than start",
+                        "start": start,
+                        "next_start": next_start
+                    })
+                }
+
+            try:
+                logger.info("Self-invoking %s start=%d limit=%d invocation=%d", context.invoked_function_arn, next_start, limit, invocation_count + 1)
+                lambda_client.invoke(
+                    FunctionName=context.invoked_function_arn,
+                    InvocationType="Event",
+                    Payload=json.dumps(next_payload).encode("utf-8"),
+                )
+                logger.info("✅ Self-invoked for next batch: start=%d limit=%d invocation=%d/%d", next_start, limit, invocation_count + 1, max_invocations)
+            except Exception as e:
+                logger.exception("Self-invoke failed: %s", e)
     else:
         # Job complete - mark as finished in DynamoDB
         if job_id:
@@ -720,6 +727,7 @@ def handler(event, context):
             "next_start": next_start if has_more else None,
             "total": total,
             "job_id": job_id,
-            "has_more": has_more
+            "has_more": has_more,
+            "zpid": processed_zpids[0] if processed_zpids else "unknown"
         })
     }
