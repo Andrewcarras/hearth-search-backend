@@ -64,13 +64,15 @@ def index_all_listings():
         print(f"\n📦 Batch {batch_num}/{total_batches} (listings {start_pos}-{start_pos + batch_size})")
         print("-" * 60)
 
-        # Create payload
+        # Create payload with unique job ID (avoid DynamoDB conflicts)
+        import uuid
         payload = {
             "bucket": "demo-hearth-data",
             "key": "murray_listings.json",
             "start": start_pos,
             "limit": batch_size,
-            "_invocation_count": 0  # Reset for each batch
+            "_invocation_count": 0,  # Reset for each batch
+            "_job_id": str(uuid.uuid4())  # Unique ID per batch to skip DynamoDB job check
         }
 
         # Call handler (same as Lambda)
@@ -113,7 +115,8 @@ def index_all_listings():
     print("=" * 60)
     print(f"Total indexed: {total_processed} listings")
     print(f"Time taken: {elapsed // 60}m {elapsed % 60}s")
-    print(f"Average: {elapsed / total_processed:.1f}s per listing")
+    if total_processed > 0:
+        print(f"Average: {elapsed / total_processed:.1f}s per listing")
     print()
     print("🔍 Test your search:")
     print("   curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search \\")
