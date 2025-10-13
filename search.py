@@ -118,9 +118,11 @@ def enrich_with_nearby_places(listing: Dict[str, Any]) -> Dict[str, Any]:
     if not GOOGLE_PLACES_API_KEY:
         return listing  # API key not configured
 
-    # Extract coordinates from Zillow JSON
-    latitude = listing.get("latitude")
-    longitude = listing.get("longitude")
+    # Extract coordinates from listing (handle both formats)
+    # OpenSearch stores as geo.lat/geo.lon, raw Zillow JSON uses latitude/longitude
+    geo = listing.get("geo", {})
+    latitude = listing.get("latitude") or geo.get("lat")
+    longitude = listing.get("longitude") or geo.get("lon")
 
     if not latitude or not longitude:
         return listing  # No coordinates available
