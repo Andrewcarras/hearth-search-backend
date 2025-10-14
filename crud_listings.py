@@ -272,6 +272,7 @@ def add_listing_handler(event, context):
                     image_urls = [image_urls]
 
                 image_vecs = []
+                image_vector_metadata = []  # For multi-vector schema
                 img_tags = set()
 
                 # Process up to 10 images
@@ -299,13 +300,30 @@ def add_listing_handler(event, context):
 
                         processing_cost += 0.00025
 
+                        # Store metadata for multi-vector schema
+                        if img_vec and analysis:
+                            image_vector_metadata.append({
+                                "image_url": url,
+                                "image_type": analysis.get("image_type", "unknown"),
+                                "vector": img_vec
+                            })
+
                     except Exception as e:
                         logger.warning(f"Failed to process image {url}: {e}")
 
-                # Average image vectors
-                if image_vecs and vec_text:
-                    vec_image = vec_mean(image_vecs, target_dim=len(vec_text))
-                    doc["vector_image"] = vec_image
+                # Detect schema and store vectors appropriately
+                is_multi_vector = target_index.endswith("-v2")
+
+                if is_multi_vector:
+                    # Multi-vector schema: store all image vectors separately
+                    if image_vector_metadata:
+                        doc["image_vectors"] = image_vector_metadata
+                        logger.info(f"Stored {len(image_vector_metadata)} image vectors (multi-vector schema)")
+                else:
+                    # Legacy schema: average image vectors
+                    if image_vecs and vec_text:
+                        vec_image = vec_mean(image_vecs, target_dim=len(vec_text))
+                        doc["vector_image"] = vec_image
 
                 # Add image tags
                 if img_tags:
