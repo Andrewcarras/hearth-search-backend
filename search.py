@@ -563,6 +563,14 @@ def handler(event, context):
     logger.info("Filter clauses: %s", json.dumps(filter_clauses))
     topK = max(100, size * 3)
 
+    # Convert must_tags to both space and underscore formats for compatibility
+    # Image tags are stored as "blue exterior" but query parser extracts "blue_exterior"
+    # This ensures we match both formats until we normalize everything
+    expanded_must_tags = set()
+    for tag in must_tags:
+        expanded_must_tags.add(tag)  # Original format (e.g., "blue_exterior")
+        expanded_must_tags.add(tag.replace("_", " "))  # Space format (e.g., "blue exterior")
+
     # 1) BM25 over text fields (tags as soft boosts via terms)
     bm25_query = {
         "query": {
@@ -582,8 +590,8 @@ def handler(event, context):
                             "type": "best_fields"
                         }
                     },
-                    *([{"terms": {"feature_tags": list(must_tags)}}] if must_tags else []),
-                    *([{"terms": {"image_tags": list(must_tags)}}] if must_tags else []),
+                    *([{"terms": {"feature_tags": list(expanded_must_tags)}}] if expanded_must_tags else []),
+                    *([{"terms": {"image_tags": list(expanded_must_tags)}}] if expanded_must_tags else []),
                 ],
                 "minimum_should_match": 1
             }
@@ -656,13 +664,19 @@ def handler(event, context):
     fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, top=size * 3)
     logger.info("RRF fusion produced %d results", len(fused))
 
+    # Check if client wants full Zillow data from S3
+    include_full_data = payload.get("include_full_data", False)
+    include_nearby = payload.get("include_nearby_places", True)
+
     # Final soft boost if all must-have tags are present
+    # Check both original format and space-converted format for compatibility
     final = []
     for h in fused:
         src = h.get("_source", {}) or {}
         tags = set((src.get("feature_tags") or []) + (src.get("image_tags") or []))
-        satisfied = must_tags.issubset(tags) if must_tags else True
-        boost = 1.0 + (0.5 if satisfied and must_tags else 0.0)
+        # Check if expanded tags (both formats) are satisfied
+        satisfied = expanded_must_tags.issubset(tags) if expanded_must_tags else True
+        boost = 1.0 + (0.5 if satisfied and expanded_must_tags else 0.0)
 
         zpid = h["_id"]
 
@@ -675,12 +689,26 @@ def handler(event, context):
         }
 
         # Add all OpenSearch fields (except vectors)
+        # This automatically includes ANY custom fields added via CRUD API
         for k, v in src.items():
             if k not in ("vector_text", "vector_image"):
                 result[k] = v
 
+        # Optionally merge full Zillow listing data from S3
+        # This adds 166+ original Zillow fields (responsivePhotos, zestimate, etc.)
+        if include_full_data:
+            try:
+                s3_listing = _fetch_listing_from_s3(zpid)
+                if s3_listing:
+                    result["original_listing"] = s3_listing
+                    logger.debug(f"Merged S3 data for zpid={zpid}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch S3 data for zpid={zpid}: {e}")
+                # Continue without S3 data - don't fail the whole request
+
         # Enrich with nearby places on-demand (cached in DynamoDB)
-        result = enrich_with_nearby_places(result)
+        if include_nearby:
+            result = enrich_with_nearby_places(result)
 
         final.append((h.get("_score", 0.0) * boost, result))
 
@@ -705,3 +733,125 @@ def handler(event, context):
         "headers": cors_headers,
         "body": json.dumps(response_data)
     }
+
+
+def get_listing_handler(event, context):
+    """
+    Get a single listing by zpid.
+
+    Supports GET /listings/{zpid}?include_full_data=true
+
+    Returns complete listing with all OpenSearch fields, optionally merged with
+    full Zillow data from S3, and enriched with nearby places.
+
+    Example:
+        GET /listings/12345?include_full_data=true&include_nearby_places=true
+    """
+    logger.info("get_listing_handler invoked")
+
+    # Extract zpid from path parameters
+    zpid = event.get("pathParameters", {}).get("zpid")
+    if not zpid:
+        return {
+            "statusCode": 400,
+            "headers": cors_headers,
+            "body": json.dumps({"error": "Missing zpid in path"})
+        }
+
+    # Extract query parameters
+    query_params = event.get("queryStringParameters") or {}
+    include_full_data = query_params.get("include_full_data", "false").lower() == "true"
+    include_nearby = query_params.get("include_nearby_places", "true").lower() == "true"
+
+    logger.info(f"Fetching listing zpid={zpid}, include_full_data={include_full_data}, include_nearby={include_nearby}")
+
+    try:
+        # Fetch from OpenSearch
+        response = os_client.get(index=OS_INDEX, id=str(zpid))
+
+        if not response.get("found"):
+            return {
+                "statusCode": 404,
+                "headers": cors_headers,
+                "body": json.dumps({"error": f"Listing {zpid} not found"})
+            }
+
+        src = response["_source"]
+
+        # Build result with all OpenSearch fields
+        result = {
+            "zpid": zpid,
+            "id": zpid
+        }
+
+        # Add all fields except vectors
+        for k, v in src.items():
+            if k not in ("vector_text", "vector_image"):
+                result[k] = v
+
+        # Optionally merge full Zillow data from S3
+        if include_full_data:
+            try:
+                s3_listing = _fetch_listing_from_s3(zpid)
+                if s3_listing:
+                    result["original_listing"] = s3_listing
+                    logger.info(f"Merged S3 data for zpid={zpid}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch S3 data for zpid={zpid}: {e}")
+
+        # Optionally enrich with nearby places
+        if include_nearby:
+            result = enrich_with_nearby_places(result)
+
+        return {
+            "statusCode": 200,
+            "headers": cors_headers,
+            "body": json.dumps({
+                "ok": True,
+                "listing": result
+            })
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching listing {zpid}: {e}", exc_info=True)
+        return {
+            "statusCode": 500,
+            "headers": cors_headers,
+            "body": json.dumps({"error": str(e)})
+        }
+
+
+def lambda_handler(event, context):
+    """
+    Router function that dispatches to correct handler based on HTTP method and path.
+
+    This allows a single Lambda to handle multiple endpoints:
+    - POST /search → handler() for search
+    - GET /listings/{zpid} → get_listing_handler() for single listing retrieval
+
+    API Gateway uses Lambda Proxy integration, so all request details are in event.
+    """
+    path = event.get('path', '')
+    method = event.get('httpMethod', '')
+
+    logger.info(f"Router: {method} {path}")
+
+    # POST /search → Search listings
+    if method == 'POST' and path == '/search':
+        return handler(event, context)
+
+    # GET /listings/{zpid} → Get single listing
+    elif method == 'GET' and '/listings/' in path:
+        return get_listing_handler(event, context)
+
+    # Unknown route
+    else:
+        return {
+            "statusCode": 404,
+            "headers": cors_headers,
+            "body": json.dumps({
+                "error": "Not found",
+                "path": path,
+                "method": method
+            })
+        }

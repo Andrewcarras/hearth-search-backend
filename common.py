@@ -313,12 +313,20 @@ def vec_mean(vectors: List[List[float]], target_dim: int) -> List[float]:
 
 
 def _get_cached_labels(image_url: str) -> Optional[List[str]]:
-    """Check DynamoDB cache for previously analyzed image labels."""
+    """
+    DEPRECATED: Legacy function for backward compatibility.
+    Use detect_labels() which returns comprehensive analysis.
+    """
     try:
         response = dynamodb.get_item(
             TableName=CACHE_TABLE,
             Key={"image_url": {"S": image_url}}
         )
+        # Try new comprehensive format first
+        if "Item" in response and "comprehensive_analysis" in response["Item"]:
+            analysis = json.loads(response["Item"]["comprehensive_analysis"]["S"])
+            return analysis.get("features", [])
+        # Fallback to old format
         if "Item" in response and "labels" in response["Item"]:
             return json.loads(response["Item"]["labels"]["S"])
     except Exception as e:
@@ -327,7 +335,10 @@ def _get_cached_labels(image_url: str) -> Optional[List[str]]:
 
 
 def _cache_labels(image_url: str, labels: List[str]):
-    """Store analyzed image labels in DynamoDB cache."""
+    """
+    DEPRECATED: Legacy function for backward compatibility.
+    Use detect_labels() which caches comprehensive analysis.
+    """
     try:
         dynamodb.put_item(
             TableName=CACHE_TABLE,
@@ -341,30 +352,54 @@ def _cache_labels(image_url: str, labels: List[str]):
         logger.warning(f"Cache write failed for {image_url}: {e}")
 
 
-def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 15) -> List[str]:
+def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 100) -> Dict[str, Any]:
     """
-    Detect objects and features in an image using Claude 3 Haiku Vision (via Bedrock).
+    UNIFIED comprehensive vision analysis using Claude 3 Haiku.
 
-    This replaces AWS Rekognition with a 75% cheaper alternative that provides
-    better context understanding. Results are cached in DynamoDB to prevent
-    re-analyzing the same images.
+    Analyzes a single property image and extracts EVERYTHING in one pass:
+    - All visible features and amenities
+    - Architecture style (if exterior)
+    - Exterior colors and materials
+    - Room type identification
+    - Whether image is interior or exterior
 
-    Cost: ~$0.00025 per image (vs $0.001 for Rekognition)
+    This replaces both the old detect_labels AND classify_architecture_style_vision
+    functions, eliminating redundant LLM calls.
+
+    Cost: ~$0.00025 per image (Haiku)
+    Savings: Eliminates $0.0015 Sonnet call per listing
 
     Args:
         img_bytes: Raw image bytes
         image_url: URL of the image (used for caching)
-        max_labels: Maximum number of labels to return
+        max_labels: Maximum number of features to return (default 100)
 
     Returns:
-        List of lowercase label strings (e.g., ["pool", "granite countertops", "hardwood floors"])
+        Dictionary with:
+        {
+            "features": ["pool", "granite countertops", ...],
+            "image_type": "exterior" or "interior",
+            "architecture_style": "modern" or null,
+            "exterior_color": "blue" or null,
+            "materials": ["brick", "stone"],
+            "visual_features": ["balcony", "porch"],
+            "confidence": "high" or "medium" or "low"
+        }
     """
     # Check cache first
     if image_url:
-        cached = _get_cached_labels(image_url)
-        if cached is not None:
-            logger.debug(f"✓ Cache hit for {image_url}")
-            return cached
+        try:
+            cached = dynamodb.get_item(
+                TableName=CACHE_TABLE,
+                Key={"image_url": {"S": image_url}}
+            )
+            if "Item" in cached and "comprehensive_analysis" in cached["Item"]:
+                analysis_json = cached["Item"]["comprehensive_analysis"]["S"]
+                analysis = json.loads(analysis_json)
+                logger.debug(f"💾 Cache hit for comprehensive analysis: {image_url[:60]}")
+                return analysis
+        except Exception as e:
+            logger.warning(f"Cache read failed for {image_url}: {e}")
 
     # Analyze with Claude Haiku
     try:
@@ -372,7 +407,8 @@ def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 15) -
 
         payload = {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 300,
+            "max_tokens": 800,  # Increased for comprehensive analysis
+            "temperature": 0,   # Consistent results for caching
             "messages": [
                 {
                     "role": "user",
@@ -387,35 +423,63 @@ def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 15) -
                         },
                         {
                             "type": "text",
-                            "text": f"""Analyze this property image and list up to {max_labels} visible features. Focus on details buyers search for.
+                            "text": """Analyze this property photo comprehensively. Extract ALL valuable information for real estate search.
 
-EXTERIOR PHOTOS - Always include:
-• Primary exterior color: blue exterior, white exterior, gray exterior, brown exterior, beige exterior, red exterior, tan exterior, yellow exterior
-• Materials: brick, stone, vinyl siding, wood siding, stucco
-• Garage: attached garage, detached garage, 2-car garage, 3-car garage, tandem garage
-• Outdoor spaces: covered patio, deck, pergola, fenced backyard, landscaped yard, mature trees
-• Special features: front porch, balcony, dormers, bay windows, large windows, skylights
+STEP 1: Determine if this is EXTERIOR or INTERIOR
+- Exterior: Shows outside of building, facade, yard, architectural features
+- Interior: Shows rooms, furnishings, indoor spaces
 
-INTERIOR PHOTOS - Look for:
-• Flooring: hardwood floors, tile floors, carpet, laminate, luxury vinyl
-• Kitchen: granite countertops, marble countertops, quartz countertops, stainless steel appliances, kitchen island, breakfast bar, double oven, pantry, updated kitchen, modern kitchen
-• Bathrooms: soaking tub, walk-in shower, dual sinks, separate tub and shower, tile shower
-• Ceilings: vaulted ceilings, cathedral ceilings, coffered ceiling, exposed beams, tray ceiling
-• Windows/Light: large windows, floor to ceiling windows, lots of natural light, bright and airy, recessed lighting
-• Closets/Storage: walk-in closet, built-in shelving
-• Fireplace: stone fireplace, brick fireplace, gas fireplace, wood burning fireplace
-• Architectural details: crown molding, wainscoting, archways, open floor plan
-• Condition: updated, modern finishes, recently renovated, move-in ready
+STEP 2: Extract ALL visible features (be exhaustive and specific):
 
-OUTDOOR AMENITIES:
-• Pool: in-ground pool, above-ground pool, pool with spa
-• Entertainment: outdoor kitchen, fire pit, hot tub, built-in BBQ
-• Views: mountain view, city view, wooded lot, water view
-• Energy: solar panels, ceiling fans
+IF EXTERIOR:
+- Primary exterior color (white, blue, gray, beige, brown, red, tan, yellow, green, black)
+- Exterior materials (brick, stone, vinyl siding, wood siding, stucco, metal siding, fiber cement)
+- Architecture style (modern, contemporary, craftsman, victorian, colonial, ranch, mediterranean, tudor, cape cod, farmhouse, mid-century modern, traditional, transitional, bungalow, cottage, spanish, etc.)
+- Garage details (attached garage, detached garage, 2-car garage, 3-car garage, carport, tandem garage)
+- Roof type (gabled roof, hipped roof, flat roof, mansard roof, gambrel roof)
+- Structural features (front porch, covered porch, balcony, deck, patio, dormers, bay windows, picture windows, columns, shutters, chimney, awning)
+- Outdoor features (fenced yard, wood fence, white fence, chain link fence, mature trees, landscaped yard, driveway, walkway, garden, lawn)
+- Views (mountain view, city view, water view, wooded lot, golf course view)
 
-PRIORITIZE features buyers commonly search for. Be specific (e.g., "3-car garage" not just "garage", "vaulted ceilings" not just "ceiling").
+IF INTERIOR:
+- Room type (kitchen, master bedroom, living room, dining room, bathroom, bedroom, home office, laundry room, basement, bonus room, etc.)
+- Flooring (hardwood floors, tile floors, carpet, laminate, luxury vinyl plank, porcelain tile, marble floors, engineered hardwood)
+- Kitchen details (granite countertops, marble countertops, quartz countertops, butcher block countertops, stainless steel appliances, white cabinets, wood cabinets, gray cabinets, kitchen island, breakfast bar, double oven, gas range, electric range, pantry, farmhouse sink, subway tile backsplash, pendant lights)
+- Bathroom features (soaking tub, walk-in shower, dual sinks, double vanity, frameless glass shower, tile shower, separate tub and shower, vessel sink, rain shower head, heated floors)
+- Ceilings (vaulted ceilings, cathedral ceilings, coffered ceiling, tray ceiling, exposed beams, wood beams, high ceilings, popcorn ceiling)
+- Windows/Lighting (large windows, floor to ceiling windows, bay windows, lots of natural light, bright and airy, recessed lighting, pendant lights, chandelier, track lighting, skylights)
+- Storage (walk-in closet, built-in shelving, linen closet, custom cabinetry, built-in storage)
+- Fireplace (stone fireplace, brick fireplace, gas fireplace, wood burning fireplace, electric fireplace, modern fireplace)
+- Architectural details (crown molding, wainscoting, archways, open floor plan, open concept, shiplap, exposed brick)
+- Appliances (stainless steel appliances, black appliances, white appliances, built-in microwave, wine fridge, dishwasher)
+- Condition/Style (updated kitchen, renovated bathroom, modern finishes, contemporary style, traditional style, farmhouse style, industrial style, move-in ready, newly renovated)
 
-Return ONLY a comma-separated list of features, nothing else."""
+OUTDOOR AMENITIES (if visible):
+- Pool (in-ground pool, above-ground pool, pool with spa, heated pool, saltwater pool, lap pool, infinity pool)
+- Entertainment (outdoor kitchen, fire pit, hot tub, built-in BBQ, pizza oven, outdoor fireplace, pergola, gazebo)
+- Energy features (solar panels, ceiling fans)
+
+GUIDELINES:
+- Be EXHAUSTIVE - include every visible feature, color, material, detail
+- Be SPECIFIC: "3-car garage" not "garage", "vaulted ceilings" not "ceiling", "quartz countertops" not "countertops"
+- Include COLORS: "white cabinets", "gray walls", "black appliances", "blue exterior"
+- Note CONDITION: "updated", "renovated", "modern", "newly installed"
+- Include MATERIALS: specific types like "porcelain tile", "engineered hardwood", "fiber cement siding"
+- Identify STYLES: architectural and design styles
+- For EXTERIORS: always identify architecture style if possible
+
+Return STRICT JSON format:
+{
+  "image_type": "exterior" or "interior",
+  "features": ["feature1", "feature2", ...],
+  "architecture_style": "modern" (only if exterior, else null),
+  "exterior_color": "blue" (only if exterior, else null),
+  "materials": ["brick", "stone"],
+  "visual_features": ["balcony", "porch", "deck"],
+  "confidence": "high" or "medium" or "low"
+}
+
+IMPORTANT: Be thorough. A good analysis should have 30-50+ features for a detailed photo."""
                         }
                     ]
                 }
@@ -430,19 +494,75 @@ Return ONLY a comma-separated list of features, nothing else."""
         result = json.loads(response["body"].read())
         text = result["content"][0]["text"].strip()
 
-        # Parse comma-separated labels
-        labels = [label.strip().lower() for label in text.split(",") if label.strip()]
-        labels = labels[:max_labels]
+        # Parse JSON response
+        try:
+            analysis = json.loads(text)
 
-        # Cache the result
+            # Ensure all required fields exist with defaults
+            analysis.setdefault("features", [])
+            analysis.setdefault("image_type", "unknown")
+            analysis.setdefault("architecture_style", None)
+            analysis.setdefault("exterior_color", None)
+            analysis.setdefault("materials", [])
+            analysis.setdefault("visual_features", [])
+            analysis.setdefault("confidence", "medium")
+
+            # Normalize all strings to lowercase
+            analysis["features"] = [f.lower().strip() for f in analysis["features"] if f]
+            analysis["materials"] = [m.lower().strip() for m in analysis["materials"] if m]
+            analysis["visual_features"] = [v.lower().strip() for v in analysis["visual_features"] if v]
+            if analysis["architecture_style"]:
+                analysis["architecture_style"] = analysis["architecture_style"].lower().replace(" ", "_")
+            if analysis["exterior_color"]:
+                analysis["exterior_color"] = analysis["exterior_color"].lower()
+
+            # Limit features if needed
+            if len(analysis["features"]) > max_labels:
+                analysis["features"] = analysis["features"][:max_labels]
+
+            logger.debug(f"Comprehensive analysis: {len(analysis['features'])} features, type={analysis['image_type']}, style={analysis['architecture_style']}")
+
+        except json.JSONDecodeError as e:
+            # Fallback: create minimal structure
+            logger.warning(f"JSON parse failed for {image_url}: {e}, falling back to basic parsing")
+            analysis = {
+                "features": [label.strip().lower() for label in text.split(",") if label.strip()][:max_labels],
+                "image_type": "unknown",
+                "architecture_style": None,
+                "exterior_color": None,
+                "materials": [],
+                "visual_features": [],
+                "confidence": "low"
+            }
+
+        # Cache the comprehensive analysis
         if image_url:
-            _cache_labels(image_url, labels)
+            try:
+                dynamodb.put_item(
+                    TableName=CACHE_TABLE,
+                    Item={
+                        "image_url": {"S": image_url},
+                        "comprehensive_analysis": {"S": json.dumps(analysis)},
+                        "analyzed_at": {"N": str(int(time.time()))}
+                    }
+                )
+                logger.debug(f"💾 Cached comprehensive analysis: {image_url[:60]}")
+            except Exception as e:
+                logger.warning(f"Cache write failed: {e}")
 
-        return labels
+        return analysis
 
     except Exception as e:
-        logger.warning(f"Vision analysis failed for {image_url}: {e}")
-        return []
+        logger.warning(f"Comprehensive vision analysis failed for {image_url}: {e}")
+        return {
+            "features": [],
+            "image_type": "unknown",
+            "architecture_style": None,
+            "exterior_color": None,
+            "materials": [],
+            "visual_features": [],
+            "confidence": "low"
+        }
 
 # ===============================================
 # OPENSEARCH INDEX MANAGEMENT
