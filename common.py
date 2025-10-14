@@ -962,7 +962,15 @@ From the user's search query, extract:
    Keywords: "near", "close to", "by", "next to", "within X miles/km of"
    If no proximity mentioned, return null.
 
-Return strict JSON with keys: must_have, nice_to_have, hard_filters, architecture_style, proximity
+6. query_type: Classify query to optimize search scoring. ONE of:
+   - "color": Query emphasizes colors (white, gray, blue, beige, brown exterior/interior)
+   - "material": Query about materials (brick, stone, wood, granite, marble, hardwood, vinyl)
+   - "visual_style": Query about architecture/design style, views, or visual characteristics
+   - "specific_feature": Query about specific amenities (pool, garage, fireplace, specific room types)
+   - "room_type": Query about specific rooms (kitchen, bathroom, master bedroom)
+   - "general": Vague or general query without specific features
+
+Return strict JSON with keys: must_have, nice_to_have, hard_filters, architecture_style, proximity, query_type
 
 Query: "{query_text}"
 """
@@ -986,8 +994,9 @@ Query: "{query_text}"
         if arch_style:
             arch_style = str(arch_style).lower().replace(" ", "_")
 
-        # Get proximity
+        # Get proximity and query type
         proximity = j.get("proximity")
+        query_type = j.get("query_type", "general")
 
         return {
             "must_have": [t.strip().lower() for t in j.get("must_have", [])],
@@ -995,6 +1004,7 @@ Query: "{query_text}"
             "hard_filters": j.get("hard_filters", {}),
             "architecture_style": arch_style,
             "proximity": proximity,
+            "query_type": query_type,
         }
 
     except Exception as e:
@@ -1054,6 +1064,7 @@ Query: "{query_text}"
             "hard_filters": {},
             "architecture_style": arch_style,
             "proximity": proximity,
+            "query_type": "general",  # Fallback defaults to general
         }
 
 
