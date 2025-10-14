@@ -625,7 +625,17 @@ def create_index_if_needed():
         }
         logger.info("Creating legacy index with SINGLE-VECTOR image schema")
 
-    os_client.indices.create(index=OS_INDEX, body=body)
+    # Create index with error handling for race conditions in parallel processing
+    try:
+        os_client.indices.create(index=OS_INDEX, body=body)
+        logger.info(f"✅ Successfully created index {OS_INDEX}")
+    except Exception as e:
+        # If index already exists (race condition), that's fine - another thread created it
+        if "resource_already_exists_exception" in str(e):
+            logger.info(f"Index {OS_INDEX} already exists (created by parallel thread)")
+        else:
+            # Re-raise any other errors
+            raise
 
 
 def upsert_listing(doc_id: str, body: Dict[str, Any]):
