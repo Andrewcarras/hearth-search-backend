@@ -409,6 +409,7 @@
         <div class="header-content">
             <h1>🏠 Hearth Search</h1>
             <p>AI-powered natural language property search</p>
+            <a href="/admin.html" style="position:absolute;top:20px;right:20px;background:white;color:#006aff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;">🔧 Admin Panel</a>
         </div>
     </div>
 
@@ -680,12 +681,17 @@
             }
             document.getElementById('modalFeatures').innerHTML = featuresHtml;
 
-            // Zillow link
+            // Zillow link and action buttons
             const zillowUrl = currentProperty.hdpUrl ?
                 'https://www.zillow.com' + currentProperty.hdpUrl :
-                'https://www.zillow.com/homedetails/' + currentProperty.zpid + '_zpid/';
+                'https://www.zillow.com/homedetails/' + currentProperty.zpid + '_zipid/';
             document.getElementById('modalActions').innerHTML =
-                `<a href="${zillowUrl}" target="_blank" class="zillow-btn">View Full Details on Zillow →</a>`;
+                `<div style="display:flex;gap:10px;margin-bottom:20px;">
+                    <button onclick="deleteListing('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#dc3545;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">🗑️ Delete Listing</button>
+                    <button onclick="editListing('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#ffc107;color:#000;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✏️ Edit Listing</button>
+                    <button onclick="markAsSold('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#28a745;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✓ Mark as Sold</button>
+                </div>
+                <a href="${zillowUrl}" target="_blank" class="zillow-btn">View Full Details on Zillow →</a>`;
 
             modal.style.display = 'block';
             document.body.style.overflow = 'hidden';
@@ -744,6 +750,82 @@
         document.getElementById('searchQuery').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') performSearch();
         });
+
+        // Action handlers
+        async function deleteListing(zpid) {
+            if (!confirm(`Are you sure you want to PERMANENTLY delete listing ${zpid}?`)) return;
+
+            try {
+                const response = await fetch(`https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/${zpid}?soft=false&index=${selectedIndex}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Listing deleted successfully!');
+                    closeModal();
+                    performSearch(); // Refresh results
+                } else {
+                    alert('Error deleting listing: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function editListing(zpid) {
+            const newPrice = prompt('Enter new price (leave blank to skip):');
+            const newStatus = prompt('Enter new status (active/pending/sold, leave blank to skip):');
+
+            const updates = {};
+            if (newPrice) updates.price = parseInt(newPrice);
+            if (newStatus) updates.status = newStatus;
+
+            if (Object.keys(updates).length === 0) {
+                alert('No changes made');
+                return;
+            }
+
+            fetch(`https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/${zpid}?index=${selectedIndex}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ updates })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error updating listing: ' + data.error);
+                } else {
+                    alert('Listing updated successfully!');
+                    closeModal();
+                    performSearch(); // Refresh results
+                }
+            })
+            .catch(error => alert('Error: ' + error.message));
+        }
+
+        async function markAsSold(zpid) {
+            if (!confirm(`Mark listing ${zpid} as SOLD?`)) return;
+
+            try {
+                const response = await fetch(`https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/${zpid}?index=${selectedIndex}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates: { status: 'sold' } })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Listing marked as sold!');
+                    closeModal();
+                    performSearch(); // Refresh results
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
     </script>
 </body>
 </html>
