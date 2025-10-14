@@ -15,7 +15,7 @@ Complete reference for all Python files in the project with detailed function do
 
 ## common.py
 
-**Purpose:** Shared utility functions for embeddings, caching, OpenSearch, and AI-based feature extraction
+**Purpose:** Shared utility functions for embeddings, caching, OpenSearch, and query parsing
 
 **Dependencies:**
 - `boto3` - AWS SDK
@@ -32,7 +32,7 @@ Complete reference for all Python files in the project with detailed function do
 | `OS_INDEX` | `listings` | OpenSearch index name |
 | `TEXT_EMBED_MODEL` | `amazon.titan-embed-text-v2:0` | Bedrock text embedding model |
 | `IMAGE_EMBED_MODEL` | `amazon.titan-embed-image-v1` | Bedrock image embedding model |
-| `LLM_MODEL_ID` | `anthropic.claude-3-haiku-20240307-v1:0` | Claude model for feature extraction |
+| `LLM_MODEL_ID` | `anthropic.claude-3-haiku-20240307-v1:0` | Claude model for query parsing and vision analysis |
 | `TEXT_DIM` | `1024` | Text embedding dimension |
 | `IMAGE_DIM` | `1024` | Image embedding dimension |
 | `MAX_IMAGES` | `6` | Max images to process per listing |
@@ -320,7 +320,7 @@ Create OpenSearch index with proper mappings if it doesn't exist.
    - Create index: `os_client.indices.create(index=OS_INDEX, body=...)`
 
 **Mappings:**
-- **Text fields:** `description`, `llm_profile` (BM25 search)
+- **Text fields:** `description` (BM25 search), `llm_profile` (reserved, unused)
 - **Keyword fields:** `zpid`, `city`, `state`, `feature_tags`, `image_tags`
 - **Numeric fields:** `price`, `bedrooms`, `bathrooms`, `livingArea`
 - **Geo field:** `geo` (lat/lon for radius search)
@@ -477,41 +477,6 @@ constraints = extract_query_constraints(query)
 - `max_drive_time_min` - Drive time in minutes
 
 **Fallback:** If LLM fails, uses simple keyword matching
-
----
-
-#### `llm_feature_profile(description: str) -> Tuple[str, List[str], Optional[str]]`
-Extract structured features from listing description using Claude Haiku.
-
-**Parameters:**
-- `description` (str) - Raw listing description text
-
-**Returns:**
-- `Tuple[str, List[str], Optional[str]]`:
-  1. `profile` (str) - Normalized summary
-  2. `feature_tags` (List[str]) - Snake_case feature tags
-  3. `architecture_style` (Optional[str]) - Style if mentioned
-
-**Example:**
-```python
-from common import llm_feature_profile
-
-description = """
-Stunning modern home with open floor plan.
-Features include granite countertops, stainless steel appliances,
-and sparkling pool. Beautiful mountain views!
-"""
-
-profile, tags, style = llm_feature_profile(description)
-# Returns:
-#   profile = "Modern home with open floor plan, granite finishes, pool, mountain views"
-#   tags = ["pool", "granite_counters", "open_floorplan", "mountain_view", "stainless_steel_appliances"]
-#   style = "modern"
-```
-
-**Cost:** ~$0.0001 per call
-
-**Note:** Currently DISABLED in production to reduce costs. Adds $60-80 for full dataset.
 
 ---
 
@@ -902,10 +867,8 @@ Build complete OpenSearch document with embeddings.
 **Returns:**
 - `Dict` - Complete document with:
   - All base fields
-  - `llm_profile` (str) - LLM-generated summary
-  - `feature_tags` (List[str]) - Extracted features
-  - `image_tags` (List[str]) - Visual features from AI
-  - `architecture_style` (str or None)
+  - `image_tags` (List[str]) - Visual features from Claude Vision
+  - `architecture_style` (str or None) - Architecture style from vision analysis
   - `vector_text` (List[float]) - Text embedding (1024-dim)
   - `vector_image` (List[float]) - Image embedding (1024-dim)
   - `has_valid_embeddings` (bool)

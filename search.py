@@ -352,19 +352,21 @@ def _filters_to_bool(filter_obj: Dict[str, Any], require_embeddings: bool = True
     return {"bool": {"filter": f}}
 
 
-def _os_search(body: Dict[str, Any], size: int = 50) -> List[Dict[str, Any]]:
+def _os_search(body: Dict[str, Any], size: int = 50, index: str = None) -> List[Dict[str, Any]]:
     """
     Execute an OpenSearch query and return hits.
 
     Args:
         body: OpenSearch query body
         size: Maximum number of results to return
+        index: Target index name (defaults to OS_INDEX if not specified)
 
     Returns:
         List of hit dictionaries from OpenSearch response
     """
     body["size"] = size
-    res = os_client.search(index=OS_INDEX, body=body)
+    target_index = index or OS_INDEX
+    res = os_client.search(index=target_index, body=body)
     return res.get("hits", {}).get("hits", [])
 
 
@@ -473,7 +475,9 @@ def handler(event, context):
         return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": "missing 'q'"})}
     size = int(payload.get("size", 15))  # Reduced from 30 to stay under 6MB with full S3 data
 
-    logger.info("Search query: '%s', size=%d", q, size)
+    # Override index if specified in payload (for UI index switching)
+    target_index = payload.get("index", OS_INDEX)
+    logger.info("Search query: '%s', size=%d, index=%s", q, size, target_index)
 
     constraints = extract_query_constraints(q)
     hard_filters = constraints.get("hard_filters", {})
@@ -514,47 +518,9 @@ def handler(event, context):
     if architecture_style:
         filter_clauses.append({"term": {"architecture_style": architecture_style}})
 
-    # DISABLED OLD PROXIMITY FILTERING: Now using on-demand enrichment instead!
-    # The old approach was: find a grocery store, filter listings within 5km
-    # The new approach: return all matching listings, enrich each with nearby places
-    # This is 100x cheaper and works better (every listing gets its own nearby places)
-    #
-    # if proximity:
-    #     poi_type = proximity.get("poi_type")
-    #     max_distance_km = proximity.get("max_distance_km")
-    #     max_drive_time_min = proximity.get("max_drive_time_min")
-    #
-    #     logger.info("Proximity requirement detected: poi_type=%s, max_distance_km=%s, max_drive_time_min=%s",
-    #                poi_type, max_distance_km, max_drive_time_min)
-    #
-    #     # Geocode the POI type using Salt Lake City as reference
-    #     # This ensures we find businesses near the listings, not in other states
-    #     slc_center = {"lat": 40.7608, "lon": -111.891}
-    #     poi_location = geocode_location(poi_type, reference_location=slc_center)
-    #
-    #     if poi_location:
-    #         # Estimate distance from drive time (if specified): ~40km in 10 minutes = 4km/min average
-    #         if max_drive_time_min and not max_distance_km:
-    #             max_distance_km = max_drive_time_min * 4  # Conservative estimate
-    #
-    #         # Default to 10km if not specified (reasonable for suburban "near")
-    #         if not max_distance_km:
-    #             max_distance_km = 10
-    #
-    #         logger.info("Using POI location: %s, max_distance: %s km", poi_location, max_distance_km)
-    #
-    #         # Add geo_distance filter (uses "geo" field from listings)
-    #         filter_clauses.append({
-    #             "geo_distance": {
-    #                 "distance": f"{max_distance_km}km",
-    #                 "geo": {
-    #                     "lat": poi_location["lat"],
-    #                     "lon": poi_location["lon"]
-    #                 }
-    #             }
-    #         })
-    #     else:
-    #         logger.warning("Could not geocode POI: %s - skipping proximity filter", poi_type)
+    # Note: Proximity filtering uses on-demand place enrichment per listing result
+    # Previous approach filtered by pre-computed POI locations (see git history)
+    # Current approach is 100x cheaper and works better for user experience
 
     if proximity:
         poi_type = proximity.get("poi_type")
@@ -598,7 +564,7 @@ def handler(event, context):
         }
     }
     logger.info("BM25 query: %s", json.dumps(bm25_query))
-    bm25_hits = _os_search(bm25_query, size=size * 3)
+    bm25_hits = _os_search(bm25_query, size=size * 3, index=target_index)
     logger.info("BM25 returned %d hits", len(bm25_hits))
 
     # 2) kNN on text vector (only if semantic search is needed)
@@ -624,7 +590,7 @@ def handler(event, context):
             }
         }
         try:
-            knn_text_hits = _os_search(knn_text_body, size=size * 3)
+            knn_text_hits = _os_search(knn_text_body, size=size * 3, index=target_index)
             logger.info("kNN text returned %d hits", len(knn_text_hits))
         except Exception as e:
             logger.warning("kNN text search failed: %s", e)
@@ -634,26 +600,61 @@ def handler(event, context):
     # 3) kNN on image vector (only if semantic search is needed)
     knn_img_hits: List[Dict[str, Any]] = []
     if require_embeddings:
+        # Detect if using multi-vector schema
+        is_multi_vector = target_index.endswith("-v2")
+
         try:
-            knn_img_body = {
-                "size": size * 3,
-                "query": {
-                    "bool": {
-                        "must": [
-                            {
-                                "knn": {
-                                    "vector_image": {
-                                        "vector": q_vec,
-                                        "k": topK
+            if is_multi_vector:
+                # PHASE 2: Query nested image_vectors array with max-match semantics
+                # This searches ALL image vectors per listing and returns listing if ANY match well
+                knn_img_body = {
+                    "size": size * 3,
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {
+                                    "nested": {
+                                        "path": "image_vectors",
+                                        "score_mode": "max",  # Take the BEST matching image
+                                        "query": {
+                                            "knn": {
+                                                "image_vectors.vector": {
+                                                    "vector": q_vec,
+                                                    "k": topK
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                        ],
-                        "filter": filter_clauses  # Use the same filter list
+                            ],
+                            "filter": filter_clauses
+                        }
                     }
                 }
-            }
-            knn_img_hits = _os_search(knn_img_body, size=size * 3)
+                logger.info("Using MULTI-VECTOR image search (listings-v2)")
+            else:
+                # LEGACY: Single averaged vector
+                knn_img_body = {
+                    "size": size * 3,
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {
+                                    "knn": {
+                                        "vector_image": {
+                                            "vector": q_vec,
+                                            "k": topK
+                                        }
+                                    }
+                                }
+                            ],
+                            "filter": filter_clauses  # Use the same filter list
+                        }
+                    }
+                }
+                logger.info("Using LEGACY single-vector image search")
+
+            knn_img_hits = _os_search(knn_img_body, size=size * 3, index=target_index)
             logger.info("kNN image returned %d hits", len(knn_img_hits))
         except Exception as e:
             logger.warning("Image kNN skipped (no mapping or field): %s", e)
@@ -762,12 +763,13 @@ def get_listing_handler(event, context):
     query_params = event.get("queryStringParameters") or {}
     include_full_data = query_params.get("include_full_data", "false").lower() == "true"
     include_nearby = query_params.get("include_nearby_places", "true").lower() == "true"
+    target_index = query_params.get("index", OS_INDEX)
 
-    logger.info(f"Fetching listing zpid={zpid}, include_full_data={include_full_data}, include_nearby={include_nearby}")
+    logger.info(f"Fetching listing zpid={zpid}, include_full_data={include_full_data}, include_nearby={include_nearby}, index={target_index}")
 
     try:
         # Fetch from OpenSearch
-        response = os_client.get(index=OS_INDEX, id=str(zpid))
+        response = os_client.get(index=target_index, id=str(zpid))
 
         if not response.get("found"):
             return {

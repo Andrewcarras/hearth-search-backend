@@ -7,13 +7,12 @@ with rich multimodal embeddings for semantic search.
 Processing pipeline for each listing:
 1. Extract core fields (price, beds, location, etc.) from Zillow JSON
 2. Generate fallback description if missing
-3. Use Claude LLM to extract normalized feature tags
-4. Generate text embeddings from description using Bedrock Titan
-5. Download and process up to MAX_IMAGES property photos
-6. Generate image embeddings using Bedrock Titan
-7. Detect visual features using Claude 3 Haiku Vision (with DynamoDB caching)
-8. Store complete original listing JSON in S3 for later retrieval
-9. Index search fields + embeddings to OpenSearch
+3. Generate text embeddings from description using Bedrock Titan
+4. Download and process up to MAX_IMAGES property photos
+5. Generate image embeddings using Bedrock Titan
+6. Detect visual features using Claude 3 Haiku Vision (with DynamoDB caching)
+7. Store complete original listing JSON in S3 for later retrieval
+8. Index search fields + embeddings to OpenSearch
 
 Cost Optimizations:
 - Claude Haiku Vision: $0.00025/image (75% cheaper than Rekognition $0.001/image)
@@ -41,7 +40,7 @@ from common import (
     AWS_REGION, OS_INDEX, MAX_IMAGES, EMBEDDING_IMAGE_WIDTH,
     create_index_if_needed, bulk_upsert,
     embed_text, embed_image_bytes, detect_labels,
-    extract_zillow_images, vec_mean, llm_feature_profile
+    extract_zillow_images, vec_mean
 )
 
 logger = logging.getLogger(__name__)
@@ -209,11 +208,10 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
     Build a complete OpenSearch document with text and image embeddings.
 
     This is the core processing function that enriches each listing with:
-    1. LLM-extracted features (pool, garage, etc.) via Claude
-    2. Text embeddings (1024-dim vector) via Bedrock Titan
-    3. Image embeddings (averaged from multiple photos) via Bedrock Titan
-    4. Visual labels (kitchen, brick, etc.) via Rekognition
-    5. Data quality flags (has_valid_embeddings, has_description)
+    1. Text embeddings (1024-dim vector) via Bedrock Titan
+    2. Image embeddings (averaged from multiple photos) via Bedrock Titan
+    3. Visual features and labels via Claude 3 Haiku Vision
+    4. Data quality flags (has_valid_embeddings, has_description)
 
     The function is resilient to failures at each step, logging errors and
     continuing with fallback values to ensure indexing completes.
@@ -226,19 +224,17 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
         Complete document ready for OpenSearch indexing with all embeddings,
         tags, and metadata
     """
-    # Step 1: Extract structured features using Claude LLM (including architecture style from text)
-    # DISABLED TO REDUCE COSTS - costs $60-80 for full dataset, not needed for basic search
-    llm_profile, feature_tags, style_from_text = "", [], None
-    # try:
-    #     llm_profile, feature_tags, style_from_text = llm_feature_profile(base["description"])
-    # except Exception as e:
-    #     logger.warning("LLM profile extraction failed for zpid=%s: %s", base.get("zpid"), e)
+    # Feature extraction via LLM has been removed (was costing $60-80 per dataset)
+    # All features are now extracted from images via Claude Haiku Vision
+    llm_profile = ""  # Always empty (kept for schema compatibility)
+    feature_tags = []  # No longer populated (kept for schema compatibility)
 
     # Text embeddings (resilient)
     vec_text = None
     text_embedding_failed = False
     try:
-        text_for_embed = " ".join([t for t in [base["description"], llm_profile] if t]).strip()
+        # Embed only the description (llm_profile is always empty now)
+        text_for_embed = base["description"].strip() if base["description"] else ""
         if text_for_embed:
             vec_text = embed_text(text_for_embed)
             if not vec_text or len(vec_text) == 0:
@@ -257,6 +253,7 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
     # Image vectors + tags (optional + resilient)
     # Deduplicate images by computing hash to avoid processing duplicates
     image_vecs, img_tags = [], set()
+    image_vector_metadata = []  # For multi-vector schema: [{url, type, vector, analysis}, ...]
     seen_hashes = set()
     style_from_vision = None
     best_exterior_score = 0
@@ -267,67 +264,76 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
             if count >= MAX_IMAGES:
                 break
             try:
-                # Download image ONCE - reuse for embeddings, labels, and architecture
-                # CRITICAL: This prevents double-download (was causing 2x bandwidth costs)
-                resp = requests.get(u, timeout=8)
-                resp.raise_for_status()
-                bb = resp.content
+                # OPTIMIZATION: Check embedding cache BEFORE downloading
+                # This saves bandwidth when embeddings are already cached (90% of re-indexes)
+                img_vec = None
+                bb = None  # Image bytes (only downloaded if needed)
 
-                # Generate embedding from bytes (checks DynamoDB cache first)
-                # This saves ~$0.0008 per image on re-indexing (90% cost reduction)
                 try:
-                    # Check cache first before embedding
-                    cached_vec = None
-                    try:
-                        cached = dynamodb.get_item(
-                            TableName="hearth-image-cache",
-                            Key={"image_url": {"S": u}}
-                        )
-                        if "Item" in cached and "embedding" in cached["Item"]:
-                            vec_str = cached["Item"]["embedding"]["S"]
-                            cached_vec = json.loads(vec_str)
-                            logger.debug(f"💾 Cache hit for image embedding: {u[:60]}...")
-                    except Exception as e:
-                        logger.debug(f"Cache read failed: {e}")
-
-                    if cached_vec:
-                        img_vec = cached_vec
-                    else:
-                        # Generate embedding from the bytes we already downloaded
-                        img_vec = embed_image_bytes(bb)
-
-                        # Cache the result
-                        try:
-                            import time
-                            dynamodb.put_item(
-                                TableName="hearth-image-cache",
-                                Item={
-                                    "image_url": {"S": u},
-                                    "embedding": {"S": json.dumps(img_vec)},
-                                    "created_at": {"N": str(int(time.time()))}
-                                }
-                            )
-                            logger.debug(f"💾 Cached image embedding: {u[:60]}")
-                        except Exception as e:
-                            logger.warning(f"Cache write failed: {e}")
-
-                    if img_vec and len(img_vec) > 0:
-                        image_vecs.append(img_vec)
+                    cached = dynamodb.get_item(
+                        TableName="hearth-image-cache",
+                        Key={"image_url": {"S": u}}
+                    )
+                    if "Item" in cached and "embedding" in cached["Item"]:
+                        vec_str = cached["Item"]["embedding"]["S"]
+                        img_vec = json.loads(vec_str)
+                        logger.debug(f"💾 Cache hit for image embedding: {u[:60]}...")
                 except Exception as e:
-                    logger.warning("Image embedding failed for zpid=%s, url=%s: %s", base.get("zpid"), u, e)
+                    logger.debug(f"Embedding cache read failed: {e}")
 
-                # Skip duplicate images using content hash
+                # Only download if we need to generate embedding
+                if img_vec is None:
+                    logger.debug(f"📥 Downloading image (cache miss): {u[:60]}...")
+                    resp = requests.get(u, timeout=8)
+                    resp.raise_for_status()
+                    bb = resp.content
+
+                    # Generate embedding from downloaded bytes
+                    img_vec = embed_image_bytes(bb)
+
+                    # Cache the embedding for future re-indexes
+                    try:
+                        import time
+                        dynamodb.put_item(
+                            TableName="hearth-image-cache",
+                            Item={
+                                "image_url": {"S": u},
+                                "embedding": {"S": json.dumps(img_vec)},
+                                "created_at": {"N": str(int(time.time()))}
+                            }
+                        )
+                        logger.debug(f"💾 Cached image embedding: {u[:60]}")
+                    except Exception as e:
+                        logger.warning(f"Embedding cache write failed: {e}")
+
+                # Validate embedding before using
+                if not img_vec or len(img_vec) == 0:
+                    logger.warning("Empty/invalid embedding for zpid=%s, url=%s", base.get("zpid"), u)
+                    continue  # Skip this image entirely
+
+                # CRITICAL: Check for duplicate images BEFORE adding to vectors
+                # Download image bytes if we haven't already (for hash check)
+                if bb is None:
+                    logger.debug(f"📥 Downloading image for dedup check: {u[:60]}...")
+                    resp = requests.get(u, timeout=8)
+                    resp.raise_for_status()
+                    bb = resp.content
+
                 import hashlib
                 img_hash = hashlib.md5(bb).hexdigest()
                 if img_hash in seen_hashes:
-                    logger.debug("Skipping duplicate image for zpid=%s", base.get("zpid"))
-                    continue
+                    logger.debug("⏭️  Skipping duplicate image (hash=%s) for zpid=%s", img_hash[:8], base.get("zpid"))
+                    continue  # Skip BEFORE adding to vectors
                 seen_hashes.add(img_hash)
+
+                # NOW it's safe to add the embedding (after dedup check)
+                image_vecs.append(img_vec)
 
                 # UNIFIED COMPREHENSIVE VISION ANALYSIS
                 # Single Haiku call extracts ALL data: features, architecture, colors, materials
                 # Cost: ~$0.00025 per image (replaces old detect_labels + classify_architecture_style)
                 # Savings: Eliminates redundant $0.0015 Sonnet call per listing
+                analysis = None
                 try:
                     analysis = detect_labels(bb, image_url=u)  # Returns comprehensive dict
 
@@ -371,39 +377,43 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
                     logger.warning("Comprehensive image analysis failed for zpid=%s, url=%s: %s",
                                  base.get("zpid"), u, e)
 
+                # Store image vector with metadata for multi-vector schema
+                if img_vec and analysis:
+                    image_vector_metadata.append({
+                        "image_url": u,
+                        "image_type": analysis.get("image_type", "unknown"),
+                        "vector": img_vec
+                    })
+
                 count += 1
             except Exception as e:
                 logger.warning("Image fetch failed for zpid=%s, url=%s: %s", base.get("zpid"), u, e)
 
     vec_image = vec_mean(image_vecs, target_dim=len(vec_text)) if image_vecs else [0.0] * len(vec_text)
 
-    # Enhanced logging: Track embedding generation details
+    # Determine if embeddings are valid (non-zero) - compute sums once for efficiency
     zpid = base.get("zpid")
-    logger.info(f"🔍 zpid={zpid}: Embedding details BEFORE validation:")
-    logger.info(f"   text_embed_len={len(vec_text) if vec_text else 0}, text_failed={text_embedding_failed}")
-    logger.info(f"   image_vecs_count={len(image_vecs)}, vec_image_len={len(vec_image) if vec_image else 0}")
-    if vec_text:
-        logger.info(f"   text_embed_sum={sum(abs(v) for v in vec_text):.4f}")
-    if vec_image:
-        logger.info(f"   image_embed_sum={sum(abs(v) for v in vec_image):.4f}")
+    text_embed_sum = sum(abs(v) for v in vec_text) if vec_text else 0.0
+    image_embed_sum = sum(abs(v) for v in vec_image) if vec_image else 0.0
 
-    # Determine if embeddings are valid (non-zero)
-    has_valid_text_embedding = not text_embedding_failed and vec_text and sum(abs(v) for v in vec_text) > 0.0
-    has_valid_image_embedding = len(image_vecs) > 0 and vec_image and sum(abs(v) for v in vec_image) > 0.0
+    has_valid_text_embedding = not text_embedding_failed and vec_text and text_embed_sum > 0.0
+    has_valid_image_embedding = len(image_vecs) > 0 and vec_image and image_embed_sum > 0.0
     has_valid_embeddings = has_valid_text_embedding or has_valid_image_embedding
 
-    # Enhanced logging: Show validation results
-    logger.info(f"✅ zpid={zpid}: Validation results:")
-    logger.info(f"   has_valid_text_embedding={has_valid_text_embedding}")
-    logger.info(f"   has_valid_image_embedding={has_valid_image_embedding}")
-    logger.info(f"   has_valid_embeddings={has_valid_embeddings}")
+    # Logging: Embedding details and validation (now using pre-computed sums)
+    logger.info(f"🔍 zpid={zpid}: text_len={len(vec_text) if vec_text else 0}, "
+                f"text_sum={text_embed_sum:.4f}, text_valid={has_valid_text_embedding}")
+    logger.info(f"   image_count={len(image_vecs)}, image_sum={image_embed_sum:.4f}, "
+                f"image_valid={has_valid_image_embedding}, overall_valid={has_valid_embeddings}")
 
     if not has_valid_embeddings:
-        logger.warning("Document zpid=%s has NO valid embeddings (text_valid=%s, image_valid=%s)",
-                      base.get("zpid"), has_valid_text_embedding, has_valid_image_embedding)
+        logger.warning("❌ Document zpid=%s has NO valid embeddings", zpid)
 
-    # Determine final architecture style (vision takes priority over text)
-    architecture_style = style_from_vision or style_from_text
+    # Architecture style comes from vision analysis only (text extraction removed)
+    architecture_style = style_from_vision
+
+    # Detect if using multi-vector schema (listings-v2)
+    is_multi_vector = OS_INDEX.endswith("-v2")
 
     # Build document - include ALL fields from base (don't filter out None values)
     # This is important because numeric fields like price=0 should be preserved
@@ -426,8 +436,17 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
     # Only add vector fields if they're valid (OpenSearch cosinesimil doesn't support zero vectors)
     if has_valid_text_embedding:
         doc["vector_text"] = vec_text
-    if has_valid_image_embedding:
-        doc["vector_image"] = vec_image
+
+    # Add image vectors based on schema version
+    if is_multi_vector:
+        # PHASE 2: Store all image vectors separately for max-match search
+        if image_vector_metadata and len(image_vector_metadata) > 0:
+            doc["image_vectors"] = image_vector_metadata
+            logger.info(f"📸 zpid={zpid}: Stored {len(image_vector_metadata)} image vectors (multi-vector schema)")
+    else:
+        # LEGACY: Single averaged vector for backward compatibility
+        if has_valid_image_embedding:
+            doc["vector_image"] = vec_image
 
     return doc
 
@@ -445,20 +464,25 @@ def handler(event, context):
 
     Processing flow:
     1. Create OpenSearch index if it doesn't exist
-    2. Load listings from S3 or direct payload
+    2. Load listings from S3 (first invocation only) or use cached data from payload
     3. Process batch of listings (default 500 per invocation)
     4. For each listing:
        - Extract core fields
        - Generate embeddings
        - Process images
        - Index to OpenSearch
-    5. If more listings remain and time permits, self-invoke for next batch
+    5. If more listings remain and time permits, self-invoke for next batch with data
+
+    OPTIMIZATION: The first invocation downloads from S3, then passes the full listing
+    data in subsequent invocations. This prevents re-downloading the same 12MB JSON
+    file multiple times (e.g., 4 downloads → 1 download for 1,588 listings).
 
     The function monitors Lambda execution time and stops ~6 seconds before
     timeout to allow graceful self-invocation of the next batch.
 
     Payload formats:
-      S3 mode: {"bucket": "my-bucket", "key": "listings.json", "start": 0, "limit": 500}
+      First invocation: {"bucket": "my-bucket", "key": "listings.json", "start": 0, "limit": 500}
+      Subsequent invocations: {"listings": [...], "start": 500, "limit": 500}
       Direct mode: {"listings": [...], "start": 0, "limit": 500}
 
     Args:
@@ -560,15 +584,24 @@ def handler(event, context):
             return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 
     # Source of listings
-    if "bucket" in payload and "key" in payload:
-        all_listings = _load_listings_from_s3(payload["bucket"], payload["key"])
-    elif "listings" in payload:
+    # OPTIMIZATION: On first invocation (start=0), load from S3 and pass data forward
+    # On subsequent invocations, use the listings data passed in payload
+    # This prevents re-downloading the same 12MB JSON file 4 times!
+    start = int(payload.get("start", 0))
+
+    if "listings" in payload:
+        # Subsequent invocation - use cached listings from payload
         all_listings = payload["listings"]
+        logger.info(f"Using cached listings from payload ({len(all_listings)} total)")
+    elif "bucket" in payload and "key" in payload:
+        # First invocation - download from S3 once
+        logger.info(f"First invocation - downloading from S3: s3://{payload['bucket']}/{payload['key']}")
+        all_listings = _load_listings_from_s3(payload["bucket"], payload["key"])
+        logger.info(f"Downloaded {len(all_listings)} listings from S3")
     else:
         return {"statusCode": 400, "body": json.dumps({"error": "Provide {bucket,key} or {listings: []}."})}
 
     total = len(all_listings)
-    start = int(payload.get("start", 0))
     limit = int(payload.get("limit", 500))
     end = min(start + limit, total)
 
@@ -684,15 +717,9 @@ def handler(event, context):
             next_payload = {
                 "start": next_start,
                 "limit": limit,
-                "_invocation_count": invocation_count + 1  # SAFEGUARD: Increment counter
+                "_invocation_count": invocation_count + 1,  # SAFEGUARD: Increment counter
+                "listings": all_listings  # OPTIMIZATION: Always pass listings to avoid re-downloading
             }
-            # Pass through bucket/key if this is an S3-based job
-            if "bucket" in payload and "key" in payload:
-                next_payload["bucket"] = payload["bucket"]
-                next_payload["key"] = payload["key"]
-            # Pass through listings array if this is a direct invocation (DON'T pass empty array)
-            elif "listings" in payload:
-                next_payload["listings"] = all_listings
 
             # Pass through job_id for tracking
             if job_id:

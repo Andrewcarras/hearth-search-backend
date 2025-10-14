@@ -74,6 +74,10 @@ def update_listing_handler(event, context):
             "body": json.dumps({"error": "Missing zpid in path"})
         }
 
+    # Extract index from query parameters
+    query_params = event.get("queryStringParameters") or {}
+    target_index = query_params.get("index", OS_INDEX)
+
     # Parse request body
     try:
         if isinstance(event.get("body"), str):
@@ -97,11 +101,11 @@ def update_listing_handler(event, context):
             "body": json.dumps({"error": "No updates provided"})
         }
 
-    logger.info(f"Updating zpid={zpid} with {len(updates)} fields")
+    logger.info(f"Updating zpid={zpid} with {len(updates)} fields in index={target_index}")
 
     try:
         # Fetch existing document
-        response = os_client.get(index=OS_INDEX, id=str(zpid))
+        response = os_client.get(index=target_index, id=str(zpid))
 
         if not response.get("found"):
             return {
@@ -132,7 +136,7 @@ def update_listing_handler(event, context):
             logger.warning("Embedding regeneration not yet implemented")
 
         # Update in OpenSearch
-        os_client.index(index=OS_INDEX, id=str(zpid), body=doc)
+        os_client.index(index=target_index, id=str(zpid), body=doc)
 
         logger.info(f"Successfully updated zpid={zpid}")
 
@@ -186,6 +190,10 @@ def add_listing_handler(event, context):
     """
     logger.info("add_listing_handler invoked")
 
+    # Extract index from query parameters
+    query_params = event.get("queryStringParameters") or {}
+    target_index = query_params.get("index", OS_INDEX)
+
     # Parse request body
     try:
         if isinstance(event.get("body"), str):
@@ -216,11 +224,11 @@ def add_listing_handler(event, context):
         zpid = f"custom_{uuid.uuid4().hex[:12]}"
         listing_data["zpid"] = zpid
 
-    logger.info(f"Adding new listing zpid={zpid}")
+    logger.info(f"Adding new listing zpid={zpid} to index={target_index}")
 
     # Check if zpid already exists
     try:
-        existing = os_client.get(index=OS_INDEX, id=str(zpid))
+        existing = os_client.get(index=target_index, id=str(zpid))
         if existing.get("found"):
             return {
                 "statusCode": 409,
@@ -307,7 +315,7 @@ def add_listing_handler(event, context):
                 logger.warning(f"Image processing failed: {e}")
 
         # Index to OpenSearch
-        os_client.index(index=OS_INDEX, id=str(zpid), body=doc)
+        os_client.index(index=target_index, id=str(zpid), body=doc)
 
         logger.info(f"Successfully added listing zpid={zpid}, cost=${processing_cost:.4f}")
 
@@ -359,12 +367,13 @@ def delete_listing_handler(event, context):
     # Check query parameters
     query_params = event.get("queryStringParameters") or {}
     soft_delete = query_params.get("soft", "true").lower() == "true"
+    target_index = query_params.get("index", OS_INDEX)
 
-    logger.info(f"Deleting zpid={zpid}, soft={soft_delete}")
+    logger.info(f"Deleting zpid={zpid}, soft={soft_delete}, index={target_index}")
 
     try:
         # Check if exists
-        response = os_client.get(index=OS_INDEX, id=str(zpid))
+        response = os_client.get(index=target_index, id=str(zpid))
 
         if not response.get("found"):
             return {
@@ -380,7 +389,7 @@ def delete_listing_handler(event, context):
             doc["searchable"] = False
             doc["deleted_at"] = int(time.time())
 
-            os_client.index(index=OS_INDEX, id=str(zpid), body=doc)
+            os_client.index(index=target_index, id=str(zpid), body=doc)
 
             logger.info(f"Soft deleted zpid={zpid}")
 
@@ -396,7 +405,7 @@ def delete_listing_handler(event, context):
             }
         else:
             # Hard delete: remove from index
-            os_client.delete(index=OS_INDEX, id=str(zpid))
+            os_client.delete(index=target_index, id=str(zpid))
 
             logger.info(f"Hard deleted zpid={zpid}")
 

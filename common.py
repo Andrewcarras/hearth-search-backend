@@ -2,17 +2,16 @@
 common.py - Shared utilities for the Hearth Real Estate Search Engine
 
 This module provides common functionality used by both upload_listings.py and search.py:
-- AWS client setup (OpenSearch, Bedrock, Rekognition)
+- AWS client setup (OpenSearch, Bedrock)
 - Text and image embedding generation via Amazon Bedrock
 - OpenSearch index creation and bulk operations
-- LLM-based feature extraction from property descriptions
+- LLM-based query parsing and constraint extraction
 - Zillow data parsing utilities
 
 Architecture:
 - Uses Amazon OpenSearch for multimodal vector search (text + images)
 - Uses Amazon Bedrock Titan models for embeddings
-- Uses Claude (via Bedrock) for intelligent feature extraction
-- Uses AWS Rekognition for image label detection (optional)
+- Uses Claude (via Bedrock) for query parsing and vision analysis
 """
 
 import base64
@@ -22,11 +21,10 @@ import logging
 import os
 import time
 import random
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urlparse
 
 import boto3
-import requests
 from botocore.config import Config
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
@@ -194,24 +192,6 @@ def embed_text(text: str) -> List[float]:
     return vec
 
 
-def _bytes_from_url(url: str) -> bytes:
-    """
-    Download image bytes from a URL.
-
-    Args:
-        url: Image URL to download
-
-    Returns:
-        Raw image bytes
-
-    Raises:
-        requests.HTTPError: If download fails
-    """
-    r = requests.get(url, timeout=15)
-    r.raise_for_status()
-    return r.content
-
-
 def embed_image_bytes(img_bytes: bytes) -> List[float]:
     """
     Generate an image embedding vector using Amazon Bedrock Titan Image Embeddings.
@@ -237,50 +217,9 @@ def embed_image_bytes(img_bytes: bytes) -> List[float]:
     return _parse_embed_response(out)
 
 
-def embed_image_from_url(url: str) -> List[float]:
-    """
-    Download an image from URL and generate its embedding vector.
-    Results are cached by URL to avoid re-embedding same images.
-
-    Args:
-        url: Image URL to process
-
-    Returns:
-        1024-dimensional image embedding vector
-    """
-    # Check cache first (use URL directly as key - it's already unique)
-    try:
-        cached = dynamodb.get_item(
-            TableName=CACHE_TABLE,
-            Key={"image_url": {"S": url}}
-        )
-        if "Item" in cached and "embedding" in cached["Item"]:
-            vec_str = cached["Item"]["embedding"]["S"]
-            vec = json.loads(vec_str)
-            logger.debug(f"💾 Cache hit for image: {url[:60]}...")
-            return vec
-    except Exception as e:
-        logger.warning(f"Cache read error for {url[:60]}: {e}")
-
-    # Cache miss - download and embed
-    img_bytes = _bytes_from_url(url)
-    vec = embed_image_bytes(img_bytes)
-
-    # Store in cache
-    try:
-        dynamodb.put_item(
-            TableName=CACHE_TABLE,
-            Item={
-                "image_url": {"S": url},
-                "embedding": {"S": json.dumps(vec)},
-                "created_at": {"N": str(int(time.time()))}
-            }
-        )
-        logger.debug(f"💾 Cached image: {url[:60]}")
-    except Exception as e:
-        logger.warning(f"Cache write error: {e}")
-
-    return vec
+# NOTE: embed_image_from_url() removed - was never used in production
+# Image embedding with caching is handled directly in upload_listings.py for better control
+# See git history if this function is ever needed
 
 
 def vec_mean(vectors: List[List[float]], target_dim: int) -> List[float]:
@@ -582,11 +521,18 @@ def create_index_if_needed():
 
     The index uses HNSW (Hierarchical Navigable Small World) algorithm for
     fast approximate nearest neighbor search on high-dimensional vectors.
+
+    Schema Version Detection:
+    - "listings" → Legacy single-vector schema (backward compatible)
+    - "listings-v2" → Multi-vector schema with all image embeddings stored separately
     """
     if os_client.indices.exists(index=OS_INDEX):
         return  # Index already exists
 
     logger.info("Creating OpenSearch index %s", OS_INDEX)
+
+    # Detect if this is the new multi-vector schema
+    is_multi_vector = OS_INDEX.endswith("-v2")
 
     body = {
         "settings": {
@@ -634,15 +580,6 @@ def create_index_if_needed():
                         "space_type": "cosinesimil"  # Cosine similarity metric
                     }
                 },
-                "vector_image": {
-                    "type": "knn_vector",
-                    "dimension": IMAGE_DIM,  # 1024 dimensions
-                    "method": {
-                        "name": "hnsw",
-                        "engine": "lucene",
-                        "space_type": "cosinesimil"
-                    }
-                },
 
                 # Data quality flags
                 "has_valid_embeddings": {"type": "boolean"},  # True if vectors are non-zero
@@ -653,6 +590,41 @@ def create_index_if_needed():
             }
         }
     }
+
+    # Add image vector field(s) based on schema version
+    if is_multi_vector:
+        # PHASE 2: Multi-vector schema for listings-v2
+        # Stores ALL image embeddings separately for max-match search
+        body["mappings"]["properties"]["image_vectors"] = {
+            "type": "nested",  # Array of image vector objects
+            "properties": {
+                "image_url": {"type": "keyword"},  # URL of the image
+                "image_type": {"type": "keyword"},  # "exterior", "interior", "kitchen", "bathroom", etc.
+                "vector": {
+                    "type": "knn_vector",
+                    "dimension": IMAGE_DIM,  # 1024 dimensions
+                    "method": {
+                        "name": "hnsw",
+                        "engine": "lucene",
+                        "space_type": "cosinesimil"
+                    }
+                }
+            }
+        }
+        logger.info("Creating listings-v2 with MULTI-VECTOR image schema (Phase 2)")
+    else:
+        # LEGACY: Single averaged vector for backward compatibility
+        body["mappings"]["properties"]["vector_image"] = {
+            "type": "knn_vector",
+            "dimension": IMAGE_DIM,  # 1024 dimensions
+            "method": {
+                "name": "hnsw",
+                "engine": "lucene",
+                "space_type": "cosinesimil"
+            }
+        }
+        logger.info("Creating legacy index with SINGLE-VECTOR image schema")
+
     os_client.indices.create(index=OS_INDEX, body=body)
 
 
@@ -778,37 +750,8 @@ def bulk_upsert(actions: Iterable[Dict[str, Any]], initial_chunk: int = 100, max
         if not buf_local:
             return
 
-        # Enhanced logging: Show sample document being indexed
-        if buf_local:
-            sample_doc = buf_local[0]
-            sample_id = sample_doc.get("_id")
-            sample_source = sample_doc.get("_source", {})
-            logger.info(f"🔍 Bulk indexing {len(buf_local)} documents. Sample zpid={sample_id}:")
-            logger.info(f"   has_valid_embeddings={sample_source.get('has_valid_embeddings')}")
-            logger.info(f"   price={sample_source.get('price')}")
-            logger.info(f"   city={sample_source.get('city')}")
-
-            # Log field counts to detect issues
-            logger.info(f"   Document field count: {len(sample_source)}")
-            logger.info(f"   Document keys: {list(sample_source.keys())[:15]}")
-
+        logger.info(f"Indexing batch: {len(buf_local)} documents to {OS_INDEX}")
         lines = lines_from_actions(buf_local)
-
-        # Enhanced logging: Show actual bulk payload structure
-        if lines:
-            logger.info(f"📤 Bulk payload: {len(lines)} lines ({len(lines)//2} documents)")
-            # Log first action+doc pair as sample
-            if len(lines) >= 2:
-                action_line = lines[0]
-                doc_line = lines[1]
-                logger.info(f"   Sample action: {action_line[:200]}")
-                logger.info(f"   Sample doc length: {len(doc_line)} chars")
-                # Parse doc to check fields
-                try:
-                    doc_obj = json.loads(doc_line)
-                    logger.info(f"   Sample doc fields: {list(doc_obj.keys())[:15]}")
-                except Exception as e:
-                    logger.error(f"   ERROR parsing sample doc: {e}")
 
         # Try to send with retries
         for attempt in range(max_retries):
@@ -947,244 +890,12 @@ def extract_zillow_images(listing: Dict[str, Any], target_width: int = 576) -> L
     return urls if urls else []
 
 
-def classify_architecture_style_vision(image_bytes: bytes, image_url: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Use Claude 3 Sonnet with vision to classify architecture style and extract visual features.
-    Results are cached in DynamoDB by image URL to avoid re-analyzing same images.
-
-    Analyzes image to identify architectural style, exterior features, colors, materials,
-    and structural elements like balconies, porches, fences, etc.
-
-    Args:
-        image_bytes: Raw image data (JPEG/PNG)
-        image_url: Optional URL of the image for caching (if not provided, no caching)
-
-    Returns:
-        Dictionary with keys:
-        - primary_style: Main architecture style (e.g., "modern", "craftsman")
-        - secondary_styles: List of additional applicable styles
-        - exterior_color: Primary exterior color
-        - roof_type: Type of roof (flat, gabled, hipped, etc.)
-        - materials: List of visible exterior materials
-        - visual_features: List of structural features (balcony, porch, fence, deck, etc.)
-        - confidence: Classification confidence (high/medium/low)
-    """
-    # Check cache first if URL provided
-    if image_url:
-        try:
-            cached = dynamodb.get_item(
-                TableName=CACHE_TABLE,
-                Key={"image_url": {"S": image_url}}
-            )
-            if "Item" in cached and "architecture_style" in cached["Item"]:
-                style_json = cached["Item"]["architecture_style"]["S"]
-                style_data = json.loads(style_json)
-                logger.debug(f"💾 Cache hit for architecture classification: {image_url[:60]}")
-                return style_data
-        except Exception as e:
-            logger.warning(f"Cache read error for architecture style: {e}")
-
-    try:
-        b64_image = base64.b64encode(image_bytes).decode('utf-8')
-
-        prompt = """Analyze this home's exterior architecture and identify:
-
-1. Primary architecture style - choose ONE most fitting style from:
-   modern, contemporary, craftsman, victorian, colonial, ranch, mediterranean, tudor, cape_cod,
-   farmhouse, mid_century_modern, traditional, transitional, industrial, spanish, french_country,
-   greek_revival, bungalow, cottage, split_level, dutch_colonial, georgian, italianate, prairie,
-   art_deco, southwestern
-
-2. Secondary styles (if home blends multiple styles)
-
-3. Primary exterior color (be specific: white, blue, gray, beige, brown, red, yellow, green, etc.)
-
-4. Roof type (flat, gabled, hipped, mansard, gambrel, shed, etc.)
-
-5. Visible exterior materials (brick, stucco, siding, stone, wood, vinyl, metal, etc.)
-
-6. Visual features - identify ALL visible structural elements:
-   - balcony, porch, deck, patio
-   - fence (specify if visible: white_fence, wood_fence, metal_fence, chain_link_fence)
-   - garage (attached, detached, carport)
-   - driveway, walkway
-   - windows (large_windows, bay_windows, picture_windows)
-   - columns, pillars
-   - shutters
-   - chimney
-   - dormer
-   - awning
-   - landscaping features (if prominent)
-
-7. Confidence in classification (high if clear style, medium if mixed, low if unclear)
-
-Return STRICT JSON only:
-{
-  "primary_style": "...",
-  "secondary_styles": [],
-  "exterior_color": "...",
-  "roof_type": "...",
-  "materials": [],
-  "visual_features": [],
-  "confidence": "high"
-}"""
-
-        body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 600,
-            "temperature": 0,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": b64_image
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": prompt
-                    }
-                ]
-            }]
-        }
-
-        # Use Claude 3 Sonnet with vision capabilities
-        resp = brt.invoke_model(
-            modelId="anthropic.claude-3-sonnet-20240229-v1:0",
-            body=json.dumps(body)
-        )
-
-        result = json.loads(resp["body"].read().decode("utf-8"))
-        content = result["content"][0]["text"]
-
-        # Parse JSON response
-        style_data = json.loads(content)
-
-        # Normalize style to snake_case
-        if "primary_style" in style_data:
-            style_data["primary_style"] = style_data["primary_style"].lower().replace(" ", "_")
-
-        # Normalize visual features to snake_case
-        if "visual_features" in style_data:
-            style_data["visual_features"] = [
-                feat.lower().replace(" ", "_") for feat in style_data.get("visual_features", [])
-            ]
-
-        # Cache the result if URL provided
-        if image_url:
-            try:
-                dynamodb.put_item(
-                    TableName=CACHE_TABLE,
-                    Item={
-                        "image_url": {"S": image_url},
-                        "architecture_style": {"S": json.dumps(style_data)},
-                        "classified_at": {"N": str(int(time.time()))}
-                    }
-                )
-                logger.debug(f"💾 Cached architecture classification: {image_url[:60]}")
-            except Exception as e:
-                logger.warning(f"Cache write error for architecture style: {e}")
-
-        return style_data
-
-    except Exception as e:
-        logger.warning("Vision-based architecture classification failed: %s", e)
-        return {
-            "primary_style": None,
-            "secondary_styles": [],
-            "exterior_color": None,
-            "roof_type": None,
-            "materials": [],
-            "visual_features": [],
-            "confidence": "low"
-        }
+# NOTE: classify_architecture_style_vision() removed - replaced by unified detect_labels()
+# The detect_labels() function now extracts ALL features including architecture style in one pass
+# This eliminated redundant LLM calls and saved ~$0.0015 per listing
+# See detect_labels() above for the unified implementation
 
 
-def llm_feature_profile(description: str) -> Tuple[str, List[str], Optional[str]]:
-    """
-    Use Claude LLM to extract structured property features from free-text description.
-
-    This normalizes messy real estate descriptions into:
-    - A concise, standardized summary (profile)
-    - A list of snake_case feature tags (pool, granite_counters, etc.)
-    - Architecture style (if mentioned in text)
-
-    The LLM uses a controlled vocabulary to ensure consistent tagging across
-    all listings, making features searchable and filterable.
-
-    Example:
-        Input: "Beautiful modern home with swimming pool and granite countertops"
-        Output: ("Modern home with pool and granite finishes", ["pool", "granite_counters"], "modern")
-
-    Args:
-        description: Raw listing description text
-
-    Returns:
-        Tuple of (profile_text, feature_tags_list, architecture_style_or_none)
-    """
-    if not description:
-        return "", [], None
-
-    # Prompt Claude to extract features in strict JSON format
-    prompt = f"""
-You are extracting property features from a real estate listing description.
-Return STRICT JSON with fields:
-- profile: string, concise normalized summary
-- tags: array of short snake_case feature tags
-- architecture_style: ONE style from the list below, or null if not mentioned
-
-Architecture styles: modern, contemporary, craftsman, victorian, colonial, ranch, mediterranean, tudor, cape_cod, farmhouse, mid_century_modern, traditional, transitional, industrial, spanish, french_country, greek_revival, bungalow, cottage, split_level, dutch_colonial, georgian, italianate, prairie, art_deco, southwestern
-
-Feature tags vocabulary:
-["pool","backyard","kitchen_island","fireplace","brick_exterior","fenced_yard","garage","finished_basement","open_floorplan","granite_counters","walk_in_closet","waterfront","mountain_view","hardwood_floors","new_construction","white_exterior","stone_facade","stucco_exterior","wood_siding"]
-
-Text:
-\"\"\"{description.strip()[:4000]}\"\"\"
-JSON only:
-"""
-
-    body = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 512,
-        "temperature": 0,  # Deterministic output
-        "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
-    }
-
-    try:
-        # Invoke Claude via Bedrock
-        resp = brt.invoke_model(modelId=LLM_MODEL_ID, body=json.dumps(body))
-        raw = resp["body"].read().decode("utf-8")
-        parsed = json.loads(raw)
-        content = parsed["content"][0]["text"]
-        j = json.loads(content)  # Parse JSON from Claude's response
-
-        # Extract and truncate profile
-        profile = str(j.get("profile", ""))[:4000]
-
-        # Extract and normalize tags to snake_case
-        tags = [str(t) for t in j.get("tags", []) if isinstance(t, (str,))]
-        norm = []
-        for t in tags:
-            t2 = t.strip().lower().replace(" ", "_")  # "Kitchen Island" -> "kitchen_island"
-            if t2:
-                norm.append(t2)
-
-        # Extract architecture style if present
-        arch_style = j.get("architecture_style")
-        if arch_style:
-            arch_style = str(arch_style).lower().replace(" ", "_")
-        else:
-            arch_style = None
-
-        return profile, norm, arch_style
-
-    except Exception as e:
-        logger.warning("LLM profile extraction failed: %s", e)
-        return "", [], None  # Graceful fallback
 
 
 def extract_query_constraints(query_text: str) -> Dict[str, Any]:

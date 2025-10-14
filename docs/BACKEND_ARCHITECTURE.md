@@ -200,8 +200,8 @@ User Query: "3 bedroom home with granite countertops under $500k"
 │    │ - Full-text on description  │     │
 │    │ - Field boosting:           │     │
 │    │   * description^3           │     │
-│    │   * llm_profile^2           │     │
 │    │   * address^0.5             │     │
+│    │   * city^0.3, state^0.2     │     │
 │    │ - Tag matching (soft boost) │     │
 │    │ - Returns: Top 45 results   │     │
 │    └─────────────────────────────┘     │
@@ -341,7 +341,7 @@ S3: murray_listings.json (1,588 listings)
                ▼
 ┌─────────────────────────────────────────┐
 │ 2. TEXT EMBEDDING                       │
-│    Input: description + llm_profile     │
+│    Input: description only              │
 │                                         │
 │    Cache Check:                         │
 │    ├─ Key: text:{MD5 hash}              │
@@ -737,7 +737,7 @@ def extract_query_constraints(query: str) -> Dict:
 | `zip_code` | keyword | ZIP code (flat field) | Exact match |
 | `geo` | geo_point | Coordinates (lat/lon) | Geo-distance |
 | `description` | text | Original description | BM25 search |
-| `llm_profile` | text | LLM-normalized description | BM25 search |
+| `llm_profile` | text | Reserved (unused, always empty) | BM25 search |
 | `feature_tags` | keyword | Extracted features (pool, etc.) | Exact match (array) |
 | `image_tags` | keyword | Visual features from AI | Exact match (array) |
 | `architecture_style` | keyword | Architecture style | Exact match |

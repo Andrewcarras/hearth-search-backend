@@ -219,6 +219,24 @@
             <strong>API Base URL:</strong> <span id="apiBaseUrl">https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod</span>
         </div>
 
+        <!-- Index Selector -->
+        <div class="card" style="margin-bottom: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+            <h2 style="color: white;">🔄 Index Selection</h2>
+            <div class="form-group">
+                <label for="indexSelector" style="color: white; font-size: 1rem;">Active Index</label>
+                <select id="indexSelector" style="font-size: 1rem; font-weight: 600;">
+                    <option value="listings">listings (v1 - Single Vector)</option>
+                    <option value="listings-v2">listings-v2 (Multi-Vector)</option>
+                </select>
+                <div class="helper-text" style="color: rgba(255,255,255,0.9);">
+                    All searches and CRUD operations will use the selected index
+                </div>
+            </div>
+            <div style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                <strong>Current Index:</strong> <span id="currentIndexDisplay">listings</span>
+            </div>
+        </div>
+
         <div class="grid">
             <!-- GET LISTING -->
             <div class="card">
@@ -353,6 +371,21 @@
     <script>
         const API_BASE = 'https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod';
 
+        // Track selected index
+        let selectedIndex = 'listings';
+
+        // Update index when selector changes
+        document.addEventListener('DOMContentLoaded', () => {
+            const selector = document.getElementById('indexSelector');
+            const display = document.getElementById('currentIndexDisplay');
+
+            selector.addEventListener('change', (e) => {
+                selectedIndex = e.target.value;
+                display.textContent = selectedIndex;
+                console.log('Switched to index:', selectedIndex);
+            });
+        });
+
         // Helper function to show response
         function showResponse(elementId, data, isError = false) {
             const el = document.getElementById(elementId);
@@ -384,7 +417,7 @@
             const fullData = document.getElementById('getFullData').checked;
 
             try {
-                const url = `${API_BASE}/listings/${zpid}?include_full_data=${fullData}`;
+                const url = `${API_BASE}/listings/${zpid}?include_full_data=${fullData}&index=${selectedIndex}`;
                 const response = await fetch(url);
                 const data = await response.json();
 
@@ -422,7 +455,7 @@
                     Object.assign(updates, custom);
                 }
 
-                const response = await fetch(`${API_BASE}/listings/${zpid}`, {
+                const response = await fetch(`${API_BASE}/listings/${zpid}?index=${selectedIndex}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ updates })
@@ -469,7 +502,7 @@
 
                 if (zpid) listing.zpid = zpid;
 
-                const response = await fetch(`${API_BASE}/listings`, {
+                const response = await fetch(`${API_BASE}/listings?index=${selectedIndex}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -511,7 +544,7 @@
             setLoading(btn, true);
 
             try {
-                const response = await fetch(`${API_BASE}/listings/${zpid}?soft=${soft}`, {
+                const response = await fetch(`${API_BASE}/listings/${zpid}?soft=${soft}&index=${selectedIndex}`, {
                     method: 'DELETE'
                 });
                 const data = await response.json();
@@ -546,7 +579,8 @@
                     body: JSON.stringify({
                         q: query,
                         size,
-                        include_full_data: fullData
+                        include_full_data: fullData,
+                        index: selectedIndex
                     })
                 });
                 const data = await response.json();

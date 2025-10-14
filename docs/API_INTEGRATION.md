@@ -138,8 +138,8 @@ Natural language property search with AI-powered semantic understanding and imag
         "lat": 40.66717,
         "lon": -111.86042
       },
-      "llm_profile": "",
-      "feature_tags": [],
+      "llm_profile": "",  // Reserved field (always empty)
+      "feature_tags": [],  // Deprecated (features now in image_tags)
       "image_tags": [
         "granite countertops",
         "stainless steel appliances",
