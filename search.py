@@ -370,24 +370,27 @@ def _os_search(body: Dict[str, Any], size: int = 50, index: str = None) -> List[
     return res.get("hits", {}).get("hits", [])
 
 
-def _rrf(*ranked_lists: List[List[Dict[str, Any]]], k: int = 60, top: int = 50) -> List[Dict[str, Any]]:
+def _rrf(*ranked_lists: List[List[Dict[str, Any]]], k: int = 60, k_values: List[int] = None, top: int = 50) -> List[Dict[str, Any]]:
     """
     Reciprocal Rank Fusion - Combine multiple ranked result lists into one.
 
     RRF is a simple but effective algorithm for fusing results from different
     search strategies (BM25, kNN text, kNN image). It works by:
     1. For each document, sum scores based on rank position in each list
-    2. Score formula: 1 / (k + rank), where k=60 is a constant
+    2. Score formula: 1 / (k + rank), where k controls weight (lower k = higher weight)
     3. Higher ranks in any list contribute more to final score
 
-    This approach gives equal weight to all search strategies and handles
-    cases where documents appear in some lists but not others.
+    ADAPTIVE SCORING: k_values can be provided to give different weights to each list.
+    Lower k = higher impact on final score. Example:
+    - k=30 for BM25 (high weight for color/material queries)
+    - k=120 for image kNN (low weight when images don't help)
 
     Reference: https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf
 
     Args:
         *ranked_lists: Variable number of result lists (each is list of OpenSearch hits)
-        k: RRF constant (controls score decay with rank, default 60)
+        k: Default RRF constant if k_values not provided (default 60)
+        k_values: List of k values per result list for adaptive weighting (e.g., [30, 60, 120])
         top: Number of top results to return after fusion
 
     Returns:
@@ -395,22 +398,75 @@ def _rrf(*ranked_lists: List[List[Dict[str, Any]]], k: int = 60, top: int = 50) 
     """
     scores: Dict[str, Dict[str, Any]] = {}
 
-    def add(listing, rank, weight=1.0):
+    # Use provided k_values or default k for all lists
+    if k_values is None:
+        k_values = [k] * len(ranked_lists)
+    elif len(k_values) != len(ranked_lists):
+        logger.warning(f"k_values length ({len(k_values)}) != ranked_lists length ({len(ranked_lists)}), using default k={k}")
+        k_values = [k] * len(ranked_lists)
+
+    def add(listing, rank, k_val):
         """Add a listing's score based on its rank in a result list."""
         _id = listing["_id"]
         entry = scores.setdefault(_id, {"doc": listing, "score": 0.0})
         # RRF formula: score += 1 / (k + rank)
-        entry["score"] += weight * (1.0 / (k + rank))
+        # Lower k = higher weight for that result list
+        entry["score"] += 1.0 / (k_val + rank)
 
-    # Process each ranked list
-    for lst in ranked_lists:
+    # Process each ranked list with its corresponding k value
+    for lst, k_val in zip(ranked_lists, k_values):
         for i, h in enumerate(lst):
-            add(h, i + 1, 1.0)  # rank is 1-indexed
+            add(h, i + 1, k_val)  # rank is 1-indexed
 
     # Sort by fused score (descending) and return top results
     fused = list(scores.values())
     fused.sort(key=lambda x: x["score"], reverse=True)
     return [x["doc"] for x in fused[:top]]
+
+
+def calculate_adaptive_weights(must_have_tags, query_type):
+    """
+    Calculate adaptive RRF k-values based on query characteristics.
+    Lower k = higher weight for that search strategy.
+
+    Returns: [bm25_k, text_knn_k, image_knn_k]
+    """
+    # Define tag categories for analysis
+    COLOR_KEYWORDS = ['white', 'gray', 'grey', 'blue', 'beige', 'brown', 'red', 'tan', 'black', 'yellow', 'green', 'cream']
+    MATERIAL_KEYWORDS = ['brick', 'stone', 'wood', 'granite', 'marble', 'quartz', 'vinyl', 'stucco', 'hardwood', 'tile', 'concrete']
+
+    # Analyze must_have tags for specific attributes
+    has_color = any(any(color in tag.lower() for color in COLOR_KEYWORDS) for tag in must_have_tags)
+    has_material = any(any(mat in tag.lower() for mat in MATERIAL_KEYWORDS) for tag in must_have_tags)
+
+    # Start with balanced weights
+    bm25_k = 60
+    text_k = 60
+    image_k = 60
+
+    # ADAPTIVE LOGIC:
+    # - Color queries: BM25 works best (tags), images fail (embeddings don't capture color)
+    # - Material queries: BM25 works well (tags), text moderate, images less reliable
+    # - Visual style: Images work best, text moderate
+    # - Specific features: All strategies work (balanced)
+
+    if has_color:
+        bm25_k = 30      # BOOST BM25 (tags have exact color info)
+        image_k = 120    # DE-BOOST images (embeddings don't distinguish colors)
+        logger.info(f"🎨 COLOR detected in tags - boosting BM25 (k=30), de-boosting images (k=120)")
+
+    if has_material:
+        bm25_k = int(bm25_k * 0.7)  # Further boost BM25 if not already boosted
+        text_k = 45      # Moderate boost for text (descriptions mention materials)
+        logger.info(f"🧱 MATERIAL detected in tags - boosting BM25 (k={bm25_k}) and text (k=45)")
+
+    if query_type == "visual_style":
+        image_k = 40     # BOOST images for architectural/visual queries
+        text_k = 45      # Moderate boost text (descriptions have style info)
+        logger.info(f"🏛️ VISUAL_STYLE query - boosting images (k=40) and text (k=45)")
+
+    logger.info(f"📊 Adaptive weights: BM25={bm25_k}, Text kNN={text_k}, Image kNN={image_k}")
+    return [bm25_k, text_k, image_k]
 
 
 # ===============================================
@@ -661,23 +717,45 @@ def handler(event, context):
     else:
         logger.info("Skipping kNN image search (geo-focused query)")
 
-    # Fuse results using RRF (only includes non-empty result lists)
-    fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, top=size * 3)
+    # Calculate adaptive RRF weights based on query characteristics
+    query_type = constraints.get("query_type", "general")
+    k_values = calculate_adaptive_weights(must_tags, query_type)
+
+    # Fuse results using RRF with adaptive weights (only includes non-empty result lists)
+    fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, k_values=k_values, top=size * 3)
     logger.info("RRF fusion produced %d results", len(fused))
 
     # Check if client wants full Zillow data from S3
     include_full_data = payload.get("include_full_data", False)
     include_nearby = payload.get("include_nearby_places", True)
 
-    # Final soft boost if all must-have tags are present
-    # Check both original format and space-converted format for compatibility
+    # Post-RRF tag boosting: Boost results matching exact must_have tags
+    # More aggressive boosting for color/material queries where exact matches matter
     final = []
     for h in fused:
         src = h.get("_source", {}) or {}
         tags = set((src.get("feature_tags") or []) + (src.get("image_tags") or []))
-        # Check if expanded tags (both formats) are satisfied
-        satisfied = expanded_must_tags.issubset(tags) if expanded_must_tags else True
-        boost = 1.0 + (0.5 if satisfied and expanded_must_tags else 0.0)
+
+        # Calculate boost based on tag match percentage
+        boost = 1.0
+        if expanded_must_tags:
+            matched_tags = expanded_must_tags.intersection(tags)
+            match_ratio = len(matched_tags) / len(expanded_must_tags)
+
+            # Progressive boosting:
+            # - 100% match: 2.0x boost (all tags present)
+            # - 75% match: 1.5x boost
+            # - 50% match: 1.25x boost
+            # - <50% match: no boost
+            if match_ratio >= 1.0:
+                boost = 2.0
+            elif match_ratio >= 0.75:
+                boost = 1.5
+            elif match_ratio >= 0.5:
+                boost = 1.25
+
+            if boost > 1.0:
+                logger.info(f"🎯 Boosting zpid={h['_id']}: {len(matched_tags)}/{len(expanded_must_tags)} tags matched ({match_ratio:.0%}) -> {boost}x")
 
         zpid = h["_id"]
 
@@ -685,7 +763,7 @@ def handler(event, context):
         result = {
             "zpid": zpid,
             "id": zpid,
-            "score": h.get("_score", 0.0),
+            "score": h.get("_score", 0.0) * boost,  # Apply multiplicative boost
             "boosted": boost > 1.0
         }
 
@@ -833,8 +911,20 @@ def lambda_handler(event, context):
 
     API Gateway uses Lambda Proxy integration, so all request details are in event.
     """
+    # CORS headers for all responses
+    cors_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, GET, OPTIONS"
+    }
+
     path = event.get('path', '')
     method = event.get('httpMethod', '')
+
+    # If no path/method (direct Lambda invocation), assume search
+    if not path and not method and 'q' in event:
+        logger.info("Direct Lambda invocation - routing to search handler")
+        return handler(event, context)
 
     logger.info(f"Router: {method} {path}")
 
