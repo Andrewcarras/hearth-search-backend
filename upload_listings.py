@@ -12,9 +12,10 @@ Processing Pipeline (per listing):
 5. Generate image embeddings via Bedrock Titan (1024-dim per image)
 6. Detect visual features via Claude 3 Haiku Vision (DynamoDB cached)
    - Extracts: features, architecture style, colors, materials, room types
-   - Cost: ~$0.00025/image (75% cheaper than Rekognition)
-7. Store complete original listing JSON in S3 (s3://demo-hearth-data/listings/{zpid}.json)
-8. Index search-relevant fields + embeddings to OpenSearch
+   - Cost: ~$0.00025/image
+7. Index search-relevant fields + embeddings to OpenSearch
+   - Complete original Zillow JSON is kept in source dataset (S3)
+   - OpenSearch stores only search-relevant fields to avoid field mapping conflicts
 
 Multi-Vector Support (Phase 2):
 - For indexes ending in "-v2": Stores ALL image vectors separately (nested array)
@@ -29,9 +30,9 @@ Self-Invocation Chain:
 - Safety limits: max 50 invocations, loop detection, idempotency checking
 
 Cost Optimizations:
-- DynamoDB caching: Prevents re-analyzing/embedding same images across re-indexes
-- S3 + OpenSearch hybrid: Complete data in S3 (cheap), only search fields in OpenSearch
-- Embedding cache: Text and image embeddings cached indefinitely
+- Unified DynamoDB caching (hearth-vision-cache): Stores both embeddings AND analysis atomically
+- Prevents re-analyzing/embedding same images across re-indexes (90%+ cache hit rate)
+- 576px image resolution for embeddings (sufficient quality, 1/4 the download size)
 
 Invocation Formats:
     # First invocation (downloads from S3)
@@ -790,8 +791,8 @@ def handler(event, context):
             doc = _build_doc(core, images)
 
             # Prepare for bulk indexing
-            # NOTE: Complete Zillow JSON stored separately in S3 (s3://demo-hearth-data/listings/{zpid}.json)
-            # This keeps OpenSearch lean and avoids field mapping conflicts
+            # NOTE: Complete Zillow JSON is kept in source dataset (slc_listings.json in S3)
+            # OpenSearch only stores search-relevant fields to keep it lean
             actions.append({"_id": core["zpid"], "_source": doc})
 
             if len(actions) >= 200:  # OK with backoff; lower to 150 if cluster is busy

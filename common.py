@@ -51,8 +51,7 @@ LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0
 TEXT_DIM = int(os.getenv("TEXT_DIM", "1024"))   # Titan Text v2 outputs 1024-dim vectors
 IMAGE_DIM = int(os.getenv("IMAGE_DIM", "1024"))  # Titan Image outputs 1024-dim vectors
 
-# Optional features
-USE_REKOGNITION = os.getenv("USE_REKOGNITION", "false").lower() in ("1", "true", "yes")  # Enable image labeling
+# Image processing configuration
 MAX_IMAGES = int(os.getenv("MAX_IMAGES", "0"))  # Max images to process per listing (0 = unlimited)
 EMBEDDING_IMAGE_WIDTH = int(os.getenv("EMBEDDING_IMAGE_WIDTH", "576"))  # Target resolution for embeddings (cost optimization)
 
@@ -92,12 +91,12 @@ os_client = OpenSearch(
 # Bedrock Runtime client for model invocations (embeddings + LLM)
 brt = session.client("bedrock-runtime", config=Config(read_timeout=30, retries={"max_attempts": 2}))
 
-# DynamoDB client for image analysis caching
+# DynamoDB client for caching
 dynamodb = session.client("dynamodb")
-CACHE_TABLE = "hearth-image-cache"
 
-# NOTE: AWS Rekognition is NOT used (replaced by Claude Haiku Vision)
-# Claude Haiku provides comprehensive analysis at 75% lower cost ($0.00025 vs $0.001 per image)
+# Legacy cache table (kept for backwards compatibility during transition)
+# New code should use cache_utils.py with hearth-vision-cache and hearth-text-embeddings
+CACHE_TABLE = "hearth-image-cache"  # Old cache table - being phased out
 
 # ===============================================
 # EMBEDDING GENERATION FUNCTIONS
@@ -238,7 +237,13 @@ def vec_mean(vectors: List[List[float]], target_dim: int) -> List[float]:
 
 def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 100) -> Dict[str, Any]:
     """
-    UNIFIED comprehensive vision analysis using Claude 3 Haiku.
+    LEGACY: Comprehensive vision analysis using Claude 3 Haiku.
+
+    **DEPRECATED:** New code should use detect_labels_with_response() instead,
+    which returns both the analysis AND raw LLM response for better caching.
+
+    This function is kept for backwards compatibility with existing code that
+    hasn't been updated to use the new unified caching system (cache_utils.py).
 
     Analyzes a single property image and extracts EVERYTHING in one pass:
     - All visible features and amenities
@@ -247,11 +252,7 @@ def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 100) 
     - Room type identification
     - Whether image is interior or exterior
 
-    This replaces both the old detect_labels AND classify_architecture_style_vision
-    functions, eliminating redundant LLM calls.
-
     Cost: ~$0.00025 per image (Haiku)
-    Savings: Eliminates $0.0015 Sonnet call per listing
 
     Args:
         img_bytes: Raw image bytes
@@ -270,7 +271,7 @@ def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 100) 
             "confidence": "high" or "medium" or "low"
         }
     """
-    # Check cache first
+    # Check OLD cache first (backwards compatibility)
     if image_url:
         try:
             cached = dynamodb.get_item(
@@ -451,24 +452,38 @@ IMPORTANT: Be thorough. A good analysis should have 30-50+ features for a detail
 
 def detect_labels_with_response(img_bytes: bytes, image_url: str = "", max_labels: int = 100) -> Dict[str, Any]:
     """
-    Same as detect_labels but also returns the raw LLM response for caching.
+    Comprehensive vision analysis that returns both parsed analysis AND raw LLM response.
 
-    This is used by the new unified caching system to store both the parsed
-    analysis AND the raw LLM response for debugging and re-parsing.
+    This function is used by the new unified caching system (cache_utils.py) to enable:
+    - Storing both the parsed analysis and raw LLM response atomically
+    - Debugging failed parses by inspecting raw LLM output
+    - Re-parsing without re-calling the LLM
+
+    NOTE: This function checks the OLD cache (hearth-image-cache) for backwards
+    compatibility. The actual caching to the NEW cache (hearth-vision-cache) is
+    done by cache_utils.cache_image_data() in the calling code.
 
     Args:
         img_bytes: Raw image bytes
-        image_url: URL of the image (used for caching)
+        image_url: URL of the image (for old cache lookup)
         max_labels: Maximum number of features to return (default 100)
 
     Returns:
         Dictionary with:
         {
-            "analysis": {parsed analysis dict},
-            "llm_response": "raw response text from Claude"
+            "analysis": {
+                "features": [...],
+                "image_type": "exterior" or "interior",
+                "architecture_style": "modern" or null,
+                "exterior_color": "blue" or null,
+                "materials": [...],
+                "visual_features": [...],
+                "confidence": "high"/"medium"/"low"
+            },
+            "llm_response": "raw response text from Claude (or empty if from old cache)"
         }
     """
-    # Check cache first (note: old cache format, will be replaced)
+    # Check OLD cache for backwards compatibility (during transition period)
     if image_url:
         try:
             cached = dynamodb.get_item(
