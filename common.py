@@ -21,7 +21,7 @@ import logging
 import os
 import time
 import random
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List
 from urllib.parse import urlparse
 
 import boto3
@@ -97,8 +97,8 @@ brt = session.client("bedrock-runtime", config=Config(read_timeout=30, retries={
 dynamodb = session.client("dynamodb")
 CACHE_TABLE = "hearth-image-cache"
 
-# Rekognition client for image label detection (DEPRECATED - replaced by Claude Haiku)
-rekog = None  # Disabled to reduce costs
+# NOTE: AWS Rekognition is NOT used (replaced by Claude Haiku Vision)
+# Claude Haiku provides comprehensive analysis at 75% lower cost ($0.00025 vs $0.001 per image)
 
 # ===============================================
 # EMBEDDING GENERATION FUNCTIONS
@@ -251,44 +251,9 @@ def vec_mean(vectors: List[List[float]], target_dim: int) -> List[float]:
     return [s / len(vectors) for s in sums]
 
 
-def _get_cached_labels(image_url: str) -> Optional[List[str]]:
-    """
-    DEPRECATED: Legacy function for backward compatibility.
-    Use detect_labels() which returns comprehensive analysis.
-    """
-    try:
-        response = dynamodb.get_item(
-            TableName=CACHE_TABLE,
-            Key={"image_url": {"S": image_url}}
-        )
-        # Try new comprehensive format first
-        if "Item" in response and "comprehensive_analysis" in response["Item"]:
-            analysis = json.loads(response["Item"]["comprehensive_analysis"]["S"])
-            return analysis.get("features", [])
-        # Fallback to old format
-        if "Item" in response and "labels" in response["Item"]:
-            return json.loads(response["Item"]["labels"]["S"])
-    except Exception as e:
-        logger.warning(f"Cache read failed for {image_url}: {e}")
-    return None
-
-
-def _cache_labels(image_url: str, labels: List[str]):
-    """
-    DEPRECATED: Legacy function for backward compatibility.
-    Use detect_labels() which caches comprehensive analysis.
-    """
-    try:
-        dynamodb.put_item(
-            TableName=CACHE_TABLE,
-            Item={
-                "image_url": {"S": image_url},
-                "labels": {"S": json.dumps(labels)},
-                "analyzed_at": {"N": str(int(time.time()))}
-            }
-        )
-    except Exception as e:
-        logger.warning(f"Cache write failed for {image_url}: {e}")
+# NOTE: _get_cached_labels() and _cache_labels() removed
+# These legacy functions are replaced by detect_labels() which caches comprehensive analysis
+# See git history if restoration is needed
 
 
 def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 100) -> Dict[str, Any]:
@@ -565,9 +530,10 @@ def create_index_if_needed():
 
                 # Text content for search
                 "description": {"type": "text"},  # Original/fallback description
-                "llm_profile": {"type": "text"},  # LLM-normalized description
+                "llm_profile": {"type": "text"},  # LLM-normalized description (deprecated, always empty)
+                "visual_features_text": {"type": "text"},  # Generated from image analyses (NEW)
                 "feature_tags": {"type": "keyword"},  # Extracted features (pool, garage, etc.)
-                "image_tags": {"type": "keyword"},  # Rekognition labels (kitchen, brick, etc.)
+                "image_tags": {"type": "keyword"},  # Vision-detected labels (kitchen, brick, etc.)
                 "architecture_style": {"type": "keyword"},  # Architecture style (modern, craftsman, etc.)
 
                 # Vector embeddings for semantic search

@@ -10,14 +10,21 @@
 
 1. [Quick Start](#quick-start)
 2. [API Endpoints](#api-endpoints)
+   - [Search Properties (POST /search)](#post-search)
+   - [Get Single Listing (GET /listings/{zpid})](#get-listingszpid)
+   - [Update Listing (PATCH /listings/{zpid})](#patch-listingszpid)
+   - [Create Listing (POST /listings)](#post-listings)
+   - [Delete Listing (DELETE /listings/{zpid})](#delete-listingszpid)
 3. [Request Format](#request-format)
 4. [Response Format](#response-format)
 5. [Search Features](#search-features)
 6. [Filters](#filters)
-7. [Error Handling](#error-handling)
-8. [Code Examples](#code-examples)
-9. [Rate Limits & Performance](#rate-limits--performance)
-10. [CORS Configuration](#cors-configuration)
+7. [CRUD Operations](#crud-operations)
+   - [Managing For Sale/Sold Status](#managing-for-salesold-status)
+8. [Error Handling](#error-handling)
+9. [Code Examples](#code-examples)
+10. [Rate Limits & Performance](#rate-limits--performance)
+11. [CORS Configuration](#cors-configuration)
 
 ---
 
@@ -56,6 +63,115 @@ Natural language property search with AI-powered semantic understanding and imag
 **Content-Type:** `application/json`
 
 **Authentication:** None (public API)
+
+---
+
+### GET /listings/{zpid}
+
+Retrieve a single property listing by Zillow Property ID (zpid).
+
+**Endpoint:** `https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/{zpid}`
+
+**Method:** `GET`
+
+**Query Parameters:**
+- `include_full_data` (boolean, optional): Include complete Zillow data from S3 (166+ fields)
+- `include_nearby_places` (boolean, optional, default: true): Include nearby places from Google Places API
+- `index` (string, optional, default: "listings"): Target index name
+
+**Example:**
+```bash
+GET /listings/456567015?include_full_data=true&index=listings-v2
+```
+
+---
+
+### PATCH /listings/{zpid}
+
+Update any fields in an existing listing. Supports adding custom fields dynamically.
+
+**Endpoint:** `https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/{zpid}`
+
+**Method:** `PATCH`
+
+**Content-Type:** `application/json`
+
+**Query Parameters:**
+- `index` (string, optional, default: "listings"): Target index name
+
+**Request Body:**
+```json
+{
+  "updates": {
+    "field_name": "new_value",
+    "another_field": 12345
+  },
+  "options": {
+    "preserve_embeddings": true,
+    "remove_fields": ["field_to_delete"]
+  }
+}
+```
+
+---
+
+### POST /listings
+
+Create a new listing with optional image processing and AI analysis.
+
+**Endpoint:** `https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings`
+
+**Method:** `POST`
+
+**Content-Type:** `application/json`
+
+**Query Parameters:**
+- `index` (string, optional, default: "listings"): Target index name
+
+**Request Body:**
+```json
+{
+  "listing": {
+    "zpid": "optional_custom_id",
+    "price": 500000,
+    "bedrooms": 3,
+    "bathrooms": 2,
+    "address": "123 Main St",
+    "city": "Salt Lake City",
+    "state": "UT",
+    "description": "Beautiful home...",
+    "images": ["url1", "url2"]
+  },
+  "options": {
+    "process_images": true,
+    "generate_embeddings": true,
+    "source": "user"
+  }
+}
+```
+
+---
+
+### DELETE /listings/{zpid}
+
+Delete a listing (soft or hard delete).
+
+**Endpoint:** `https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/{zpid}`
+
+**Method:** `DELETE`
+
+**Query Parameters:**
+- `soft` (boolean, optional, default: true): If true, marks as deleted but keeps in index. If false, permanently removes.
+- `index` (string, optional, default: "listings"): Target index name
+
+**Example:**
+```bash
+# Soft delete (mark as deleted, keep in index)
+DELETE /listings/456567015?soft=true
+
+# Hard delete (permanently remove)
+DELETE /listings/456567015?soft=false
+```
 
 ---
 
@@ -291,6 +407,258 @@ Results are ranked using:
   }
 }
 ```
+
+---
+
+## CRUD Operations
+
+The API provides full CRUD (Create, Read, Update, Delete) capabilities for managing property listings. All operations support **dynamic fields**, meaning you can add any custom field to any listing without predefined schema restrictions.
+
+### Key Features
+
+- ✅ **Schema-less**: Add any field to any listing
+- ✅ **Dynamic mapping**: OpenSearch auto-detects field types
+- ✅ **Immediate retrieval**: All fields returned in GET and search responses
+- ✅ **No code changes**: Add custom fields without redeploying
+
+---
+
+### Managing For Sale/Sold Status
+
+One of the most common use cases is managing listing status (for sale, pending, sold, etc.). Here's how to implement this:
+
+#### Recommended Status Fields
+
+```json
+{
+  "listing_status": "for_sale" | "pending" | "sold" | "off_market",
+  "list_date": "2025-01-14",
+  "sold_date": "2025-03-01",
+  "asking_price": 500000,
+  "sold_price": 525000,
+  "days_on_market": 45,
+  "listing_agent": "Jane Smith",
+  "listing_agent_email": "jane@realty.com",
+  "mls_number": "MLS123456"
+}
+```
+
+#### Example: Mark Property as For Sale
+
+```bash
+curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015?index=listings-v2 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "updates": {
+      "listing_status": "for_sale",
+      "list_date": "2025-01-14",
+      "asking_price": 500000,
+      "listing_agent": "Jane Smith",
+      "mls_number": "MLS123456"
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "zpid": "456567015",
+  "updated_fields": ["listing_status", "list_date", "asking_price", "listing_agent", "mls_number"],
+  "removed_fields": []
+}
+```
+
+#### Example: Mark Property as Sold
+
+```bash
+curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015?index=listings-v2 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "updates": {
+      "listing_status": "sold",
+      "sold_date": "2025-03-01",
+      "sold_price": 525000,
+      "days_on_market": 45
+    }
+  }'
+```
+
+#### Example: Retrieve Listing with Status
+
+```bash
+curl https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015?index=listings-v2
+```
+
+**Response includes all custom fields:**
+```json
+{
+  "ok": true,
+  "listing": {
+    "zpid": "456567015",
+    "price": 500000,
+    "bedrooms": 3,
+    "bathrooms": 2,
+    "description": "Beautiful home...",
+
+    // ✅ Custom fields automatically returned
+    "listing_status": "sold",
+    "list_date": "2025-01-14",
+    "sold_date": "2025-03-01",
+    "asking_price": 500000,
+    "sold_price": 525000,
+    "days_on_market": 45,
+    "listing_agent": "Jane Smith",
+    "mls_number": "MLS123456",
+
+    "images": [...],
+    "geo": {...}
+  }
+}
+```
+
+#### Example: Search Results Include Custom Fields
+
+When you search, all custom fields are automatically included:
+
+```bash
+curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search \
+  -H 'Content-Type: application/json' \
+  -d '{"q":"modern homes","size":10,"index":"listings-v2"}'
+```
+
+**Each result includes custom fields:**
+```json
+{
+  "ok": true,
+  "results": [
+    {
+      "zpid": "456567015",
+      "score": 4.5,
+      "price": 500000,
+
+      // ✅ Custom fields in search results
+      "listing_status": "sold",
+      "sold_date": "2025-03-01",
+      "sold_price": 525000,
+
+      // ... other fields
+    }
+  ]
+}
+```
+
+---
+
+### UI Implementation Example
+
+```javascript
+// Display listing status badge in UI
+function renderStatusBadge(listing) {
+  switch (listing.listing_status) {
+    case 'sold':
+      return `
+        <div class="badge badge-sold">
+          SOLD ${listing.sold_date}
+          <br>
+          Sale Price: $${listing.sold_price.toLocaleString()}
+          <br>
+          ${listing.days_on_market} days on market
+        </div>
+      `;
+
+    case 'pending':
+      return `
+        <div class="badge badge-pending">
+          PENDING SALE
+          <br>
+          Listed: ${listing.list_date}
+        </div>
+      `;
+
+    case 'for_sale':
+      return `
+        <div class="badge badge-for-sale">
+          FOR SALE
+          <br>
+          $${listing.asking_price.toLocaleString()}
+          <br>
+          Listed: ${listing.list_date}
+        </div>
+      `;
+
+    default:
+      return '';
+  }
+}
+
+// Usage in React/Vue/vanilla JS
+listings.forEach(listing => {
+  const statusBadge = renderStatusBadge(listing);
+  // Render badge in property card
+});
+```
+
+---
+
+### Additional Custom Field Examples
+
+#### Example: Add Agent Contact Information
+
+```bash
+curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "updates": {
+      "listing_agent": "Jane Smith",
+      "listing_agent_email": "jane@realty.com",
+      "listing_agent_phone": "555-1234",
+      "brokerage": "Premier Realty"
+    }
+  }'
+```
+
+#### Example: Add Open House Information
+
+```bash
+curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "updates": {
+      "open_house_dates": ["2025-01-20", "2025-01-21"],
+      "open_house_times": "1:00 PM - 4:00 PM",
+      "open_house_notes": "Refreshments served"
+    }
+  }'
+```
+
+#### Example: Add Property Highlights
+
+```bash
+curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "updates": {
+      "highlights": [
+        "Recently renovated kitchen",
+        "New HVAC system (2024)",
+        "Solar panels installed"
+      ],
+      "virtual_tour_url": "https://...",
+      "property_video_url": "https://..."
+    }
+  }'
+```
+
+---
+
+### Important Notes
+
+1. **All custom fields are immediately searchable** via OpenSearch (depending on field type)
+2. **Field types are auto-detected**: strings become `text`, numbers become `long`/`float`, etc.
+3. **Embeddings are preserved** by default when updating (no need to regenerate expensive AI vectors)
+4. **Updates are atomic** - each property updated independently
+5. **No schema conflicts** - dynamic fields don't conflict with predefined fields
 
 ---
 
@@ -727,6 +1095,15 @@ Include in your report:
 ---
 
 ## Changelog
+
+### Version 1.1 (2025-01-14)
+- ✨ **NEW**: Enhanced visual feature matching - Text embeddings now include image analysis
+- ✨ **NEW**: `visual_features_text` field - AI-generated description from photo analysis
+- 📚 **NEW**: Complete CRUD API documentation
+- 📚 **NEW**: For Sale/Sold status management guide
+- 🔧 Improved BM25 search with visual features (weight: 2.5)
+- 🔧 Enhanced kNN text search includes visual characteristics
+- 📊 Updated score breakdown UI with visual features explanation
 
 ### Version 1.0 (2025-10-13)
 - Initial production release

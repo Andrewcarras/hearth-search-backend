@@ -1,38 +1,53 @@
 #!/usr/bin/env python3
 """
-Local indexing script - Run upload_listings.py on your computer instead of Lambda.
+index_local.py - Local indexing script for running upload_listings.py on your computer
 
-OPTIMIZED & FULLY CONFIGURABLE:
-- Loads S3 data ONCE (not per-listing)
-- 5-10x faster than Lambda chain
-- No hardcoded values - works with any bucket/file
-- Calculates all metrics dynamically
-- Same DynamoDB caching (saves costs!)
+This script provides a local alternative to Lambda-based indexing with better control
+and debugging capabilities. It processes listings in parallel batches for speed.
 
-Benefits:
-- Full control (start/stop anytime)
-- No Lambda timeouts
-- Better debugging
-- Works with any JSON file format
+Key Advantages over Lambda:
+- 5-10x faster: Parallel batch processing (default 5 concurrent)
+- No timeouts: Run as long as needed (Lambda has 15min limit)
+- Better debugging: Full control, detailed progress tracking
+- Resume capability: Start from any index with --start
+- Live progress: Real-time ETA, rate, and completion stats
 
-Usage:
+Optimizations:
+- Loads S3 data ONCE (Lambda chain re-downloads multiple times)
+- Parallel processing: Process multiple listings simultaneously
+- Same DynamoDB caching: Leverages existing embedding/analysis cache
+- Verification: Confirms each listing indexed to OpenSearch
+
+Configuration:
+- No hardcoded values - all configurable via arguments
+- Works with any S3 bucket/file and JSON format
+- Supports both single-vector (listings) and multi-vector (listings-v2) schemas
+- Dynamic batching based on --batch-size
+
+Usage Examples:
     # Index all listings from a file
     python3 index_local.py --bucket demo-hearth-data --key slc_listings.json
 
     # Test with first 30 listings
     python3 index_local.py --bucket demo-hearth-data --key slc_listings.json --limit 30
 
-    # Resume from listing 500
+    # Resume from listing 500 (if previous run interrupted)
     python3 index_local.py --bucket demo-hearth-data --key slc_listings.json --start 500
 
     # Index to listings-v2 (multi-vector schema)
     python3 index_local.py --bucket demo-hearth-data --key slc_listings.json --index listings-v2
 
-    # Process specific range (listings 100-150)
+    # Process specific range (listings 100-150 only)
     python3 index_local.py --bucket demo-hearth-data --key murray_listings.json --start 100 --limit 50
+
+    # Faster processing: 10 parallel, limit to 5 images per listing
+    python3 index_local.py --bucket demo-hearth-data --key slc_listings.json --batch-size 10 --max-images 5
 
 Requirements:
     pip install boto3 opensearch-py requests requests-aws4auth
+
+Note: This script calls upload_listings.handler() for each listing, so all processing
+logic, DynamoDB caching, and Bedrock calls are identical to Lambda execution.
 """
 
 import argparse

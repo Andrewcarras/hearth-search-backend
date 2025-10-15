@@ -1,38 +1,40 @@
 """
 search.py - Lambda function for natural language property search
 
-This Lambda implements a sophisticated hybrid search strategy that combines:
+This Lambda implements a sophisticated hybrid search strategy combining:
 1. BM25 full-text search on property descriptions
 2. kNN vector similarity search on text embeddings
-3. kNN vector similarity search on image embeddings
-4. Reciprocal Rank Fusion (RRF) to combine results
-5. On-demand geolocation enrichment with nearby places
+3. kNN vector similarity search on image embeddings (multi-vector support)
+4. Reciprocal Rank Fusion (RRF) to combine results with adaptive weighting
+5. On-demand geolocation enrichment with nearby places (cached in DynamoDB)
 
-The search pipeline:
+Search Pipeline:
 1. Parse natural language query using Claude LLM to extract:
    - Required features (must_have tags like "pool", "garage")
    - Numeric filters (price range, bedroom/bathroom minimums)
-   - Proximity mentions (for logging only - not used for filtering)
-2. Generate query embedding vector
-3. Execute three parallel searches:
+   - Architecture style (modern, craftsman, etc.)
+   - Proximity requirements (near school, gym, etc.)
+2. Generate query embedding vector via Bedrock Titan
+3. Execute three parallel OpenSearch queries:
    - BM25: Traditional keyword search with field boosting
    - kNN text: Semantic similarity on description embeddings
-   - kNN image: Visual similarity on property photo embeddings
-4. Fuse results using RRF algorithm (combines rankings from multiple sources)
-5. Apply soft boost for properties matching all required tags
-6. Fetch complete listing data from S3 for top results
-7. Enrich each result with nearby places from Google Places API (New)
-8. Return ranked, enriched results with all original Zillow data + nearby_places
+   - kNN image: Visual similarity on property photo embeddings (nested for multi-vector)
+4. Fuse results using adaptive RRF algorithm (dynamic k-values based on query type)
+5. Apply tag-based boosting (2.0x for 100% match, 1.5x for 75%, etc.)
+6. Optionally fetch complete listing data from S3 (166+ Zillow fields)
+7. Enrich with nearby places from Google Places API (on-demand, cached)
+8. Return ranked, enriched results
 
-On-Demand Geolocation Approach:
-- OLD: Find one grocery store, filter all 1,588 listings, return those within 5km (~$27/search)
-- NEW: Return best matches, enrich each with ITS OWN nearby places (~$0.26/search)
-- 100x more cost-effective and provides better UX (each home shows what's near IT)
+Geolocation Enrichment:
+- Enriches EACH result with nearby places using Google Places API
+- DynamoDB caching prevents duplicate API calls (~100m precision)
+- Cost: ~$0.017 per cache miss, $0 per hit
+- 100x cheaper than pre-filtering all listings by proximity
 
-Example queries:
+Example Queries:
 - "3 bedroom house with pool under $500k"
 - "Modern home with open floor plan and mountain views"
-- "Show me homes near a grocery store" (returns all matches, each shows nearby places)
+- "Show me homes near a grocery store" (returns best matches, each shows nearby places)
 """
 
 import json
@@ -562,7 +564,10 @@ def handler(event, context):
 
     # Override index if specified in payload (for UI index switching)
     target_index = payload.get("index", OS_INDEX)
-    logger.info("Search query: '%s', size=%d, index=%s", q, size, target_index)
+
+    # Boost mode for A/B testing visual features weight
+    boost_mode = payload.get("boost_mode", "standard")  # standard | conservative | aggressive
+    logger.info("Search query: '%s', size=%d, index=%s, boost_mode=%s", q, size, target_index, boost_mode)
 
     constraints = extract_query_constraints(q)
     hard_filters = constraints.get("hard_filters", {})
@@ -623,6 +628,20 @@ def handler(event, context):
         expanded_must_tags.add(tag.replace("_", " "))  # Space format (e.g., "blue exterior")
 
     # 1) BM25 over text fields (tags as soft boosts via terms)
+    # Boost modes for A/B testing visual features weight:
+    # - standard: description^3, visual_features_text^2.5 (original)
+    # - conservative: description^3, visual_features_text^3.5 (slight visual boost)
+    # - aggressive: description^3, visual_features_text^5 (strong visual boost)
+    if boost_mode == "conservative":
+        desc_boost = 3
+        visual_boost = 3.5
+    elif boost_mode == "aggressive":
+        desc_boost = 3
+        visual_boost = 5
+    else:  # standard
+        desc_boost = 3
+        visual_boost = 2.5
+
     bm25_query = {
         "query": {
             "bool": {
@@ -632,11 +651,12 @@ def handler(event, context):
                         "multi_match": {
                             "query": q,
                             "fields": [
-                                "description^3",
-                                "llm_profile^2",
-                                "address^0.5",
-                                "city^0.3",
-                                "state^0.2"
+                                f"description^{desc_boost}",           # Original Zillow description
+                                f"visual_features_text^{visual_boost}", # AI-generated from image analysis
+                                "llm_profile^2",           # Deprecated, always empty (kept for compatibility)
+                                "address^0.5",             # Street address (low weight)
+                                "city^0.3",                # City name (low weight)
+                                "state^0.2"                # State (low weight)
                             ],
                             "type": "best_fields"
                         }
@@ -912,14 +932,26 @@ def get_listing_handler(event, context):
     """
     Get a single listing by zpid.
 
-    Supports GET /listings/{zpid}?include_full_data=true
+    Endpoint: GET /listings/{zpid}
+    Query Parameters:
+        - include_full_data (bool): If true, merges complete Zillow data from S3
+        - include_nearby_places (bool): If true, enriches with Google Places data (default: true)
+        - index (str): Target index name (default: listings)
 
-    Returns complete listing with all OpenSearch fields, optionally merged with
-    full Zillow data from S3, and enriched with nearby places.
+    Returns:
+        Complete listing with all OpenSearch fields, optionally merged with
+        full Zillow data from S3 and enriched with nearby places.
 
     Example:
         GET /listings/12345?include_full_data=true&include_nearby_places=true
     """
+    # CORS headers for all responses
+    cors_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, GET, OPTIONS"
+    }
+
     logger.info("get_listing_handler invoked")
 
     # Extract zpid from path parameters

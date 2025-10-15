@@ -389,6 +389,52 @@
             font-weight: 500;
         }
 
+        .boost-selector {
+            background: #e3f2ff;
+            border: 2px solid #006aff;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .boost-selector label {
+            font-weight: 600;
+            color: #004494;
+            font-size: 14px;
+        }
+        .boost-selector select {
+            padding: 8px 12px;
+            border: 2px solid #006aff;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            background: white;
+            cursor: pointer;
+        }
+        .boost-indicator {
+            color: #004494;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .info-button {
+            background: #006aff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .info-button:hover {
+            background: #0056cc;
+        }
+
         @media (max-width: 768px) {
             .property-grid {
                 grid-template-columns: 1fr;
@@ -562,6 +608,18 @@
             <span class="index-indicator" id="indexIndicator">Currently using: <strong>listings</strong></span>
         </div>
 
+        <!-- Boost Mode Selector -->
+        <div class="boost-selector">
+            <label for="boostSelector">⚡ Visual Features Boost:</label>
+            <select id="boostSelector">
+                <option value="standard">Standard (2.5x)</option>
+                <option value="conservative">Conservative (3.5x)</option>
+                <option value="aggressive">Aggressive (5.0x)</option>
+            </select>
+            <span class="boost-indicator" id="boostIndicator">Mode: <strong>Standard</strong></span>
+            <button class="info-button" onclick="showBoostInfo()" title="Learn about boost modes">?</button>
+        </div>
+
         <div class="search-card">
             <div class="search-box">
                 <input type="text" id="searchQuery" placeholder="Try: modern home with mountain views" value="modern homes">
@@ -634,6 +692,7 @@
         let currentProperty = null;
         let currentImageIndex = 0;
         let selectedIndex = 'listings';
+        let selectedBoostMode = 'standard';
 
         // Update index when selector changes
         document.addEventListener('DOMContentLoaded', () => {
@@ -645,7 +704,46 @@
                 indicator.innerHTML = `Currently using: <strong>${selectedIndex}</strong>`;
                 console.log('Switched to index:', selectedIndex);
             });
+
+            // Update boost mode when selector changes
+            const boostSelector = document.getElementById('boostSelector');
+            const boostIndicator = document.getElementById('boostIndicator');
+
+            boostSelector.addEventListener('change', (e) => {
+                selectedBoostMode = e.target.value;
+                const modeName = e.target.options[e.target.selectedIndex].text.split(' (')[0];
+                boostIndicator.innerHTML = `Mode: <strong>${modeName}</strong>`;
+                console.log('Switched to boost mode:', selectedBoostMode);
+            });
         });
+
+        function showBoostInfo() {
+            alert(`Visual Features Boost Modes
+
+WHAT IT DOES:
+Controls how much weight is given to AI-generated visual features vs. original property descriptions in search ranking.
+
+MODES:
+• Standard (2.5x): Description=3x, Visual Features=2.5x
+  - Default balanced mode
+  - Descriptions slightly prioritized
+
+• Conservative (3.5x): Description=3x, Visual Features=3.5x
+  - Visual features slightly prioritized
+  - Better for architectural/style queries
+
+• Aggressive (5.0x): Description=3x, Visual Features=5.0x
+  - Visual features heavily prioritized
+  - Best for finding specific styles/materials
+
+VISUAL FEATURES INCLUDE:
+- Architecture style (modern, craftsman, ranch, etc.)
+- Exterior color (white, gray, brick, etc.)
+- Materials (wood, stone, vinyl, etc.)
+- Interior features from images
+
+TIP: Try "modern white house" in different modes to see ranking changes!`);
+        }
 
         async function performSearch() {
             const query = document.getElementById('searchQuery').value.trim();
@@ -657,7 +755,8 @@
             const payload = {
                 q: query,
                 size: 30,
-                index: selectedIndex
+                index: selectedIndex,
+                boost_mode: selectedBoostMode
             };
             const priceMin = document.getElementById('priceMin').value;
             const priceMax = document.getElementById('priceMax').value;
@@ -1056,6 +1155,49 @@
                 </p>
             </div>`;
 
+            // PROPERTY TEXT CONTENT SECTION (NEW)
+            html += `<div class="score-section" style="background:#f0f8ff;border-left-color:#4a90e2;">
+                <h4 style="color:#4a90e2;">📄 Property Text Content</h4>
+                <p style="color:#666;font-size:12px;margin:8px 0 10px 0;">
+                    This shows what text is actually being searched by BM25 and embedded for kNN text search.
+                </p>
+
+                <div style="margin-bottom:15px;">
+                    <strong style="color:#333;">Original Description ${infoTooltip('The property description from Zillow. This is searched with highest weight (3.0) in BM25.')}</strong>
+                    <div style="background:#fff;border:1px solid #ddd;padding:10px;border-radius:4px;margin-top:5px;max-height:150px;overflow-y:auto;">
+                        ${currentProperty.description || '<em style="color:#999;">No description available</em>'}
+                    </div>
+                </div>
+
+                ${currentProperty.visual_features_text ? `
+                <div style="margin-bottom:15px;">
+                    <strong style="color:#333;">Visual Features Text ${infoTooltip('AI-generated description from analyzing all property images. Includes architecture style, colors, materials, and features detected by Claude Haiku Vision. Searched with weight 2.5 in BM25 and included in text embeddings for semantic search.')}</strong>
+                    <div style="background:#fff3cd;border:1px solid #ffc107;padding:10px;border-radius:4px;margin-top:5px;max-height:150px;overflow-y:auto;">
+                        ${currentProperty.visual_features_text}
+                    </div>
+                    <p style="color:#856404;font-size:11px;margin:5px 0 0 0;">
+                        ✨ This visual content enhances both keyword matching (BM25) and semantic search (kNN text)
+                    </p>
+                </div>
+                ` : `
+                <div style="background:#f8d7da;border:1px solid #f5c6cb;padding:10px;border-radius:4px;">
+                    <strong style="color:#721c24;">⚠️ Visual Features Text Missing</strong>
+                    <p style="color:#721c24;font-size:12px;margin:5px 0 0 0;">
+                        This property hasn't been re-indexed with visual feature extraction yet.
+                    </p>
+                </div>
+                `}
+
+                <div style="background:#e7f3ff;border:1px solid #b3d9ff;padding:10px;border-radius:4px;margin-top:10px;">
+                    <strong style="color:#004085;">How Text Matching Works:</strong>
+                    <ul style="margin:8px 0 0 0;padding-left:20px;color:#004085;font-size:12px;line-height:1.6;">
+                        <li><strong>BM25:</strong> Searches both description (3.0x) and visual_features_text (2.5x) for keywords</li>
+                        <li><strong>kNN Text:</strong> Embeds <em>description + visual_features_text</em> into 1024-dim vector for semantic similarity</li>
+                        <li><strong>Result:</strong> Queries match on visual features even if not in original description!</li>
+                    </ul>
+                </div>
+            </div>`;
+
             // EXPLANATION HEADER
             html += `<div class="score-section" style="background:#e8f4f8;border-left-color:#0066cc;">
                 <h4 style="color:#0066cc;">📚 How This Score Was Calculated</h4>
@@ -1109,8 +1251,11 @@
                     html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #28a745;border-radius:4px;">
                         <strong style="color:#28a745;font-size:16px;">📝 BM25 Full-Text Search</strong>
                         <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
-                            BM25 searches text fields (description, address, tags) using keyword matching.
-                            It finds properties where the query words appear in the text, with boosting for exact tag matches.
+                            BM25 searches text fields using keyword matching with field-specific boosting:<br>
+                            • <strong>description</strong> (weight: 3.0) - Original Zillow listing text<br>
+                            • <strong>visual_features_text</strong> (weight: 2.5) - AI-generated from image analysis (NEW!)<br>
+                            • <strong>address, city, state</strong> (weights: 0.5-0.2) - Location fields<br>
+                            Plus: Exact matches on feature_tags and image_tags get additional boost.<br>
                             This search returned <strong>${bm25_debug.hits_count} total results</strong>.
                         </p>
                         <div class="score-metric">
@@ -1146,13 +1291,18 @@
                     html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #007bff;border-radius:4px;">
                         <strong style="color:#007bff;font-size:16px;">🧠 kNN Text Similarity Search</strong>
                         <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
-                            kNN text search converts the query into a 1536-dimensional vector and finds properties
-                            with similar text embeddings using cosine similarity. This captures semantic meaning beyond exact keywords.
+                            kNN text search converts the query into a 1024-dimensional vector and finds properties
+                            with similar text embeddings using cosine similarity. This captures semantic meaning beyond exact keywords.<br>
+                            <strong>Property vectors embed:</strong> description + visual_features_text (NEW! - includes image analysis)<br>
                             This search returned <strong>${knn_text_debug.hits_count} total results</strong>.
                         </p>
                         <div class="score-metric">
-                            <span class="score-label">Query Vector ${infoTooltip('Your query converted into a 1536-dimensional vector using Amazon Titan text embedding model. This captures semantic meaning.')}</span>
-                            <span class="score-value">1536-dimensional embedding from: "${debug_info.query.original_query}"</span>
+                            <span class="score-label">Query Vector ${infoTooltip('Your query converted into a 1024-dimensional vector using Amazon Titan text embedding model. This captures semantic meaning.')}</span>
+                            <span class="score-value">1024-dimensional embedding from: "${debug_info.query.original_query}"</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Property Vector ${infoTooltip('Each property\'s vector embeds both the original description AND visual features detected in images (architecture, colors, materials). This allows semantic matching on visual characteristics!')}</span>
+                            <span class="score-value">1024-dim from: description + visual_features_text</span>
                         </div>
                         <div class="score-metric">
                             <span class="score-label">Rank in kNN Text Results ${infoTooltip('Position of this property when ranked by text embedding similarity (1=most semantically similar). Uses vector distance to find meaning, not just keywords.')}</span>

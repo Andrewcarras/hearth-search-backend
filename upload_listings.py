@@ -1,30 +1,47 @@
 """
 upload_listings.py - Lambda function for indexing real estate listings to OpenSearch
 
-This Lambda function processes Zillow property listings and indexes them into OpenSearch
-with rich multimodal embeddings for semantic search.
+This Lambda processes Zillow property listings and indexes them into OpenSearch
+with multimodal embeddings (text + images) for semantic search.
 
-Processing pipeline for each listing:
-1. Extract core fields (price, beds, location, etc.) from Zillow JSON
-2. Generate fallback description if missing
-3. Generate text embeddings from description using Bedrock Titan
-4. Download and process up to MAX_IMAGES property photos
-5. Generate image embeddings using Bedrock Titan
-6. Detect visual features using Claude 3 Haiku Vision (with DynamoDB caching)
-7. Store complete original listing JSON in S3 for later retrieval
-8. Index search fields + embeddings to OpenSearch
+Processing Pipeline (per listing):
+1. Extract core fields (price, beds, location, geo coordinates) from Zillow JSON
+2. Generate fallback description if missing (from available fields)
+3. Generate text embedding from description via Bedrock Titan (1024-dim)
+4. Download property photos (up to MAX_IMAGES, default unlimited)
+5. Generate image embeddings via Bedrock Titan (1024-dim per image)
+6. Detect visual features via Claude 3 Haiku Vision (DynamoDB cached)
+   - Extracts: features, architecture style, colors, materials, room types
+   - Cost: ~$0.00025/image (75% cheaper than Rekognition)
+7. Store complete original listing JSON in S3 (s3://demo-hearth-data/listings/{zpid}.json)
+8. Index search-relevant fields + embeddings to OpenSearch
+
+Multi-Vector Support (Phase 2):
+- For indexes ending in "-v2": Stores ALL image vectors separately (nested array)
+- Enables max-match search: Property ranks high if ANY image matches well
+- Legacy indexes: Average all image vectors into single vector
+
+Self-Invocation Chain:
+- Processes listings in batches (default: 500 per invocation)
+- Automatically invokes next batch if more listings remain
+- First invocation downloads from S3, passes data to subsequent invocations
+- Prevents re-downloading same file 4+ times (optimization)
+- Safety limits: max 50 invocations, loop detection, idempotency checking
 
 Cost Optimizations:
-- Claude Haiku Vision: $0.00025/image (75% cheaper than Rekognition $0.001/image)
-- DynamoDB caching: Prevents re-analyzing same images across re-indexes
-- S3 + OpenSearch hybrid: Store complete data in S3, only search fields in OpenSearch
+- DynamoDB caching: Prevents re-analyzing/embedding same images across re-indexes
+- S3 + OpenSearch hybrid: Complete data in S3 (cheap), only search fields in OpenSearch
+- Embedding cache: Text and image embeddings cached indefinitely
 
-The function supports self-invocation for processing large datasets that exceed
-Lambda's execution time limit (15 minutes).
+Invocation Formats:
+    # First invocation (downloads from S3)
+    {"bucket": "demo-hearth-data", "key": "slc_listings.json", "start": 0, "limit": 500}
 
-Invocation modes:
-- From S3: {"bucket": "my-bucket", "key": "listings.json", "start": 0, "limit": 500}
-- Direct: {"listings": [...], "start": 0, "limit": 500}
+    # Subsequent invocations (uses cached data)
+    {"listings": [...], "start": 500, "limit": 500, "_invocation_count": 1}
+
+    # Special operations
+    {"operation": "delete_index"}
 """
 
 import json
@@ -224,36 +241,22 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
         Complete document ready for OpenSearch indexing with all embeddings,
         tags, and metadata
     """
-    # Feature extraction via LLM has been removed (was costing $60-80 per dataset)
-    # All features are now extracted from images via Claude Haiku Vision
-    llm_profile = ""  # Always empty (kept for schema compatibility)
-    feature_tags = []  # No longer populated (kept for schema compatibility)
+    # NOTE: Text-based LLM feature extraction removed (was $60-80 per 1,588 listings)
+    # All features now extracted from images via Claude Haiku Vision (~$0.40 per dataset)
+    # These fields kept for backward compatibility with existing OpenSearch mappings
+    llm_profile = ""  # Always empty
+    feature_tags = []  # No longer populated
 
-    # Text embeddings (resilient)
+    # Text embeddings will be generated AFTER image processing
+    # This allows us to include visual_features_text in the embedding
     vec_text = None
     text_embedding_failed = False
-    try:
-        # Embed only the description (llm_profile is always empty now)
-        text_for_embed = base["description"].strip() if base["description"] else ""
-        if text_for_embed:
-            vec_text = embed_text(text_for_embed)
-            if not vec_text or len(vec_text) == 0:
-                raise ValueError("Empty vector returned from embed_text")
-        else:
-            logger.warning("No text to embed for zpid=%s", base.get("zpid"))
-            text_embedding_failed = True
-    except Exception as e:
-        logger.error("Text embedding FAILED for zpid=%s: %s", base.get("zpid"), e)
-        text_embedding_failed = True
-
-    # If text embedding failed, use zeros
-    if vec_text is None:
-        vec_text = [0.0] * int(os.getenv("TEXT_DIM", "1024"))
 
     # Image vectors + tags (optional + resilient)
     # Deduplicate images by computing hash to avoid processing duplicates
     image_vecs, img_tags = [], set()
     image_vector_metadata = []  # For multi-vector schema: [{url, type, vector, analysis}, ...]
+    all_image_analyses = []  # Collect all analyses to generate visual_features_text
     seen_hashes = set()
     style_from_vision = None
     best_exterior_score = 0
@@ -338,6 +341,9 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
                 try:
                     analysis = detect_labels(bb, image_url=u)  # Returns comprehensive dict
 
+                    # Store analysis for visual_features_text generation
+                    all_image_analyses.append(analysis)
+
                     # Extract all features from analysis
                     features = analysis.get("features", [])
                     for feature in features:
@@ -390,6 +396,120 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
             except Exception as e:
                 logger.warning("Image fetch failed for zpid=%s, url=%s: %s", base.get("zpid"), u, e)
 
+    # Generate visual_features_text from all image analyses
+    # IMPROVEMENT: Use majority voting to eliminate contradictory features
+    visual_features_text = ""
+    if all_image_analyses:
+        from collections import Counter
+
+        # Collect unique features from all images
+        all_features = set()
+
+        # Separate exterior and interior analyses
+        exterior_analyses = []
+        interior_descriptions = []
+
+        # Collect votes for exterior attributes
+        exterior_styles = []
+        exterior_colors = []
+        all_materials = []
+
+        for analysis in all_image_analyses:
+            # Add all features
+            all_features.update(analysis.get("features", []))
+            all_features.update(analysis.get("materials", []))
+            all_features.update(analysis.get("visual_features", []))
+
+            if analysis.get("image_type") == "exterior":
+                exterior_analyses.append(analysis)
+                # Collect votes for consensus
+                if analysis.get("architecture_style"):
+                    exterior_styles.append(analysis["architecture_style"])
+                if analysis.get("exterior_color"):
+                    exterior_colors.append(analysis["exterior_color"])
+                # Collect all materials (will pick top ones)
+                all_materials.extend(analysis.get("materials", []))
+
+            elif analysis.get("image_type") == "interior":
+                # Group interior features by type
+                interior_descriptions.extend(analysis.get("features", [])[:5])  # Top 5 features per room
+
+        # Build natural language description
+        description_parts = []
+
+        # EXTERIOR: Use majority voting for style/color, top materials for accents
+        if exterior_analyses:
+            parts = []
+
+            # Most common architecture style (majority vote)
+            if exterior_styles:
+                style_counts = Counter(exterior_styles)
+                primary_style = style_counts.most_common(1)[0][0]
+                parts.append(f"{primary_style} style")
+                logger.debug(f"Exterior style votes: {dict(style_counts)} → chose '{primary_style}'")
+
+            # Most common exterior color (majority vote)
+            if exterior_colors:
+                color_counts = Counter(exterior_colors)
+                primary_color = color_counts.most_common(1)[0][0]
+                parts.append(f"{primary_color} exterior")
+                logger.debug(f"Exterior color votes: {dict(color_counts)} → chose '{primary_color}'")
+
+            # Top 2-3 materials (allow accents like brick chimney, stone foundation)
+            if all_materials:
+                material_counts = Counter(all_materials)
+                top_materials = [material for material, _ in material_counts.most_common(3)]
+                if top_materials:
+                    parts.append(f"with {', '.join(top_materials)}")
+                    logger.debug(f"Material votes: {dict(material_counts)} → chose top 3: {top_materials}")
+
+            if parts:
+                description_parts.append(f"Exterior: {' '.join(parts)}")
+
+        # INTERIOR: Use most common features (frequency-based)
+        if interior_descriptions:
+            # Count feature frequency and get top 10
+            feature_counts = Counter(interior_descriptions)
+            top_interior = [feature for feature, _ in feature_counts.most_common(10)]
+            description_parts.append(f"Interior features: {', '.join(top_interior)}")
+
+        # GENERAL FEATURES: Remaining unique features
+        if all_features:
+            # Exclude features already mentioned in exterior/interior descriptions
+            mentioned_features = set(interior_descriptions) | set(all_materials)
+            remaining_features = sorted(all_features - mentioned_features)[:15]
+            if remaining_features:
+                description_parts.append(f"Property includes: {', '.join(remaining_features)}")
+
+        visual_features_text = ". ".join(description_parts) + "." if description_parts else ""
+        logger.info(f"📝 Generated visual_features_text for zpid={base.get('zpid')}: {len(visual_features_text)} chars, {len(all_features)} unique features")
+
+    # NOW generate text embedding with both description AND visual features
+    try:
+        text_for_embed = base["description"].strip() if base["description"] else ""
+
+        # Combine original description with visual features
+        if visual_features_text:
+            combined_text = f"{text_for_embed} {visual_features_text}".strip()
+        else:
+            combined_text = text_for_embed
+
+        if combined_text:
+            vec_text = embed_text(combined_text)
+            if not vec_text or len(vec_text) == 0:
+                raise ValueError("Empty vector returned from embed_text")
+            logger.debug(f"Embedded {len(combined_text)} chars (desc: {len(text_for_embed)}, visual: {len(visual_features_text)})")
+        else:
+            logger.warning("No text to embed for zpid=%s", base.get("zpid"))
+            text_embedding_failed = True
+    except Exception as e:
+        logger.error("Text embedding FAILED for zpid=%s: %s", base.get("zpid"), e)
+        text_embedding_failed = True
+
+    # If text embedding failed, use zeros
+    if vec_text is None:
+        vec_text = [0.0] * int(os.getenv("TEXT_DIM", "1024"))
+
     vec_image = vec_mean(image_vecs, target_dim=len(vec_text)) if image_vecs else [0.0] * len(vec_text)
 
     # Determine if embeddings are valid (non-zero) - compute sums once for efficiency
@@ -429,6 +549,10 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
         "status": "active",
         "indexed_at": int(__import__("time").time()),
     }
+
+    # Add visual_features_text for enhanced BM25 matching
+    if visual_features_text:
+        doc["visual_features_text"] = visual_features_text
 
     # Add architecture style if detected
     if architecture_style:
@@ -657,9 +781,9 @@ def handler(event, context):
             images = extract_zillow_images(lst, target_width=EMBEDDING_IMAGE_WIDTH)
             doc = _build_doc(core, images)
 
-            # NOTE: Complete Zillow listing JSON is stored in S3 at: s3://demo-hearth-data/listings/{zpid}.json
-            # OpenSearch only stores search-relevant fields to avoid mapping conflicts
-
+            # Prepare for bulk indexing
+            # NOTE: Complete Zillow JSON stored separately in S3 (s3://demo-hearth-data/listings/{zpid}.json)
+            # This keeps OpenSearch lean and avoids field mapping conflicts
             actions.append({"_id": core["zpid"], "_source": doc})
 
             if len(actions) >= 200:  # OK with backoff; lower to 150 if cluster is busy

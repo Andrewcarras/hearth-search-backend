@@ -1,12 +1,27 @@
 """
-crud_listings.py - CRUD operations for property listings
+crud_listings.py - CRUD API for property listings
 
-Provides Lambda handlers for:
-- UPDATE: Modify any fields in existing listings
-- CREATE: Add new listings with optional image processing
-- DELETE: Remove listings (soft or hard delete)
+Provides Lambda handlers for manual listing management:
 
-These endpoints support the admin panel and future user-facing listing management.
+UPDATE (PATCH /listings/{zpid}):
+- Modify any fields in existing listings
+- Supports custom fields (dynamic schema)
+- Optional field removal
+- Preserves embeddings by default
+
+CREATE (POST /listings):
+- Add new listings with auto-generated zpid
+- Optional image processing (embeddings + vision analysis)
+- Quick-add mode (skip expensive processing)
+- Supports both single-vector and multi-vector schemas
+
+DELETE (DELETE /listings/{zpid}):
+- Soft delete: Marks as deleted, keeps in index (default)
+- Hard delete: Permanently removes from index
+- Configurable via ?soft=true/false
+
+These endpoints support the admin panel UI and future user-facing listing management.
+All operations support index switching via ?index=listings-v2 query parameter.
 """
 
 import json
@@ -20,8 +35,7 @@ import boto3
 from common import (
     os_client, OS_INDEX, AWS_REGION,
     embed_text, embed_image_bytes, detect_labels,
-    extract_zillow_images, vec_mean,
-    EMBEDDING_IMAGE_WIDTH
+    vec_mean
 )
 
 logger = logging.getLogger(__name__)
@@ -275,8 +289,8 @@ def add_listing_handler(event, context):
                 image_vector_metadata = []  # For multi-vector schema
                 img_tags = set()
 
-                # Process up to 10 images
-                for i, url in enumerate(image_urls[:10]):
+                # Process up to 10 images (configurable limit to avoid timeout)
+                for url in image_urls[:10]:
                     try:
                         import requests
                         resp = requests.get(url, timeout=8)
