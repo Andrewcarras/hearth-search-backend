@@ -769,12 +769,25 @@ TIP: Try "modern white house" in different modes to see ranking changes!`);
             if (bathsMin) payload.baths_min = bathsMin;
 
             try {
-                const response = await fetch('https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search', {
+                // TEMPORARY: Using Lambda function URL directly to bypass API Gateway 30s timeout
+                // TODO: Switch back to API Gateway once indexing is complete
+                const lambdaPayload = {
+                    httpMethod: 'POST',
+                    path: '/search',
+                    body: JSON.stringify(payload)
+                };
+                const response = await fetch('https://qz7qstyzzqracgry5iq6ehiy540reeqx.lambda-url.us-east-1.on.aws/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(lambdaPayload)
                 });
-                const data = await response.json();
+                let data = await response.json();
+
+                // Lambda function URL returns API Gateway format with statusCode and body
+                if (data.statusCode) {
+                    data = JSON.parse(data.body);
+                }
+
                 if (data.error) {
                     resultsDiv.innerHTML = '<div class="no-results"><h3>Error: ' + data.error + '</h3></div>';
                     return;
