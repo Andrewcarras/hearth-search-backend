@@ -504,32 +504,29 @@ def calculate_adaptive_weights(must_have_tags, query_type):
 
 def handler(event, context):
     """
-    AWS Lambda handler for natural language property search.
+    DEBUG Lambda handler for comprehensive search diagnostics.
 
-    Implements hybrid search combining BM25 keyword search with kNN vector
-    similarity search on both text and images, fused using RRF algorithm.
+    This is a testing/diagnostic version of the search Lambda that returns
+    EVERYTHING about how the search was executed, scored, and ranked.
 
-    Payload format:
-      {
-        "q": "3 bedroom house with pool and mountain views",
-        "size": 30,
-        "filters": {"price_max": 750000, "beds_min": 3}  # Optional explicit filters
-      }
+    Returns extensive diagnostic information including:
+    - Original query and extracted constraints
+    - All intermediate search results (BM25, kNN text, kNN image)
+    - Individual image vector scores with URLs
+    - OpenSearch query bodies
+    - RRF fusion details
+    - Tag matching analysis
+    - Full scoring breakdowns
 
-    The handler:
-    1. Parses natural language query to extract constraints
-    2. Generates query embedding vector
-    3. Executes 3 parallel searches (BM25, kNN text, kNN image)
-    4. Fuses results with RRF
-    5. Applies tag-based boosting
-    6. Returns ranked results
+    This Lambda is NOT optimized for production use - it prioritizes
+    diagnostic information over response size and speed.
 
     Args:
         event: Lambda event with query payload
         context: Lambda context (unused)
 
     Returns:
-        Response dict with results array and metadata
+        Comprehensive diagnostic response with all search internals
     """
     # CORS headers for all responses
     cors_headers = {
@@ -564,12 +561,28 @@ def handler(event, context):
     target_index = payload.get("index", OS_INDEX)
     logger.info("Search query: '%s', size=%d, index=%s", q, size, target_index)
 
+    # DEBUG: Start collecting diagnostic information
+    debug_info = {
+        "query": {
+            "original_query": q,
+            "size_requested": size,
+            "index": target_index
+        }
+    }
+
     constraints = extract_query_constraints(q)
     hard_filters = constraints.get("hard_filters", {})
     must_tags = set(constraints.get("must_have", []))
     architecture_style = constraints.get("architecture_style")
     proximity = constraints.get("proximity")
     logger.info("Extracted constraints: %s", constraints)
+
+    # DEBUG: Store extracted constraints
+    debug_info["query"]["extracted_constraints"] = constraints
+    debug_info["query"]["must_tags"] = list(must_tags)
+    debug_info["query"]["hard_filters"] = hard_filters
+    debug_info["query"]["architecture_style"] = architecture_style
+    debug_info["query"]["proximity"] = proximity
 
     # Merge explicit filters from payload
     if "filters" in payload:
@@ -652,6 +665,13 @@ def handler(event, context):
     bm25_hits = _os_search(bm25_query, size=size * 3, index=target_index)
     logger.info("BM25 returned %d hits", len(bm25_hits))
 
+    # DEBUG: Store BM25 query and results
+    debug_info["bm25"] = {
+        "query": bm25_query,
+        "hits_count": len(bm25_hits),
+        "top_results": [{"zpid": h["_id"], "score": h.get("_score", 0.0)} for h in bm25_hits[:10]]
+    }
+
     # 2) kNN on text vector (only if semantic search is needed)
     # For geo-focused queries, skip kNN to avoid filtering out partially-indexed docs
     knn_text_hits: List[Dict[str, Any]] = []
@@ -677,10 +697,19 @@ def handler(event, context):
         try:
             knn_text_hits = _os_search(knn_text_body, size=size * 3, index=target_index)
             logger.info("kNN text returned %d hits", len(knn_text_hits))
+
+            # DEBUG: Store kNN text query and results
+            debug_info["knn_text"] = {
+                "query": knn_text_body,
+                "hits_count": len(knn_text_hits),
+                "top_results": [{"zpid": h["_id"], "score": h.get("_score", 0.0)} for h in knn_text_hits[:10]]
+            }
         except Exception as e:
             logger.warning("kNN text search failed: %s", e)
+            debug_info["knn_text"] = {"error": str(e)}
     else:
         logger.info("Skipping kNN text search (geo-focused query)")
+        debug_info["knn_text"] = {"skipped": True, "reason": "geo-focused query"}
 
     # 3) kNN on image vector (only if semantic search is needed)
     knn_img_hits: List[Dict[str, Any]] = []
@@ -745,27 +774,48 @@ def handler(event, context):
 
             knn_img_hits = _os_search(knn_img_body, size=size * 3, index=target_index)
             logger.info("kNN image returned %d hits", len(knn_img_hits))
+
+            # DEBUG: Store kNN image query and results (including inner_hits)
+            debug_info["knn_image"] = {
+                "query": knn_img_body,
+                "hits_count": len(knn_img_hits),
+                "top_results": [{"zpid": h["_id"], "score": h.get("_score", 0.0), "has_inner_hits": "inner_hits" in h} for h in knn_img_hits[:10]],
+                "is_multi_vector": is_multi_vector
+            }
         except Exception as e:
             logger.warning("Image kNN skipped (no mapping or field): %s", e)
+            debug_info["knn_image"] = {"error": str(e)}
     else:
         logger.info("Skipping kNN image search (geo-focused query)")
+        debug_info["knn_image"] = {"skipped": True, "reason": "geo-focused query"}
 
     # Calculate adaptive RRF weights based on query characteristics
     query_type = constraints.get("query_type", "general")
     k_values = calculate_adaptive_weights(must_tags, query_type)
 
-    # Check if client wants detailed scoring breakdown
-    include_scoring_details = payload.get("include_scoring_details", False)
+    # Check if client wants detailed scoring breakdown (always True for debug Lambda)
+    include_scoring_details = True
 
     # Create a mapping of zpid -> original kNN image hit (for inner_hits access)
     knn_img_map = {}
-    if include_scoring_details:
-        for hit in knn_img_hits:
-            knn_img_map[hit["_id"]] = hit
+    for hit in knn_img_hits:
+        knn_img_map[hit["_id"]] = hit
 
     # Fuse results using RRF with adaptive weights (only includes non-empty result lists)
-    fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, k_values=k_values, top=size * 3, include_scoring_details=include_scoring_details)
+    fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, k_values=k_values, top=size * 3, include_scoring_details=True)  # Always get scoring details for debug
     logger.info("RRF fusion produced %d results", len(fused))
+
+    # DEBUG: Store RRF configuration and adaptive weights
+    debug_info["rrf"] = {
+        "k_values": {
+            "bm25": k_values[0],
+            "knn_text": k_values[1],
+            "knn_image": k_values[2]
+        },
+        "query_type": query_type,
+        "adaptive_scoring_applied": k_values != [60, 60, 60],
+        "fusion_result_count": len(fused)
+    }
 
     # Check if client wants full Zillow data from S3
     include_full_data = payload.get("include_full_data", False)
@@ -846,13 +896,21 @@ def handler(event, context):
             if original_knn_hit and "inner_hits" in original_knn_hit and "image_vectors" in original_knn_hit["inner_hits"]:
                 inner_hits_data = original_knn_hit["inner_hits"]["image_vectors"]["hits"]["hits"]
                 image_scores = []
+
+                # Get parent document's images array for URL lookup
+                images_array = src.get("images", [])
+
                 for inner_hit in inner_hits_data:
                     # inner_hit contains _nested with offset (array index) and _source with nested doc
                     nested_info = inner_hit.get("_nested", {})
-                    inner_src = inner_hit.get("_source", {})
+                    img_index = nested_info.get("offset")
+
+                    # Look up actual image URL from parent document using the index
+                    img_url = images_array[img_index] if img_index is not None and img_index < len(images_array) else None
+
                     image_scores.append({
-                        "index": nested_info.get("offset"),  # Array index of the image
-                        "url": inner_src.get("url"),
+                        "index": img_index,  # Array index of the image
+                        "url": img_url,  # Actual image URL from parent document
                         "score": inner_hit.get("_score", 0.0)
                     })
                 # Sort by score descending to show best matches first
@@ -890,11 +948,13 @@ def handler(event, context):
 
     logger.info("Returning %d final results", len(results))
 
+    # DEBUG: Build comprehensive diagnostic response
     response_data = {
         "ok": True,
         "results": results,
         "total": len(results),
-        "must_have": list(must_tags)
+        "must_have": list(must_tags),
+        "debug_info": debug_info  # Include all diagnostic information
     }
 
     # Include architecture_style filter in response if it was used

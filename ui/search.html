@@ -446,6 +446,60 @@
         .score-label {
             font-weight: 500;
             color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .info-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #007bff;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            font-family: serif;
+            font-style: italic;
+            cursor: help;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .info-icon:hover {
+            background: #0056b3;
+            transform: scale(1.1);
+        }
+        .info-tooltip {
+            visibility: hidden;
+            position: absolute;
+            z-index: 1000;
+            background: #2d2d2d;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: normal;
+            width: 280px;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 8px;
+            line-height: 1.4;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .info-tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: #2d2d2d;
+        }
+        .info-icon:hover .info-tooltip {
+            visibility: visible;
         }
         .score-value {
             font-weight: 600;
@@ -603,8 +657,7 @@
             const payload = {
                 q: query,
                 size: 30,
-                index: selectedIndex,
-                include_scoring_details: true  // Request detailed scoring breakdown
+                index: selectedIndex
             };
             const priceMin = document.getElementById('priceMin').value;
             const priceMax = document.getElementById('priceMax').value;
@@ -795,10 +848,8 @@
                 <button onclick="markAsSold('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#28a745;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✓ Mark as Sold</button>
             </div>`;
 
-            // Add score breakdown button if scoring details available
-            if (currentProperty._scoring_details) {
-                actionsHTML += `<button onclick="showScoreBreakdown()" class="score-breakdown-btn">📊 View Detailed Score Breakdown</button><br>`;
-            }
+            // Always show score breakdown button (fetches data on demand from debug endpoint)
+            actionsHTML += `<button onclick="showScoreBreakdown()" class="score-breakdown-btn">📊 View Detailed Score Breakdown</button><br>`;
 
             actionsHTML += `<a href="${zillowUrl}" target="_blank" class="zillow-btn">View Full Details on Zillow →</a>`;
 
@@ -937,110 +988,287 @@
                 alert('Error: ' + error.message);
             }
         }
+        // Helper function to create info tooltip
+        function infoTooltip(text) {
+            return `<span class="info-icon">ⓘ<span class="info-tooltip">${text}</span></span>`;
+        }
+
         // Score Breakdown Modal Functions
-        function showScoreBreakdown() {
-            if (!currentProperty._scoring_details) {
-                alert('No scoring details available for this property');
-                return;
-            }
-
-            const details = currentProperty._scoring_details;
+        async function showScoreBreakdown() {
+            // Show loading state
             const content = document.getElementById('scoreBreakdownContent');
+            content.innerHTML = '<div class="loading">Loading detailed score breakdown...</div>';
+            document.getElementById('scoreModal').style.display = 'block';
 
-            let html = '';
+            try {
+                // Call the debug endpoint to get comprehensive diagnostic information
+                const response = await fetch('https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search/debug', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        q: document.getElementById('searchQuery').value.trim(),
+                        size: 30,
+                        index: selectedIndex
+                    })
+                });
+
+                const debugData = await response.json();
+
+                // Find the current property in the debug results
+                const debugProperty = debugData.results.find(r => r.zpid === currentProperty.zpid);
+                if (!debugProperty || !debugProperty._scoring_details) {
+                    content.innerHTML = '<div class="no-results"><h3>Could not load score breakdown</h3></div>';
+                    return;
+                }
+
+                const details = debugProperty._scoring_details;
+                const debug_info = debugData.debug_info;
+
+                let html = '';
+
+            // QUERY INFORMATION SECTION
+            html += `<div class="score-section" style="background:#fff3cd;border-left-color:#ffc107;">
+                <h4 style="color:#856404;">🔍 Query Information</h4>
+                <div class="score-metric">
+                    <span class="score-label">Original Query ${infoTooltip('The exact search query you entered.')}</span>
+                    <span class="score-value">"${debug_info.query.original_query}"</span>
+                </div>
+                <div class="score-metric">
+                    <span class="score-label">Query Type ${infoTooltip('Classified by the LLM: specific_feature (like "modern kitchen"), color, material, visual_style, or general. Determines which search strategies get boosted.')}</span>
+                    <span class="score-value">${debug_info.query.extracted_constraints.query_type}</span>
+                </div>
+                <div class="score-metric">
+                    <span class="score-label">Must-Have Tags Extracted ${infoTooltip('Feature tags extracted from your query by the LLM. Properties are filtered to match these tags for ranking.')}</span>
+                    <span class="score-value">${debug_info.query.must_tags.length > 0 ? debug_info.query.must_tags.join(', ') : 'None'}</span>
+                </div>
+                <div class="score-metric">
+                    <span class="score-label">Architecture Style ${infoTooltip('Detected architectural style filter (modern, colonial, craftsman, etc.) applied as a hard filter.')}</span>
+                    <span class="score-value">${debug_info.query.architecture_style || 'None'}</span>
+                </div>
+                ${debug_info.query.hard_filters && Object.keys(debug_info.query.hard_filters).length > 0 ? `
+                <div class="score-metric">
+                    <span class="score-label">Filters Applied</span>
+                    <span class="score-value">${JSON.stringify(debug_info.query.hard_filters)}</span>
+                </div>` : ''}
+                <p style="color:#666;font-size:12px;margin-top:10px;line-height:1.5;">
+                    <strong>What this means:</strong> The system analyzed your natural language query and extracted structured filters,
+                    required tags, and determined the query type to apply adaptive scoring weights.
+                </p>
+            </div>`;
+
+            // EXPLANATION HEADER
+            html += `<div class="score-section" style="background:#e8f4f8;border-left-color:#0066cc;">
+                <h4 style="color:#0066cc;">📚 How This Score Was Calculated</h4>
+                <p style="color:#555;line-height:1.6;margin:10px 0;">
+                    This property's ranking score is calculated using <strong>Reciprocal Rank Fusion (RRF)</strong>, which combines results from three independent search strategies:
+                    <strong>(1) BM25 full-text search</strong>, <strong>(2) kNN text similarity</strong>, and <strong>(3) kNN image similarity</strong>.
+                    Each strategy ranks properties independently, then RRF fuses them using the formula: <code>Score = Σ[1/(k + rank)]</code>.
+                    Finally, tag matching applies a multiplicative boost to promote exact matches.
+                </p>
+            </div>`;
 
             // Overall Score Section
             html += `<div class="score-section">
                 <h4>🎯 Final Score</h4>
                 <div class="score-metric">
-                    <span class="score-label">Final Ranking Score</span>
-                    <span class="score-value highlight">${currentProperty.score.toFixed(4)}</span>
+                    <span class="score-label">Final Ranking Score ${infoTooltip('This is the final score after combining all search strategies (RRF) and applying tag boost multiplier. Higher scores rank first.')}</span>
+                    <span class="score-value highlight" style="font-size:24px;">${currentProperty.score.toFixed(6)}</span>
                 </div>
-                ${currentProperty.boosted ? '<div class="score-metric"><span class="score-label">Tag Boost Applied</span><span class="score-value success">✓ Yes</span></div>' : ''}
+                ${currentProperty.boosted ? '<div class="score-metric"><span class="score-label">Tag Boost Applied ' + infoTooltip('Properties matching more required tags get multiplicative boosts: 100%=2.0x, 75%=1.5x, 50%=1.25x') + '</span><span class="score-value success">✓ Yes</span></div>' : ''}
+                <p style="color:#666;font-size:13px;margin-top:10px;line-height:1.5;">
+                    <strong>How it's calculated:</strong> Final Score = RRF Total Score × Tag Boost Factor<br>
+                    ${currentProperty.boosted && details.tag_boosting ?
+                        `= ${details.tag_boosting.score_before_boost.toFixed(6)} × ${details.tag_boosting.boost_factor} = ${currentProperty.score.toFixed(6)}` :
+                        `= ${currentProperty.score.toFixed(6)} (no boost applied)`}
+                </p>
             </div>`;
 
             // RRF Breakdown Section
             if (details.bm25 || details.knn_text || details.knn_image) {
                 html += `<div class="score-section">
                     <h4>🔀 Reciprocal Rank Fusion (RRF) Breakdown</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        RRF combines rankings from multiple search strategies. For each strategy, if the property appears at rank R,
+                        it contributes <code>1/(k+R)</code> to the total score. Lower k-values give higher weight to that strategy.
+                        The three contributions are summed to get the RRF total.
+                    </p>
                     <div class="score-metric">
-                        <span class="score-label">Total RRF Score</span>
-                        <span class="score-value highlight">${details.rrf_total.toFixed(4)}</span>
-                    </div>`;
+                        <span class="score-label">Total RRF Score ${infoTooltip('Sum of contributions from all 3 search strategies. This is the score before tag boosting is applied.')}</span>
+                        <span class="score-value highlight" style="font-size:20px;">${details.rrf_total.toFixed(6)}</span>
+                    </div>
+                    <p style="color:#666;font-size:12px;margin-top:5px;">
+                        = ${details.bm25?.rrf_contribution?.toFixed(6) || '0'} (BM25) +
+                        ${details.knn_text?.rrf_contribution?.toFixed(6) || '0'} (kNN text) +
+                        ${details.knn_image?.rrf_contribution?.toFixed(6) || '0'} (kNN image)
+                    </p>`;
 
                 // BM25 Full-Text Search
                 if (details.bm25) {
                     const bm25 = details.bm25;
-                    html += `<div style="margin-top:15px;padding-top:15px;border-top:2px solid #dee2e6;">
-                        <strong style="color:#2a2a2a;">BM25 Full-Text Search</strong>
+                    const bm25_debug = debug_info.bm25;
+                    html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #28a745;border-radius:4px;">
+                        <strong style="color:#28a745;font-size:16px;">📝 BM25 Full-Text Search</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
+                            BM25 searches text fields (description, address, tags) using keyword matching.
+                            It finds properties where the query words appear in the text, with boosting for exact tag matches.
+                            This search returned <strong>${bm25_debug.hits_count} total results</strong>.
+                        </p>
                         <div class="score-metric">
-                            <span class="score-label">Rank in Results</span>
-                            <span class="score-value ${bm25.rank ? 'success' : 'danger'}">${bm25.rank ? '#' + bm25.rank : 'Not found'}</span>
+                            <span class="score-label">Rank in BM25 Results ${infoTooltip('Position of this property in the BM25-only search results (1=best match). Properties not found didn\'t match the text query well enough.')}</span>
+                            <span class="score-value ${bm25.rank ? 'success' : 'danger'}">${bm25.rank ? '#' + bm25.rank : 'Not found in top results'}</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">Original BM25 Score</span>
-                            <span class="score-value">${bm25.original_score ? bm25.original_score.toFixed(4) : 'N/A'}</span>
+                            <span class="score-label">Original BM25 Score ${infoTooltip('Raw relevance score from BM25 algorithm measuring term frequency and document length normalization. Higher = better text match.')}</span>
+                            <span class="score-value">${bm25.original_score ? bm25.original_score.toFixed(6) : 'N/A'}</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">RRF k-value</span>
+                            <span class="score-label">RRF k-value ${infoTooltip('Tuning parameter for this strategy. Lower k = higher weight. Default is 60 (balanced). Adaptive scoring adjusts this based on query type.')}</span>
                             <span class="score-value">${bm25.k}</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">RRF Contribution</span>
-                            <span class="score-value">${bm25.rrf_contribution.toFixed(4)} ${bm25.rank ? '(= 1/(' + bm25.k + '+' + bm25.rank + '))' : ''}</span>
+                            <span class="score-label">RRF Contribution ${infoTooltip('How much BM25 contributes to final RRF score. Calculated as 1/(k+rank). This gets added to contributions from other strategies.')}</span>
+                            <span class="score-value" style="font-weight:bold;">${bm25.rrf_contribution.toFixed(6)}</span>
                         </div>
+                        <p style="color:#666;font-size:12px;margin-top:8px;">
+                            <strong>Calculation:</strong> 1 ÷ (${bm25.k} + ${bm25.rank || 0}) = ${bm25.rrf_contribution.toFixed(6)}
+                        </p>
+                        <details style="margin-top:10px;">
+                            <summary style="cursor:pointer;color:#28a745;font-weight:600;">View OpenSearch Query</summary>
+                            <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(bm25_debug.query, null, 2)}</pre>
+                        </details>
                     </div>`;
                 }
 
                 // kNN Text Search
                 if (details.knn_text) {
                     const knn_text = details.knn_text;
-                    html += `<div style="margin-top:15px;padding-top:15px;border-top:2px solid #dee2e6;">
-                        <strong style="color:#2a2a2a;">kNN Text Similarity Search</strong>
+                    const knn_text_debug = debug_info.knn_text;
+                    html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #007bff;border-radius:4px;">
+                        <strong style="color:#007bff;font-size:16px;">🧠 kNN Text Similarity Search</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
+                            kNN text search converts the query into a 1536-dimensional vector and finds properties
+                            with similar text embeddings using cosine similarity. This captures semantic meaning beyond exact keywords.
+                            This search returned <strong>${knn_text_debug.hits_count} total results</strong>.
+                        </p>
                         <div class="score-metric">
-                            <span class="score-label">Rank in Results</span>
-                            <span class="score-value ${knn_text.rank ? 'success' : 'danger'}">${knn_text.rank ? '#' + knn_text.rank : 'Not found'}</span>
+                            <span class="score-label">Query Vector ${infoTooltip('Your query converted into a 1536-dimensional vector using Amazon Titan text embedding model. This captures semantic meaning.')}</span>
+                            <span class="score-value">1536-dimensional embedding from: "${debug_info.query.original_query}"</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">Cosine Similarity Score</span>
-                            <span class="score-value">${knn_text.original_score ? knn_text.original_score.toFixed(4) : 'N/A'}</span>
+                            <span class="score-label">Rank in kNN Text Results ${infoTooltip('Position of this property when ranked by text embedding similarity (1=most semantically similar). Uses vector distance to find meaning, not just keywords.')}</span>
+                            <span class="score-value ${knn_text.rank ? 'success' : 'danger'}">${knn_text.rank ? '#' + knn_text.rank : 'Not found in top results'}</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">RRF k-value</span>
+                            <span class="score-label">Cosine Similarity Score ${infoTooltip('Similarity between query vector and property description vector (0-1 scale). Higher = more semantically similar. Measured using cosine distance in 1536-dimensional space.')}</span>
+                            <span class="score-value">${knn_text.original_score ? knn_text.original_score.toFixed(6) : 'N/A'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF k-value ${infoTooltip('Tuning parameter for this strategy. Lower k = higher weight. Default is 60 (balanced). Material/color queries reduce this to boost semantic understanding.')}</span>
                             <span class="score-value">${knn_text.k}</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">RRF Contribution</span>
-                            <span class="score-value">${knn_text.rrf_contribution.toFixed(4)} ${knn_text.rank ? '(= 1/(' + knn_text.k + '+' + knn_text.rank + '))' : ''}</span>
+                            <span class="score-label">RRF Contribution ${infoTooltip('How much semantic text similarity contributes to final RRF score. Calculated as 1/(k+rank). Added to BM25 and image contributions.')}</span>
+                            <span class="score-value" style="font-weight:bold;">${knn_text.rrf_contribution.toFixed(6)}</span>
                         </div>
+                        <p style="color:#666;font-size:12px;margin-top:8px;">
+                            <strong>Calculation:</strong> 1 ÷ (${knn_text.k} + ${knn_text.rank || 0}) = ${knn_text.rrf_contribution.toFixed(6)}
+                        </p>
+                        <details style="margin-top:10px;">
+                            <summary style="cursor:pointer;color:#007bff;font-weight:600;">View OpenSearch Query</summary>
+                            <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(knn_text_debug.query, null, 2)}</pre>
+                        </details>
                     </div>`;
                 }
 
                 // kNN Image Search
                 if (details.knn_image) {
                     const knn_image = details.knn_image;
-                    html += `<div style="margin-top:15px;padding-top:15px;border-top:2px solid #dee2e6;">
-                        <strong style="color:#2a2a2a;">kNN Image Similarity Search ${details.image_vectors_count ? '(' + details.image_vectors_count + ' images)' : ''}</strong>
+                    const knn_image_debug = debug_info.knn_image;
+                    html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #dc3545;border-radius:4px;">
+                        <strong style="color:#dc3545;font-size:16px;">🖼️ kNN Image Similarity Search ${details.image_vectors_count ? '(' + details.image_vectors_count + ' images)' : ''}</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
+                            kNN image search compares the query vector against ALL ${details.image_vectors_count || 'property'} image vectors independently.
+                            The <strong>highest-scoring image</strong> determines the overall image similarity score (score_mode: "max").
+                            This search returned <strong>${knn_image_debug.hits_count} total results</strong>.
+                        </p>
                         <div class="score-metric">
-                            <span class="score-label">Rank in Results</span>
-                            <span class="score-value ${knn_image.rank ? 'success' : 'danger'}">${knn_image.rank ? '#' + knn_image.rank : 'Not found'}</span>
+                            <span class="score-label">Query Vector ${infoTooltip('Your query converted into a 1536-dimensional image embedding using Amazon Titan multimodal model. Captures visual concepts from text.')}</span>
+                            <span class="score-value">1536-dimensional embedding from: "${debug_info.query.original_query}"</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">Best Image Match Score</span>
-                            <span class="score-value">${knn_image.original_score ? knn_image.original_score.toFixed(4) : 'N/A'}</span>
+                            <span class="score-label">Search Mode ${infoTooltip('Multi-vector: Each image is embedded separately and searched independently (score_mode: max takes highest). Legacy: All images averaged into one vector.')}</span>
+                            <span class="score-value">${knn_image_debug.is_multi_vector ? 'Multi-vector (nested, score_mode: max)' : 'Single averaged vector (legacy)'}</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">RRF k-value</span>
+                            <span class="score-label">Rank in kNN Image Results ${infoTooltip('Position of this property when ranked by best image match (1=most visually similar). Each property\'s best-matching image determines its rank.')}</span>
+                            <span class="score-value ${knn_image.rank ? 'success' : 'danger'}">${knn_image.rank ? '#' + knn_image.rank : 'Not found in top results'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Best Image Match Score ${infoTooltip('Highest similarity score among all this property\'s images. Score_mode: max takes the single best match. See Individual Image Scores below for breakdown.')}</span>
+                            <span class="score-value">${knn_image.original_score ? knn_image.original_score.toFixed(6) : 'N/A'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF k-value ${infoTooltip('Tuning parameter for image strategy. Lower k = higher weight. Default is 60. Visual_style queries reduce this to boost image matching.')}</span>
                             <span class="score-value">${knn_image.k}</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">RRF Contribution</span>
-                            <span class="score-value">${knn_image.rrf_contribution.toFixed(4)} ${knn_image.rank ? '(= 1/(' + knn_image.k + '+' + knn_image.rank + '))' : ''}</span>
+                            <span class="score-label">RRF Contribution ${infoTooltip('How much visual similarity contributes to final RRF score. Calculated as 1/(k+rank). Added to BM25 and text contributions.')}</span>
+                            <span class="score-value" style="font-weight:bold;">${knn_image.rrf_contribution.toFixed(6)}</span>
                         </div>
+                        <p style="color:#666;font-size:12px;margin-top:8px;">
+                            <strong>Calculation:</strong> 1 ÷ (${knn_image.k} + ${knn_image.rank || 0}) = ${knn_image.rrf_contribution.toFixed(6)}
+                        </p>
+                        <details style="margin-top:10px;">
+                            <summary style="cursor:pointer;color:#dc3545;font-weight:600;">View OpenSearch Query</summary>
+                            <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(knn_image_debug.query, null, 2)}</pre>
+                        </details>
                     </div>`;
                 }
 
                 html += `</div>`;
+            }
+
+            // Individual Image Scores Section
+            if (details.individual_image_scores && details.individual_image_scores.length > 0) {
+                html += `<div class="score-section">
+                    <h4>🎨 Individual Image Vector Scores</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        Each image has its own embedding vector (1536 dimensions). The table below shows how well each image matched your query.
+                        The <strong style="color:#dc3545;">highest score (${Math.max(...details.individual_image_scores.map(i => i.score)).toFixed(6)})</strong>
+                        is used as the "Best Image Match Score" in the kNN Image search above.
+                    </p>
+                    <div style="max-height:400px;overflow-y:auto;border:1px solid #dee2e6;border-radius:6px;">
+                        <table style="width:100%;border-collapse:collapse;">
+                            <thead style="background:#343a40;color:white;position:sticky;top:0;">
+                                <tr>
+                                    <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Rank</th>
+                                    <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Image #</th>
+                                    <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Score</th>
+                                    <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Preview</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+
+                details.individual_image_scores.forEach((img, idx) => {
+                    const isTop = idx === 0;
+                    const rowStyle = isTop ? 'background:#fff3cd;font-weight:bold;' : '';
+                    html += `<tr style="${rowStyle}border-bottom:1px solid #dee2e6;">
+                        <td style="padding:10px;">${isTop ? '🥇 ' : ''}#${idx + 1}</td>
+                        <td style="padding:10px;">Image ${img.index !== undefined ? img.index : 'N/A'}</td>
+                        <td style="padding:10px;font-family:monospace;">${img.score.toFixed(6)}</td>
+                        <td style="padding:10px;">${img.url ? '<img src="' + img.url + '" style="width:80px;height:60px;object-fit:cover;border-radius:4px;" />' : 'No preview'}</td>
+                    </tr>`;
+                });
+
+                html += `</tbody>
+                        </table>
+                    </div>
+                    <p style="color:#666;font-size:12px;margin-top:10px;line-height:1.5;">
+                        <strong>Why different scores?</strong> Each image captures different aspects of the property.
+                        For a query like "modern kitchen," images showing the kitchen will score higher than exterior shots.
+                        The multi-vector approach ensures that properties with at least one highly relevant image rank well.
+                    </p>
+                </div>`;
             }
 
             // Tag Boosting Section
@@ -1048,28 +1276,35 @@
                 const tb = details.tag_boosting;
                 html += `<div class="score-section">
                     <h4>🏷️ Tag Matching & Boosting</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        After RRF fusion, we apply a multiplicative boost based on exact tag matches.
+                        Properties matching more required tags get stronger boosts: 100% match = 2.0x, 75% = 1.5x, 50% = 1.25x.
+                    </p>
                     <div class="score-metric">
-                        <span class="score-label">Match Ratio</span>
+                        <span class="score-label">Match Ratio ${infoTooltip('Percentage of required tags that this property has. Calculated as (matched tags / required tags). Higher ratio = stronger boost.')}</span>
                         <span class="score-value ${tb.match_ratio >= 1.0 ? 'success' : tb.match_ratio >= 0.5 ? 'warning' : 'danger'}">${(tb.match_ratio * 100).toFixed(0)}% (${tb.matched_tags.length}/${tb.required_tags.length})</span>
                     </div>
                     <div class="score-metric">
-                        <span class="score-label">Boost Factor</span>
-                        <span class="score-value ${tb.boost_factor > 1 ? 'success' : ''}">${tb.boost_factor}x</span>
+                        <span class="score-label">Boost Factor ${infoTooltip('Multiplicative boost applied to RRF score. 100% match=2.0x, 75-99%=1.5x, 50-74%=1.25x, <50%=1.0x (no boost). Rewards exact tag matches.')}</span>
+                        <span class="score-value ${tb.boost_factor > 1 ? 'success' : ''}" style="font-size:18px;">${tb.boost_factor}x</span>
                     </div>
                     <div class="score-metric">
-                        <span class="score-label">Score Before Boost</span>
-                        <span class="score-value">${tb.score_before_boost.toFixed(4)}</span>
+                        <span class="score-label">RRF Score (before boost) ${infoTooltip('The combined RRF score from all search strategies before tag boost is applied. This is the sum of BM25, kNN text, and kNN image contributions.')}</span>
+                        <span class="score-value">${tb.score_before_boost.toFixed(6)}</span>
                     </div>
                     <div class="score-metric">
-                        <span class="score-label">Score After Boost</span>
-                        <span class="score-value highlight">${tb.score_after_boost.toFixed(4)}</span>
-                    </div>`;
+                        <span class="score-label">Final Score (after boost) ${infoTooltip('The final ranking score after multiplying RRF score by boost factor. This is the score that determines search result order.')}</span>
+                        <span class="score-value highlight">${tb.score_after_boost.toFixed(6)}</span>
+                    </div>
+                    <p style="color:#666;font-size:12px;margin-top:8px;">
+                        <strong>Calculation:</strong> ${tb.score_before_boost.toFixed(6)} × ${tb.boost_factor} = ${tb.score_after_boost.toFixed(6)}
+                    </p>`;
 
                 // Show matched vs required tags
                 if (tb.required_tags && tb.required_tags.length > 0) {
                     html += `<div style="margin-top:15px;">
-                        <strong style="color:#2a2a2a;">Required Tags:</strong>
-                        <div class="tag-list">`;
+                        <strong style="color:#2a2a2a;">Required Tags Analysis:</strong>
+                        <div class="tag-list" style="margin-top:10px;">`;
                     tb.required_tags.forEach(tag => {
                         const matched = tb.matched_tags.includes(tag);
                         html += `<span class="score-tag ${matched ? 'matched' : 'missing'}">${matched ? '✓' : '✗'} ${tag}</span>`;
@@ -1084,30 +1319,36 @@
             if (details.query_context) {
                 const qc = details.query_context;
                 html += `<div class="score-section">
-                    <h4>🔍 Query Analysis</h4>
+                    <h4>🔍 Query Analysis & Adaptive Weighting</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        The system analyzes your query to determine the best search strategy.
+                        For example, color queries boost BM25 (tags) and de-boost images (embeddings don't distinguish colors well).
+                        Lower k-values = higher weight for that strategy.
+                    </p>
                     <div class="score-metric">
-                        <span class="score-label">Query Type</span>
+                        <span class="score-label">Query Type Detected</span>
                         <span class="score-value">${qc.query_type}</span>
                     </div>
                     <div class="score-metric">
                         <span class="score-label">Adaptive Scoring</span>
-                        <span class="score-value ${qc.adaptive_scoring_applied ? 'success' : ''}">${qc.adaptive_scoring_applied ? '✓ Applied' : 'Not Applied'}</span>
+                        <span class="score-value ${qc.adaptive_scoring_applied ? 'success' : ''}">${qc.adaptive_scoring_applied ? '✓ Applied' : '✗ Not Applied (balanced weights)'}</span>
                     </div>`;
 
                 if (qc.k_values) {
-                    html += `<div style="margin-top:15px;">
-                        <strong style="color:#2a2a2a;">RRF k-values (lower = higher weight):</strong>
+                    html += `<div style="margin-top:15px;padding:15px;background:#f8f9fa;border-radius:6px;">
+                        <strong style="color:#2a2a2a;">RRF k-values Used:</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;">Lower k = higher influence. Default is 60 (balanced).</p>
                         <div class="score-metric">
-                            <span class="score-label">BM25 (full-text)</span>
-                            <span class="score-value">${qc.k_values.bm25}</span>
+                            <span class="score-label">BM25 (full-text keyword matching)</span>
+                            <span class="score-value ${qc.k_values.bm25 < 60 ? 'success' : qc.k_values.bm25 > 60 ? 'danger' : ''}">${qc.k_values.bm25} ${qc.k_values.bm25 < 60 ? '(boosted)' : qc.k_values.bm25 > 60 ? '(reduced)' : '(balanced)'}</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">kNN Text (semantic)</span>
-                            <span class="score-value">${qc.k_values.knn_text}</span>
+                            <span class="score-label">kNN Text (semantic similarity)</span>
+                            <span class="score-value ${qc.k_values.knn_text < 60 ? 'success' : qc.k_values.knn_text > 60 ? 'danger' : ''}">${qc.k_values.knn_text} ${qc.k_values.knn_text < 60 ? '(boosted)' : qc.k_values.knn_text > 60 ? '(reduced)' : '(balanced)'}</span>
                         </div>
                         <div class="score-metric">
-                            <span class="score-label">kNN Image (visual)</span>
-                            <span class="score-value">${qc.k_values.knn_image}</span>
+                            <span class="score-label">kNN Image (visual similarity)</span>
+                            <span class="score-value ${qc.k_values.knn_image < 60 ? 'success' : qc.k_values.knn_image > 60 ? 'danger' : ''}">${qc.k_values.knn_image} ${qc.k_values.knn_image < 60 ? '(boosted)' : qc.k_values.knn_image > 60 ? '(reduced)' : '(balanced)'}</span>
                         </div>
                     </div>`;
                 }
@@ -1115,26 +1356,16 @@
                 html += `</div>`;
             }
 
-            // Image Vectors Info
-            if (details.image_vectors_count) {
-                html += `<div class="score-section">
-                    <h4>🖼️ Image Vectors</h4>
-                    <div class="score-metric">
-                        <span class="score-label">Total Images Processed</span>
-                        <span class="score-value">${details.image_vectors_count}</span>
-                    </div>
-                    <div class="score-metric">
-                        <span class="score-label">Search Strategy</span>
-                        <span class="score-value">Multi-vector (max match)</span>
-                    </div>
-                    <p style="color:#666;font-size:13px;margin-top:10px;">Each image is searched independently. The best matching image determines the overall image similarity score.</p>
-                </div>`;
-            }
-
             content.innerHTML = html;
 
-            // Show modal
-            document.getElementById('scoreModal').style.display = 'block';
+            } catch (error) {
+                console.error('Error loading score breakdown:', error);
+                content.innerHTML = `<div class="no-results">
+                    <h3>Error Loading Score Breakdown</h3>
+                    <p>${error.message}</p>
+                    <p style="font-size:12px;color:#666;">Check the console for more details.</p>
+                </div>`;
+            }
         }
 
         function closeScoreModal() {
