@@ -581,17 +581,22 @@ def handler(event, context):
         hard_filters.update(payload["filters"])
         logger.info("Applied additional filters from payload: %s", payload["filters"])
 
-    # Add architecture style as a filter if detected
+    # Architecture style is now a SOFT SIGNAL (not a hard filter)
+    # It works through:
+    # 1. BM25 matching on visual_features_text (which includes "modern style", etc.)
+    # 2. Text embeddings capturing semantic similarity between styles
+    # 3. Image embeddings capturing visual similarity
+    # This allows users to see stylistically similar homes (e.g., contemporary when searching modern)
     if architecture_style:
-        logger.info("Filtering by architecture style: %s", architecture_style)
+        logger.info("Architecture style preference detected: %s (soft signal, not filter)", architecture_style)
 
     # Determine if we need vector search (kNN) based on query characteristics
     # We can skip embeddings requirement if:
     # 1. Query is primarily location-based (has proximity but no feature requirements)
     # 2. Query is simple numeric filters (price, beds, baths)
     # This allows results to show during indexing for geo/filter-only queries
-    is_geo_focused = proximity is not None and not must_tags and not architecture_style
-    needs_semantic_search = bool(must_tags) or bool(architecture_style) or not proximity
+    is_geo_focused = proximity is not None and not must_tags
+    needs_semantic_search = bool(must_tags) or not proximity
 
     # Only require embeddings when we're doing semantic/vector search
     require_embeddings = needs_semantic_search
@@ -604,9 +609,11 @@ def handler(event, context):
     q_vec = embed_text(q)
     filter_clauses = _filters_to_bool(hard_filters, require_embeddings=require_embeddings)["bool"]["filter"]
 
-    # Add architecture style filter
-    if architecture_style:
-        filter_clauses.append({"term": {"architecture_style": architecture_style}})
+    # Note: Architecture style is NOT filtered here - it's a soft ranking signal
+    # The style preference naturally influences ranking through:
+    # - BM25 text match on visual_features_text (contains "modern style", "craftsman style", etc.)
+    # - kNN text embeddings (semantic similarity between "modern" and "contemporary")
+    # - kNN image embeddings (visual similarity between architecturally similar homes)
 
     # Note: Proximity filtering uses on-demand place enrichment per listing result
     # Previous approach filtered by pre-computed POI locations (see git history)
@@ -835,10 +842,36 @@ def handler(event, context):
             # Get scoring details from RRF (stored in document by _rrf function)
             scoring_details = h.get("scoring_details", {})
 
-            # Add tag boosting details
+            # Deduplicate tags for display (remove underscore variants, keep space format)
+            # expanded_must_tags contains both "kitchen_island" and "kitchen island"
+            # We only want to show "kitchen island" in the UI to avoid confusion
+            unique_required_tags = set()
+            unique_matched_tags = set()
+
+            for tag in expanded_must_tags:
+                # Prefer space format (what's actually stored in index)
+                if "_" in tag:
+                    space_version = tag.replace("_", " ")
+                    if space_version not in expanded_must_tags:
+                        unique_required_tags.add(tag)  # Only underscore version exists
+                    else:
+                        pass  # Skip underscore version, space version will be added
+                else:
+                    unique_required_tags.add(tag)  # Space version
+
+            for tag in matched_tags:
+                # Matched tags should already be in the correct format, but deduplicate anyway
+                if "_" in tag:
+                    space_version = tag.replace("_", " ")
+                    if space_version not in matched_tags:
+                        unique_matched_tags.add(tag)
+                else:
+                    unique_matched_tags.add(tag)
+
+            # Add tag boosting details with deduplicated tags
             scoring_details["tag_boosting"] = {
-                "matched_tags": list(matched_tags),
-                "required_tags": list(expanded_must_tags),
+                "matched_tags": list(unique_matched_tags),
+                "required_tags": list(unique_required_tags),
                 "match_ratio": len(matched_tags) / len(expanded_must_tags) if expanded_must_tags else 0.0,
                 "boost_factor": boost,
                 "score_before_boost": h.get("_score", 0.0),

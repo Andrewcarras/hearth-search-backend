@@ -55,8 +55,9 @@ import requests
 
 from common import (
     AWS_REGION, OS_INDEX, MAX_IMAGES, EMBEDDING_IMAGE_WIDTH,
+    IMAGE_MODEL_ID, LLM_MODEL_ID,
     create_index_if_needed, bulk_upsert,
-    embed_text, embed_image_bytes, detect_labels,
+    embed_text, embed_image_bytes, detect_labels_with_response,
     extract_zillow_images, vec_mean
 )
 
@@ -268,25 +269,22 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
             if MAX_IMAGES > 0 and count >= MAX_IMAGES:
                 break
             try:
-                # OPTIMIZATION: Check embedding cache BEFORE downloading
-                # This saves bandwidth when embeddings are already cached (90% of re-indexes)
+                # OPTIMIZATION: Check unified vision cache BEFORE downloading
+                # Cache contains both embedding AND analysis for each image
+                from cache_utils import get_cached_image_data, cache_image_data
+
                 img_vec = None
+                analysis = None
                 bb = None  # Image bytes (only downloaded if needed)
 
-                try:
-                    cached = dynamodb.get_item(
-                        TableName="hearth-image-cache",
-                        Key={"image_url": {"S": u}}
-                    )
-                    if "Item" in cached and "embedding" in cached["Item"]:
-                        vec_str = cached["Item"]["embedding"]["S"]
-                        img_vec = json.loads(vec_str)
-                        logger.debug(f"💾 Cache hit for image embedding: {u[:60]}...")
-                except Exception as e:
-                    logger.debug(f"Embedding cache read failed: {e}")
+                # Try to get both embedding and analysis from cache
+                cached_data = get_cached_image_data(dynamodb, u)
+                if cached_data:
+                    img_vec, analysis = cached_data
+                    logger.debug(f"💾 Cache hit for image (embedding + analysis): {u[:60]}...")
 
-                # Only download if we need to generate embedding
-                if img_vec is None:
+                # Cache miss - need to download and process
+                if img_vec is None or analysis is None:
                     logger.debug(f"📥 Downloading image (cache miss): {u[:60]}...")
                     resp = requests.get(u, timeout=8)
                     resp.raise_for_status()
@@ -295,20 +293,22 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
                     # Generate embedding from downloaded bytes
                     img_vec = embed_image_bytes(bb)
 
-                    # Cache the embedding for future re-indexes
-                    try:
-                        import time
-                        dynamodb.put_item(
-                            TableName="hearth-image-cache",
-                            Item={
-                                "image_url": {"S": u},
-                                "embedding": {"S": json.dumps(img_vec)},
-                                "created_at": {"N": str(int(time.time()))}
-                            }
-                        )
-                        logger.debug(f"💾 Cached image embedding: {u[:60]}")
-                    except Exception as e:
-                        logger.warning(f"Embedding cache write failed: {e}")
+                    # Get comprehensive analysis (returns dict with analysis + raw LLM response)
+                    analysis_result = detect_labels_with_response(bb, image_url=u)
+                    analysis = analysis_result["analysis"]
+                    llm_response = analysis_result["llm_response"]
+
+                    # Cache both embedding and analysis atomically
+                    cache_image_data(
+                        dynamodb,
+                        image_url=u,
+                        image_bytes=bb,
+                        embedding=img_vec,
+                        analysis=analysis,
+                        llm_response=llm_response,
+                        embedding_model=IMAGE_MODEL_ID,
+                        analysis_model=LLM_MODEL_ID
+                    )
 
                 # Validate embedding before using
                 if not img_vec or len(img_vec) == 0:
@@ -333,15 +333,9 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
                 # NOW it's safe to add the embedding (after dedup check)
                 image_vecs.append(img_vec)
 
-                # UNIFIED COMPREHENSIVE VISION ANALYSIS
-                # Single Haiku call extracts ALL data: features, architecture, colors, materials
-                # Cost: ~$0.00025 per image (replaces old detect_labels + classify_architecture_style)
-                # Savings: Eliminates redundant $0.0015 Sonnet call per listing
-                analysis = None
-                try:
-                    analysis = detect_labels(bb, image_url=u)  # Returns comprehensive dict
-
-                    # Store analysis for visual_features_text generation
+                # Analysis was already obtained above (either from cache or freshly generated)
+                # Store analysis for visual_features_text generation
+                if analysis:
                     all_image_analyses.append(analysis)
 
                     # Extract all features from analysis
@@ -380,10 +374,6 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
                     logger.debug("Analyzed image for zpid=%s: type=%s, features=%d, style=%s",
                                base.get("zpid"), image_type, len(features), analysis.get("architecture_style"))
 
-                except Exception as e:
-                    logger.warning("Comprehensive image analysis failed for zpid=%s, url=%s: %s",
-                                 base.get("zpid"), u, e)
-
                 # Store image vector with metadata for multi-vector schema
                 if img_vec and analysis:
                     image_vector_metadata.append({
@@ -414,11 +404,20 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
         exterior_colors = []
         all_materials = []
 
+        # Track feature frequencies for "Property includes" section
+        all_feature_counts = Counter()
+
         for analysis in all_image_analyses:
-            # Add all features
-            all_features.update(analysis.get("features", []))
-            all_features.update(analysis.get("materials", []))
-            all_features.update(analysis.get("visual_features", []))
+            # Add all features with frequency tracking
+            for feature in analysis.get("features", []):
+                all_features.add(feature)
+                all_feature_counts[feature] += 1
+            for material in analysis.get("materials", []):
+                all_features.add(material)
+                all_feature_counts[material] += 1
+            for visual_feature in analysis.get("visual_features", []):
+                all_features.add(visual_feature)
+                all_feature_counts[visual_feature] += 1
 
             if analysis.get("image_type") == "exterior":
                 exterior_analyses.append(analysis)
@@ -473,13 +472,22 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
             top_interior = [feature for feature, _ in feature_counts.most_common(10)]
             description_parts.append(f"Interior features: {', '.join(top_interior)}")
 
-        # GENERAL FEATURES: Remaining unique features
-        if all_features:
+        # GENERAL FEATURES: Remaining features ranked by frequency
+        if all_feature_counts:
             # Exclude features already mentioned in exterior/interior descriptions
             mentioned_features = set(interior_descriptions) | set(all_materials)
-            remaining_features = sorted(all_features - mentioned_features)[:15]
+
+            # Get remaining features with their counts
+            remaining_feature_counts = {f: count for f, count in all_feature_counts.items()
+                                       if f not in mentioned_features}
+
+            # Rank by frequency (most common first), take top 15
+            remaining_features = [f for f, _ in sorted(remaining_feature_counts.items(),
+                                                      key=lambda x: x[1], reverse=True)[:15]]
+
             if remaining_features:
                 description_parts.append(f"Property includes: {', '.join(remaining_features)}")
+                logger.debug(f"Property includes (by frequency): {remaining_features[:5]}... (showing top 5 of {len(remaining_features)})")
 
         visual_features_text = ". ".join(description_parts) + "." if description_parts else ""
         logger.info(f"📝 Generated visual_features_text for zpid={base.get('zpid')}: {len(visual_features_text)} chars, {len(all_features)} unique features")

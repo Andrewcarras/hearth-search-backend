@@ -15,7 +15,6 @@ Architecture:
 """
 
 import base64
-import hashlib
 import json
 import logging
 import os
@@ -41,7 +40,7 @@ OS_HOST = os.getenv("OS_HOST")  # e.g., search-xyz.us-east-1.es.amazonaws.com
 if OS_HOST and OS_HOST.startswith("https://"):
     OS_HOST = urlparse(OS_HOST).netloc  # Strip protocol if provided
 
-OS_INDEX = os.getenv("OS_INDEX", "listings")  # Index name for property listings
+OS_INDEX = os.getenv("OS_INDEX", "listings-v2")  # Index name for property listings (multi-vector schema)
 
 # Bedrock model identifiers
 TEXT_MODEL_ID = os.getenv("TEXT_EMBED_MODEL", "amazon.titan-embed-text-v2:0")  # Text embeddings
@@ -153,20 +152,13 @@ def embed_text(text: str) -> List[float]:
     if not text:
         return [0.0] * TEXT_DIM  # Return zero vector for empty text
 
-    # Check cache first (using image_url as key for compatibility with table schema)
-    cache_key = f"text:{hashlib.md5(text.encode()).hexdigest()}"
-    try:
-        cached = dynamodb.get_item(
-            TableName=CACHE_TABLE,
-            Key={"image_url": {"S": cache_key}}
-        )
-        if "Item" in cached and "embedding" in cached["Item"]:
-            vec_str = cached["Item"]["embedding"]["S"]
-            vec = json.loads(vec_str)
-            logger.debug(f"💾 Cache hit for text embedding")
-            return vec
-    except Exception as e:
-        logger.warning(f"Cache read error: {e}")
+    # Import cache utilities
+    from cache_utils import get_cached_text_embedding, cache_text_embedding
+
+    # Check cache first
+    cached_embedding = get_cached_text_embedding(dynamodb, text)
+    if cached_embedding:
+        return cached_embedding
 
     # Cache miss - generate embedding
     body = json.dumps({"inputText": text})
@@ -175,19 +167,7 @@ def embed_text(text: str) -> List[float]:
     vec = _parse_embed_response(out)
 
     # Store in cache
-    try:
-        dynamodb.put_item(
-            TableName=CACHE_TABLE,
-            Item={
-                "image_url": {"S": cache_key},
-                "embedding": {"S": json.dumps(vec)},
-                "type": {"S": "text"},
-                "created_at": {"N": str(int(time.time()))}
-            }
-        )
-        logger.debug(f"💾 Cached text embedding")
-    except Exception as e:
-        logger.warning(f"Cache write error: {e}")
+    cache_text_embedding(dynamodb, text, vec, TEXT_MODEL_ID)
 
     return vec
 
@@ -466,6 +446,193 @@ IMPORTANT: Be thorough. A good analysis should have 30-50+ features for a detail
             "materials": [],
             "visual_features": [],
             "confidence": "low"
+        }
+
+
+def detect_labels_with_response(img_bytes: bytes, image_url: str = "", max_labels: int = 100) -> Dict[str, Any]:
+    """
+    Same as detect_labels but also returns the raw LLM response for caching.
+
+    This is used by the new unified caching system to store both the parsed
+    analysis AND the raw LLM response for debugging and re-parsing.
+
+    Args:
+        img_bytes: Raw image bytes
+        image_url: URL of the image (used for caching)
+        max_labels: Maximum number of features to return (default 100)
+
+    Returns:
+        Dictionary with:
+        {
+            "analysis": {parsed analysis dict},
+            "llm_response": "raw response text from Claude"
+        }
+    """
+    # Check cache first (note: old cache format, will be replaced)
+    if image_url:
+        try:
+            cached = dynamodb.get_item(
+                TableName=CACHE_TABLE,
+                Key={"image_url": {"S": image_url}}
+            )
+            if "Item" in cached and "comprehensive_analysis" in cached["Item"]:
+                analysis_json = cached["Item"]["comprehensive_analysis"]["S"]
+                analysis = json.loads(analysis_json)
+                # Old cache doesn't have LLM response, return empty string
+                return {"analysis": analysis, "llm_response": ""}
+        except Exception as e:
+            logger.warning(f"Cache read failed for {image_url}: {e}")
+
+    # Analyze with Claude Haiku (same logic as detect_labels)
+    try:
+        b64_image = base64.b64encode(img_bytes).decode("utf-8")
+
+        payload = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 800,
+            "temperature": 0,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": b64_image
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": """Analyze this property photo comprehensively. Extract ALL valuable information for real estate search.
+
+STEP 1: Determine if this is EXTERIOR or INTERIOR
+- Exterior: Shows outside of building, facade, yard, architectural features
+- Interior: Shows rooms, furnishings, indoor spaces
+
+STEP 2: Extract ALL visible features (be exhaustive and specific):
+
+IF EXTERIOR:
+- Primary exterior color (white, blue, gray, beige, brown, red, tan, yellow, green, black)
+- Exterior materials (brick, stone, vinyl siding, wood siding, stucco, metal siding, fiber cement)
+- Architecture style (modern, contemporary, craftsman, victorian, colonial, ranch, mediterranean, tudor, cape cod, farmhouse, mid-century modern, traditional, transitional, bungalow, cottage, spanish, etc.)
+- Garage details (attached garage, detached garage, 2-car garage, 3-car garage, carport, tandem garage)
+- Roof type (gabled roof, hipped roof, flat roof, mansard roof, gambrel roof)
+- Structural features (front porch, covered porch, balcony, deck, patio, dormers, bay windows, picture windows, columns, shutters, chimney, awning)
+- Outdoor features (fenced yard, wood fence, white fence, chain link fence, mature trees, landscaped yard, driveway, walkway, garden, lawn)
+- Views (mountain view, city view, water view, wooded lot, golf course view)
+
+IF INTERIOR:
+- Room type (kitchen, master bedroom, living room, dining room, bathroom, bedroom, home office, laundry room, basement, bonus room, etc.)
+- Flooring (hardwood floors, tile floors, carpet, laminate, luxury vinyl plank, porcelain tile, marble floors, engineered hardwood)
+- Kitchen details (granite countertops, marble countertops, quartz countertops, butcher block countertops, stainless steel appliances, white cabinets, wood cabinets, gray cabinets, kitchen island, breakfast bar, double oven, gas range, electric range, pantry, farmhouse sink, subway tile backsplash, pendant lights)
+- Bathroom features (soaking tub, walk-in shower, dual sinks, double vanity, frameless glass shower, tile shower, separate tub and shower, vessel sink, rain shower head, heated floors)
+- Ceilings (vaulted ceilings, cathedral ceilings, coffered ceiling, tray ceiling, exposed beams, wood beams, high ceilings, popcorn ceiling)
+- Windows/Lighting (large windows, floor to ceiling windows, bay windows, lots of natural light, bright and airy, recessed lighting, pendant lights, chandelier, track lighting, skylights)
+- Storage (walk-in closet, built-in shelving, linen closet, custom cabinetry, built-in storage)
+- Fireplace (stone fireplace, brick fireplace, gas fireplace, wood burning fireplace, electric fireplace, modern fireplace)
+- Architectural details (crown molding, wainscoting, archways, open floor plan, open concept, shiplap, exposed brick)
+- Appliances (stainless steel appliances, black appliances, white appliances, built-in microwave, wine fridge, dishwasher)
+- Condition/Style (updated kitchen, renovated bathroom, modern finishes, contemporary style, traditional style, farmhouse style, industrial style, move-in ready, newly renovated)
+
+OUTDOOR AMENITIES (if visible):
+- Pool (in-ground pool, above-ground pool, pool with spa, heated pool, saltwater pool, lap pool, infinity pool)
+- Entertainment (outdoor kitchen, fire pit, hot tub, built-in BBQ, pizza oven, outdoor fireplace, pergola, gazebo)
+- Energy features (solar panels, ceiling fans)
+
+GUIDELINES:
+- Be EXHAUSTIVE - include every visible feature, color, material, detail
+- Be SPECIFIC: "3-car garage" not "garage", "vaulted ceilings" not "ceiling", "quartz countertops" not "countertops"
+- Include COLORS: "white cabinets", "gray walls", "black appliances", "blue exterior"
+- Note CONDITION: "updated", "renovated", "modern", "newly installed"
+- Include MATERIALS: specific types like "porcelain tile", "engineered hardwood", "fiber cement siding"
+- Identify STYLES: architectural and design styles
+- For EXTERIORS: always identify architecture style if possible
+
+Return STRICT JSON format:
+{
+  "image_type": "exterior" or "interior",
+  "features": ["feature1", "feature2", ...],
+  "architecture_style": "modern" or null (only for exteriors),
+  "exterior_color": "blue" or null (only for exteriors),
+  "materials": ["brick", "stone", ...],
+  "visual_features": ["balcony", "porch", ...],
+  "confidence": "high" or "medium" or "low"
+}"""
+                        }
+                    ]
+                }
+            ]
+        }
+
+        response = brt.invoke_model(
+            modelId=LLM_MODEL_ID,
+            body=json.dumps(payload)
+        )
+
+        result = json.loads(response["body"].read())
+        text = result["content"][0]["text"].strip()
+
+        # Store raw response
+        llm_response = text
+
+        # Parse JSON response
+        try:
+            analysis = json.loads(text)
+
+            # Ensure all required fields exist with defaults
+            analysis.setdefault("features", [])
+            analysis.setdefault("image_type", "unknown")
+            analysis.setdefault("architecture_style", None)
+            analysis.setdefault("exterior_color", None)
+            analysis.setdefault("materials", [])
+            analysis.setdefault("visual_features", [])
+            analysis.setdefault("confidence", "medium")
+
+            # Normalize all strings to lowercase
+            analysis["features"] = [f.lower().strip() for f in analysis["features"] if f]
+            analysis["materials"] = [m.lower().strip() for m in analysis["materials"] if m]
+            analysis["visual_features"] = [v.lower().strip() for v in analysis["visual_features"] if v]
+            if analysis["architecture_style"]:
+                analysis["architecture_style"] = analysis["architecture_style"].lower().replace(" ", "_")
+            if analysis["exterior_color"]:
+                analysis["exterior_color"] = analysis["exterior_color"].lower()
+
+            # Limit features if needed
+            if len(analysis["features"]) > max_labels:
+                analysis["features"] = analysis["features"][:max_labels]
+
+            logger.debug(f"Comprehensive analysis: {len(analysis['features'])} features, type={analysis['image_type']}, style={analysis['architecture_style']}")
+
+        except json.JSONDecodeError as e:
+            # Fallback: create minimal structure
+            logger.warning(f"JSON parse failed for {image_url}: {e}, falling back to basic parsing")
+            analysis = {
+                "features": [label.strip().lower() for label in text.split(",") if label.strip()][:max_labels],
+                "image_type": "unknown",
+                "architecture_style": None,
+                "exterior_color": None,
+                "materials": [],
+                "visual_features": [],
+                "confidence": "low"
+            }
+
+        return {"analysis": analysis, "llm_response": llm_response}
+
+    except Exception as e:
+        logger.warning(f"Comprehensive vision analysis failed for {image_url}: {e}")
+        return {
+            "analysis": {
+                "features": [],
+                "image_type": "unknown",
+                "architecture_style": None,
+                "exterior_color": None,
+                "materials": [],
+                "visual_features": [],
+                "confidence": "low"
+            },
+            "llm_response": ""
         }
 
 # ===============================================

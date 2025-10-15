@@ -68,7 +68,7 @@ aws lambda invoke \
   /tmp/lambda_response.json > /dev/null
 
 echo "✅ Lambda invoked successfully"
-echo ""
+echo ""1
 echo "⏱️  Estimated time: ~$((COUNT * 2)) minutes"
 echo ""
 echo "📊 Monitor progress:"
