@@ -258,10 +258,11 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
     style_from_vision = None
     best_exterior_score = 0
 
-    if MAX_IMAGES and MAX_IMAGES > 0 and image_urls:
+    if image_urls:
         count = 0
         for u in image_urls:
-            if count >= MAX_IMAGES:
+            # MAX_IMAGES=0 means unlimited, otherwise stop at limit
+            if MAX_IMAGES > 0 and count >= MAX_IMAGES:
                 break
             try:
                 # OPTIMIZATION: Check embedding cache BEFORE downloading

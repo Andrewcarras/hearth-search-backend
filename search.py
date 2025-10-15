@@ -770,7 +770,7 @@ def handler(event, context):
         # Add all OpenSearch fields (except vectors)
         # This automatically includes ANY custom fields added via CRUD API
         for k, v in src.items():
-            if k not in ("vector_text", "vector_image"):
+            if k not in ("vector_text", "vector_image", "image_vectors"):
                 result[k] = v
 
         # Optionally merge full Zillow listing data from S3
@@ -866,7 +866,7 @@ def get_listing_handler(event, context):
 
         # Add all fields except vectors
         for k, v in src.items():
-            if k not in ("vector_text", "vector_image"):
+            if k not in ("vector_text", "vector_image", "image_vectors"):
                 result[k] = v
 
         # Optionally merge full Zillow data from S3

@@ -54,7 +54,7 @@ IMAGE_DIM = int(os.getenv("IMAGE_DIM", "1024"))  # Titan Image outputs 1024-dim 
 
 # Optional features
 USE_REKOGNITION = os.getenv("USE_REKOGNITION", "false").lower() in ("1", "true", "yes")  # Enable image labeling
-MAX_IMAGES = int(os.getenv("MAX_IMAGES", "6"))  # Max images to process per listing
+MAX_IMAGES = int(os.getenv("MAX_IMAGES", "0"))  # Max images to process per listing (0 = unlimited)
 EMBEDDING_IMAGE_WIDTH = int(os.getenv("EMBEDDING_IMAGE_WIDTH", "576"))  # Target resolution for embeddings (cost optimization)
 
 # Logging configuration
