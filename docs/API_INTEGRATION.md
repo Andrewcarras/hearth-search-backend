@@ -1,8 +1,9 @@
 # Hearth Property Search API - Complete Integration Guide
 
-**Last Updated:** 2025-10-13
-**API Version:** 1.0
-**Base URL:** `https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod`
+**Last Updated:** 2025-10-15
+**API Version:** 2.0 (Multi-Vector Image Search)
+**Base URL:** `https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod`
+**Default Index:** `listings-v2` (multi-vector kNN enabled)
 
 ---
 
@@ -33,20 +34,20 @@
 ### Test the API
 
 ```bash
-curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search \
+curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search \
   -H 'Content-Type: application/json' \
-  -d '{"q":"granite countertops","size":10}'
+  -d '{"query":"granite countertops","limit":10,"index":"listings-v2"}'
 ```
 
 ### Live Demo
 
-**UI:** http://34.228.111.56/
+**UI:** http://54.227.66.148/
 
 Try these searches:
 - "granite countertops"
 - "blue house"
 - "vaulted ceilings"
-- "3 bedroom homes under $500k"
+- "modern 3 bedroom homes"
 
 ---
 
@@ -56,7 +57,7 @@ Try these searches:
 
 Natural language property search with AI-powered semantic understanding and image recognition.
 
-**Endpoint:** `https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search`
+**Endpoint:** `https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search`
 
 **Method:** `POST`
 
@@ -70,18 +71,18 @@ Natural language property search with AI-powered semantic understanding and imag
 
 Retrieve a single property listing by Zillow Property ID (zpid).
 
-**Endpoint:** `https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/{zpid}`
+**Endpoint:** `https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings/{zpid}`
 
 **Method:** `GET`
 
 **Query Parameters:**
 - `include_full_data` (boolean, optional): Include complete Zillow data from S3 (166+ fields)
 - `include_nearby_places` (boolean, optional, default: true): Include nearby places from Google Places API
-- `index` (string, optional, default: "listings"): Target index name
+- `index` (string, optional, default: "listings-v2"): Target index name
 
 **Example:**
 ```bash
-GET /listings/456567015?include_full_data=true&index=listings-v2
+GET /listings/448383785?include_full_data=true&index=listings-v2
 ```
 
 ---
@@ -90,14 +91,14 @@ GET /listings/456567015?include_full_data=true&index=listings-v2
 
 Update any fields in an existing listing. Supports adding custom fields dynamically.
 
-**Endpoint:** `https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/{zpid}`
+**Endpoint:** `https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings/{zpid}`
 
 **Method:** `PATCH`
 
 **Content-Type:** `application/json`
 
 **Query Parameters:**
-- `index` (string, optional, default: "listings"): Target index name
+- `index` (string, optional, default: "listings-v2"): Target index name
 
 **Request Body:**
 ```json
@@ -119,14 +120,14 @@ Update any fields in an existing listing. Supports adding custom fields dynamica
 
 Create a new listing with optional image processing and AI analysis.
 
-**Endpoint:** `https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings`
+**Endpoint:** `https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings`
 
 **Method:** `POST`
 
 **Content-Type:** `application/json`
 
 **Query Parameters:**
-- `index` (string, optional, default: "listings"): Target index name
+- `index` (string, optional, default: "listings-v2"): Target index name
 
 **Request Body:**
 ```json
@@ -156,13 +157,13 @@ Create a new listing with optional image processing and AI analysis.
 
 Delete a listing (soft or hard delete).
 
-**Endpoint:** `https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/{zpid}`
+**Endpoint:** `https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings/{zpid}`
 
 **Method:** `DELETE`
 
 **Query Parameters:**
 - `soft` (boolean, optional, default: true): If true, marks as deleted but keeps in index. If false, permanently removes.
-- `index` (string, optional, default: "listings"): Target index name
+- `index` (string, optional, default: "listings-v2"): Target index name
 
 **Example:**
 ```bash
@@ -181,8 +182,9 @@ DELETE /listings/456567015?soft=false
 
 ```json
 {
-  "q": "granite countertops",
-  "size": 10
+  "query": "granite countertops",
+  "limit": 10,
+  "index": "listings-v2"
 }
 ```
 
@@ -190,8 +192,9 @@ DELETE /listings/456567015?soft=false
 
 ```json
 {
-  "q": "modern homes with open floor plan",
-  "size": 20,
+  "query": "modern homes with open floor plan",
+  "limit": 20,
+  "index": "listings-v2",
   "filters": {
     "price_min": 300000,
     "price_max": 600000,
@@ -205,8 +208,10 @@ DELETE /listings/456567015?soft=false
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `q` | string | Yes | - | Natural language search query |
-| `size` | integer | No | 15 | Number of results (max: 50) |
+| `query` | string | Yes | - | Natural language search query |
+| `limit` | integer | No | 15 | Number of results (max: 50) |
+| `index` | string | No | listings-v2 | Target OpenSearch index name |
+| `boost_mode` | boolean | No | false | Enable A/B testing boost mode |
 | `filters` | object | No | {} | Filter criteria (see below) |
 
 ### Filter Options
@@ -371,7 +376,8 @@ Results are ranked using:
 
 ```json
 {
-  "q": "homes",
+  "query": "homes",
+  "index": "listings-v2",
   "filters": {
     "price_min": 300000,
     "price_max": 600000
@@ -385,7 +391,8 @@ Results are ranked using:
 
 ```json
 {
-  "q": "family homes",
+  "query": "family homes",
+  "index": "listings-v2",
   "filters": {
     "beds_min": 3,
     "baths_min": 2
@@ -397,8 +404,9 @@ Results are ranked using:
 
 ```json
 {
-  "q": "granite countertops with large windows",
-  "size": 20,
+  "query": "granite countertops with large windows",
+  "limit": 20,
+  "index": "listings-v2",
   "filters": {
     "price_min": 400000,
     "price_max": 700000,
@@ -446,7 +454,7 @@ One of the most common use cases is managing listing status (for sale, pending, 
 #### Example: Mark Property as For Sale
 
 ```bash
-curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015?index=listings-v2 \
+curl -X PATCH https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings/448383785?index=listings-v2 \
   -H 'Content-Type: application/json' \
   -d '{
     "updates": {
@@ -463,7 +471,7 @@ curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listin
 ```json
 {
   "ok": true,
-  "zpid": "456567015",
+  "zpid": "448383785",
   "updated_fields": ["listing_status", "list_date", "asking_price", "listing_agent", "mls_number"],
   "removed_fields": []
 }
@@ -472,7 +480,7 @@ curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listin
 #### Example: Mark Property as Sold
 
 ```bash
-curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015?index=listings-v2 \
+curl -X PATCH https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings/448383785?index=listings-v2 \
   -H 'Content-Type: application/json' \
   -d '{
     "updates": {
@@ -487,7 +495,7 @@ curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listin
 #### Example: Retrieve Listing with Status
 
 ```bash
-curl https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015?index=listings-v2
+curl https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings/448383785?index=listings-v2
 ```
 
 **Response includes all custom fields:**
@@ -495,7 +503,7 @@ curl https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567
 {
   "ok": true,
   "listing": {
-    "zpid": "456567015",
+    "zpid": "448383785",
     "price": 500000,
     "bedrooms": 3,
     "bathrooms": 2,
@@ -522,9 +530,9 @@ curl https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567
 When you search, all custom fields are automatically included:
 
 ```bash
-curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search \
+curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search \
   -H 'Content-Type: application/json' \
-  -d '{"q":"modern homes","size":10,"index":"listings-v2"}'
+  -d '{"query":"modern homes","limit":10,"index":"listings-v2"}'
 ```
 
 **Each result includes custom fields:**
@@ -533,7 +541,7 @@ curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search 
   "ok": true,
   "results": [
     {
-      "zpid": "456567015",
+      "zpid": "448383785",
       "score": 4.5,
       "price": 500000,
 
@@ -606,7 +614,7 @@ listings.forEach(listing => {
 #### Example: Add Agent Contact Information
 
 ```bash
-curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015 \
+curl -X PATCH https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings/448383785?index=listings-v2 \
   -H 'Content-Type: application/json' \
   -d '{
     "updates": {
@@ -621,7 +629,7 @@ curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listin
 #### Example: Add Open House Information
 
 ```bash
-curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015 \
+curl -X PATCH https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings/448383785?index=listings-v2 \
   -H 'Content-Type: application/json' \
   -d '{
     "updates": {
@@ -635,7 +643,7 @@ curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listin
 #### Example: Add Property Highlights
 
 ```bash
-curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/456567015 \
+curl -X PATCH https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings/448383785?index=listings-v2 \
   -H 'Content-Type: application/json' \
   -d '{
     "updates": {
@@ -699,7 +707,7 @@ curl -X PATCH https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listin
 
 ```javascript
 async function searchProperties(query, filters = {}) {
-  const API_URL = 'https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search';
+  const API_URL = 'https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search';
 
   try {
     const response = await fetch(API_URL, {
@@ -708,8 +716,9 @@ async function searchProperties(query, filters = {}) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        q: query,
-        size: 20,
+        query: query,
+        limit: 20,
+        index: 'listings-v2',
         filters: filters
       })
     });
@@ -744,11 +753,12 @@ results.forEach(property => {
 const axios = require('axios');
 
 async function searchProperties(query, options = {}) {
-  const API_URL = 'https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search';
+  const API_URL = 'https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search';
 
   const payload = {
-    q: query,
-    size: options.size || 20
+    query: query,
+    limit: options.limit || 20,
+    index: options.index || 'listings-v2'
   };
 
   if (options.filters) {
@@ -766,7 +776,7 @@ async function searchProperties(query, options = {}) {
 
 // Usage
 searchProperties('modern homes with pool', {
-  size: 10,
+  limit: 10,
   filters: {
     price_min: 400000,
     beds_min: 3,
@@ -786,13 +796,14 @@ searchProperties('modern homes with pool', {
 import requests
 import json
 
-def search_properties(query, filters=None, size=20):
+def search_properties(query, filters=None, limit=20, index='listings-v2'):
     """Search properties using natural language query."""
-    API_URL = 'https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search'
+    API_URL = 'https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search'
 
     payload = {
-        'q': query,
-        'size': size
+        'query': query,
+        'limit': limit,
+        'index': index
     }
 
     if filters:
@@ -814,7 +825,7 @@ results = search_properties(
         'beds_min': 3,
         'baths_min': 2
     },
-    size=15
+    limit=15
 )
 
 if results and results['ok']:
@@ -837,7 +848,7 @@ const PropertySearch = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const API_URL = 'https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search';
+  const API_URL = 'https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search';
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -849,7 +860,7 @@ const PropertySearch = () => {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: query, size: 12 })
+        body: JSON.stringify({ query: query, limit: 12, index: 'listings-v2' })
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -906,16 +917,17 @@ export default PropertySearch;
 
 ```bash
 # Basic search
-curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search \
+curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search \
   -H 'Content-Type: application/json' \
-  -d '{"q":"granite countertops","size":10}'
+  -d '{"query":"granite countertops","limit":10,"index":"listings-v2"}'
 
 # With filters
-curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search \
+curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search \
   -H 'Content-Type: application/json' \
   -d '{
-    "q": "modern homes with pool",
-    "size": 20,
+    "query": "modern homes with pool",
+    "limit": 20,
+    "index": "listings-v2",
     "filters": {
       "price_min": 400000,
       "price_max": 800000,
@@ -925,9 +937,9 @@ curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search 
   }' | jq '.'
 
 # Extract specific fields
-curl -s -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search \
+curl -s -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search \
   -H 'Content-Type: application/json' \
-  -d '{"q":"vaulted ceilings","size":5}' \
+  -d '{"query":"vaulted ceilings","limit":5,"index":"listings-v2"}' \
   | jq '.results[] | {price, address: .address.streetAddress, beds: .bedrooms}'
 ```
 
@@ -939,11 +951,12 @@ curl -s -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/sear
 
 | Metric | Value |
 |--------|-------|
-| **Average Response Time** | 1-3 seconds |
-| **P95 Response Time** | <5 seconds |
-| **Indexed Listings** | 1,358+ properties |
-| **Max Results Per Request** | 50 |
-| **Timeout** | 30 seconds |
+| **Average Response Time** | 2-5 seconds |
+| **P95 Response Time** | <8 seconds |
+| **Indexed Listings** | 3,904 properties (Salt Lake City, UT) |
+| **Max Results Per Request** | 100 |
+| **Lambda Timeout** | 300 seconds (5 minutes) |
+| **API Gateway Timeout** | 30 seconds (hard limit) |
 
 ### Rate Limits
 
@@ -985,10 +998,10 @@ No special configuration needed. API works directly from browser:
 
 ```javascript
 // Works from any domain
-fetch('https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search', {
+fetch('https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ q: 'granite countertops', size: 10 })
+  body: JSON.stringify({ query: 'granite countertops', limit: 10, index: 'listings-v2' })
 })
 .then(res => res.json())
 .then(data => console.log(data.results));
@@ -1038,37 +1051,39 @@ const highResUrl = getHighResImage(thumbnailUrl); // uncropped version
 
 ```javascript
 // Granite countertops
-{"q": "granite countertops", "size": 10}
+{"query": "granite countertops", "limit": 10, "index": "listings-v2"}
 
 // Blue exterior
-{"q": "blue house", "size": 10}
+{"query": "blue house", "limit": 10, "index": "listings-v2"}
 
 // Vaulted ceilings
-{"q": "vaulted ceilings", "size": 10}
+{"query": "vaulted ceilings", "limit": 10, "index": "listings-v2"}
 
 // Large windows
-{"q": "large windows", "size": 10}
+{"query": "large windows", "limit": 10, "index": "listings-v2"}
 
 // Open floor plan
-{"q": "open floor plan", "size": 10}
+{"query": "open floor plan", "limit": 10, "index": "listings-v2"}
 ```
 
 ### Complex Searches
 
 ```javascript
 // Multiple features
-{"q": "granite countertops with stainless steel appliances and hardwood floors", "size": 10}
+{"query": "granite countertops with stainless steel appliances and hardwood floors", "limit": 10, "index": "listings-v2"}
 
 // With price filter
 {
-  "q": "modern homes with pool",
-  "size": 15,
+  "query": "modern homes with pool",
+  "limit": 15,
+  "index": "listings-v2",
   "filters": {"price_max": 600000}
 }
 
 // Bedroom + bathroom requirements
 {
-  "q": "family homes",
+  "query": "family homes",
+  "index": "listings-v2",
   "filters": {"beds_min": 4, "baths_min": 2.5}
 }
 ```
@@ -1096,18 +1111,30 @@ Include in your report:
 
 ## Changelog
 
+### Version 2.0 (2025-10-15)
+- ✨ **NEW**: Multi-vector image search (listings-v2 index)
+- ✨ **NEW**: Unified caching system (hearth-vision-cache, hearth-text-embeddings)
+- ✨ **NEW**: Parallel image processing (20x faster indexing)
+- ✨ **NEW**: Salt Lake City dataset (3,904 listings)
+- ✨ **NEW**: Boost mode A/B testing for visual features
+- 🔧 Changed parameter names: `q` → `query`, `size` → `limit`
+- 🔧 Added `index` parameter (default: listings-v2)
+- 🔧 Increased Lambda timeout to 300s for complex queries
+- 🔧 Enhanced Bedrock throttling protection (semaphore + retry)
+- 📊 Comprehensive score breakdown with visual features
+- 🚀 Performance optimizations: 50-60 listings/min indexing
+
 ### Version 1.1 (2025-01-14)
-- ✨ **NEW**: Enhanced visual feature matching - Text embeddings now include image analysis
-- ✨ **NEW**: `visual_features_text` field - AI-generated description from photo analysis
-- 📚 **NEW**: Complete CRUD API documentation
-- 📚 **NEW**: For Sale/Sold status management guide
+- ✨ Enhanced visual feature matching - Text embeddings now include image analysis
+- ✨ `visual_features_text` field - AI-generated description from photo analysis
+- 📚 Complete CRUD API documentation
+- 📚 For Sale/Sold status management guide
 - 🔧 Improved BM25 search with visual features (weight: 2.5)
 - 🔧 Enhanced kNN text search includes visual characteristics
-- 📊 Updated score breakdown UI with visual features explanation
 
 ### Version 1.0 (2025-10-13)
 - Initial production release
-- 1,358+ listings indexed
+- 1,588 listings indexed (Murray, UT)
 - AI vision analysis active
 - CORS enabled
 - Full natural language support

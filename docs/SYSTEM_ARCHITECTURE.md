@@ -41,12 +41,16 @@ The system is built on AWS using:
 # AWS Configuration
 AWS_REGION = "us-east-1"
 OS_HOST = "search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com"
-OS_INDEX = "listings"  # Default index (can be overridden)
+OS_INDEX = "listings-v2"  # Default index (multi-vector schema)
 
 # Processing Limits
 MAX_IMAGES = 0  # 0 = unlimited, process all available images
 EMBEDDING_IMAGE_WIDTH = 576  # Resize images to 576px for embeddings (cost optimization)
 USE_REKOGNITION = False  # Disabled (Claude Haiku is cheaper and better)
+
+# Caching Tables
+VISION_CACHE_TABLE = "hearth-vision-cache"  # Unified cache for embeddings + vision analysis
+TEXT_CACHE_TABLE = "hearth-text-embeddings"  # Text embedding cache
 ```
 
 #### Embedding Generation Functions
@@ -62,7 +66,7 @@ USE_REKOGNITION = False  # Disabled (Claude Haiku is cheaper and better)
 - Automatically resizes images to EMBEDDING_IMAGE_WIDTH (576px) before processing
 - Cost: $0.00006 per image
 - Returns: `[0.012, -0.089, 0.201, ...]` (1024 floats)
-- **Cached in DynamoDB** (`hearth-image-cache` table by image_url)
+- **Cached in DynamoDB** (`hearth-vision-cache` table with unified embedding + analysis storage)
 
 #### Vision Analysis Function
 
@@ -97,12 +101,23 @@ Uses **Claude 3 Haiku Vision** to perform comprehensive image analysis. This is 
 }
 ```
 
-**Caching Strategy**:
+**Caching Strategy** (Unified hearth-vision-cache):
 - First checks DynamoDB cache by `image_url`
-- If cache hit: Returns cached analysis (saves $0.00025)
-- If cache miss: Calls Claude Haiku Vision API
-- Stores complete analysis JSON in DynamoDB for future use
-- Cache hit rate: ~90% during re-indexing
+- If cache hit: Returns cached embedding + analysis + hash (saves $0.00031)
+- If cache miss: Generates embedding AND vision analysis (atomic operation)
+- Stores complete data in single DynamoDB item:
+  ```python
+  {
+    "image_url": "https://...",
+    "embedding": "[0.012, ...]",  # 1024-dim vector
+    "analysis": {...},             # Complete vision analysis
+    "image_hash": "a3f2d8...",    # MD5 hash for deduplication
+    "created_at": "2025-10-15T...",
+    "model_version": "titan-v1",
+    "analysis_version": "haiku-20250314"
+  }
+  ```
+- Cache hit rate: ~90% during re-indexing, higher for duplicate images
 
 **Cost Optimization**:
 - Claude 3 Haiku: $0.00025 per image (~500 input tokens, 100 output tokens)

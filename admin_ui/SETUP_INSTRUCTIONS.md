@@ -27,18 +27,21 @@ The Lambda functions are created but need to be connected to API Gateway endpoin
 - hearth-crud-update (update_listing_handler)
 - hearth-crud-create (add_listing_handler)
 - hearth-crud-delete (delete_listing_handler)
-- hearth-search (get_listing_handler added)
+- hearth-search (search + get listing handlers)
 
-⚠️ API Gateway Routes Needed:
-- GET /listings/{zpid} → hearth-search.get_listing_handler
+✅ API Gateway Configuration:
+- Base URL: `https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod`
+- GET /listings/{zpid} → hearth-search
 - PATCH /listings/{zpid} → hearth-crud-update
 - POST /listings → hearth-crud-create
 - DELETE /listings/{zpid} → hearth-crud-delete
+- POST /search → hearth-search
 
 ### Configure API Gateway (AWS Console)
 
 1. **Go to API Gateway Console**
-   - Navigate to `mqgsb4xb2g` (hearth-api)
+   - Navigate to API Gateway (hearth-api)
+   - Current API ID: `mwf1h5nbxe`
 
 2. **Create /listings resource (if not exists)**
    - Actions → Create Resource
@@ -131,9 +134,10 @@ Create a separate Lambda for GET listings endpoint.
 ### 1. Test Search (Should work now)
 ```
 Query: "granite countertops"
-Size: 5
+Limit: 5
+Index: listings-v2
 ```
-Should return existing Murray County listings.
+Should return existing Salt Lake City listings.
 
 ### 2. Get Listing Details
 ```

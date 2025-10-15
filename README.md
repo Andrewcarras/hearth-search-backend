@@ -6,17 +6,18 @@ Advanced multimodal AI-powered real estate search combining natural language pro
 
 ## 🚀 Quick Start
 
-**Live Demo:** http://34.228.111.56/
-**Search API:** https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search
-**Status:** ✅ 1,358+ of 1,588 listings indexed (85.5%)
+**Live Demo:** http://54.227.66.148/
+**Search API:** https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search
+**Current Index:** `listings-v2` (multi-vector image search enabled)
+**Status:** ✅ Production Ready - 3,904 listings from Salt Lake City, UT
 
 ### Try It Now
 
 ```bash
 # Search for properties with granite countertops
-curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search \
+curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search \
   -H 'Content-Type: application/json' \
-  -d '{"q": "granite countertops", "size": 5}'
+  -d '{"query": "granite countertops", "limit": 5, "index": "listings-v2"}'
 ```
 
 **Example Queries:**
@@ -67,13 +68,13 @@ curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         USER INTERFACE                           │
-│  http://34.228.111.56/ (Property search with modal details)     │
+│  http://54.227.66.148/ (Property search with modal details)     │
 └───────────────────────────┬──────────────────────────────────────┘
                             │ HTTP POST
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     API GATEWAY (HTTP API)                       │
-│  https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod    │
+│  https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod    │
 └───────────────────────────┬──────────────────────────────────────┘
                             │ Invokes
                             ▼
@@ -81,16 +82,16 @@ curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search 
 │                    LAMBDA: hearth-search                         │
 │  • Parse query (Claude Haiku)                                   │
 │  • Generate embeddings (Bedrock Titan)                          │
-│  • Hybrid search (BM25 + kNN text + kNN image)                  │
-│  • RRF fusion                                                   │
+│  • Hybrid search (BM25 + kNN text + kNN image multi-vector)     │
+│  • RRF fusion with adaptive k-values                            │
 │  • Enrich with nearby places (Google Places API)                │
 └───────────────────┬─────────────────────────────────────────────┘
                     │ Query
                     ▼
         ┌───────────────────────┐
         │   OPENSEARCH CLUSTER  │
-        │   1,358+ documents    │
-        │   • kNN vectors       │
+        │   3,904 documents     │
+        │   • Multi-vector kNN  │
         │   • BM25 text index   │
         │   • Filters/facets    │
         └───────────────────────┘
@@ -101,32 +102,35 @@ curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search 
 │                                                                  │
 │  ┌──────────────┐      ┌─────────────────────────────┐         │
 │  │ S3 Listings  │  →   │ index_local.py (Recommended)│         │
-│  │ 1,588 props  │      │ OR Lambda: upload-listings  │         │
+│  │ 3,904 props  │      │ OR Lambda: upload-listings  │         │
 │  └──────────────┘      └──────────┬──────────────────┘         │
 │                                   │                             │
 │                                   ▼                             │
 │                    ┌──────────────────────────┐                 │
 │                    │ For each listing:        │                 │
 │                    │ • Text embedding         │                 │
-│                    │ • Image embeddings (10x) │                 │
+│                    │ • Image embeddings (ALL) │                 │
 │                    │ • Vision AI analysis     │                 │
 │                    │ • Architecture style     │                 │
+│                    │ • Parallel processing    │                 │
 │                    └──────────┬───────────────┘                 │
 │                               │                                 │
 │                               ▼                                 │
-│                    ┌─────────────────┐                          │
-│                    │ DynamoDB Cache  │                          │
-│                    │ (90% cost save) │                          │
-│                    └─────────────────┘                          │
+│                    ┌──────────────────────────┐                 │
+│                    │ Unified DynamoDB Caches  │                 │
+│                    │ • hearth-vision-cache    │                 │
+│                    │ • hearth-text-embeddings │                 │
+│                    │ (90%+ hit rate)          │                 │
+│                    └──────────────────────────┘                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Technologies:**
-- **OpenSearch** - Hybrid search (BM25 + kNN with HNSW)
-- **Amazon Bedrock** - Titan embeddings (1024-dim) + Claude for NLP
-- **DynamoDB** - Caching layer (embeddings, vision, geolocation)
-- **Google Places API** - Nearby places enrichment
-- **Python 3.11** - Lambda runtime
+- **OpenSearch 2.11** - Multi-vector kNN search with HNSW algorithm
+- **Amazon Bedrock** - Titan embeddings (1024-dim) + Claude Haiku for vision/NLP
+- **DynamoDB** - Unified caching (embeddings + vision + geolocation)
+- **Google Places API** - On-demand nearby places enrichment
+- **Python 3.13** - Lambda runtime with optimized parallel processing
 
 See [docs/BACKEND_ARCHITECTURE.md](docs/BACKEND_ARCHITECTURE.md) for detailed architecture.
 
@@ -182,7 +186,7 @@ Lambda functions require:
 ```bash
 # OpenSearch
 OS_HOST=search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com
-OS_INDEX=listings
+OS_INDEX=listings-v2  # Use listings-v2 for multi-vector image search
 
 # Bedrock Models
 TEXT_EMBED_MODEL=amazon.titan-embed-text-v2:0
@@ -190,8 +194,8 @@ IMAGE_EMBED_MODEL=amazon.titan-embed-image-v1
 LLM_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
 
 # Image Processing
-MAX_IMAGES=10
-EMBEDDING_IMAGE_WIDTH=576
+MAX_IMAGES=0  # 0 = unlimited (process all images per listing)
+EMBEDDING_IMAGE_WIDTH=576  # Optimize cost vs quality
 
 # Self-Invocation (upload Lambda only)
 MAX_INVOCATIONS=50
@@ -204,16 +208,20 @@ GOOGLE_PLACES_API_KEY=your-api-key-here  # Optional
 
 ```bash
 # Install dependencies
-pip install boto3 opensearch-py requests requests-aws4auth
+pip install boto3 opensearch-py requests requests-aws4auth pytz
 
 # Set AWS credentials
 export AWS_PROFILE=default
+export AWS_REGION=us-east-1
 
-# Run local indexing (recommended)
-python index_local.py
+# Run local indexing (recommended - much faster than Lambda)
+python3 index_local.py --file slc_listings.json --index listings-v2
 
 # Test search locally
-python -c "from common import embed_text; print(len(embed_text('test')))"
+python3 -c "from common import embed_text; print(f'Embedding dimension: {len(embed_text(\"test\"))}')"
+
+# Verify OpenSearch connection
+python3 -c "from common import os_client; print(os_client.info())"
 ```
 
 See [AWS_DEPLOYMENT_GUIDE.md](AWS_DEPLOYMENT_GUIDE.md) for production deployment.
@@ -224,13 +232,15 @@ See [AWS_DEPLOYMENT_GUIDE.md](AWS_DEPLOYMENT_GUIDE.md) for production deployment
 
 | Metric | Value |
 |--------|-------|
-| **Search Latency** | 500-800ms (warm), 2-3s (cold start) |
-| **Indexing Speed** | 30-40 seconds per listing |
-| **Cache Hit Rate** | 90% (embeddings), 95% (geolocation) |
-| **Dataset Size** | 1,588 listings (Murray, UT) |
-| **Images per Listing** | Up to 10 (576px for embeddings) |
+| **Search Latency** | 2-5s (fully indexed), 60-120s (partial index) |
+| **Indexing Speed** | 50-60 listings/min (local, parallel) |
+| **Indexing Time** | ~65 minutes for 3,904 listings (cold cache) |
+| **Cache Hit Rate** | 90%+ (vision), 95%+ (geolocation) |
+| **Dataset Size** | 3,904 listings (Salt Lake City, UT) |
+| **Images per Listing** | Unlimited (avg ~10 images at 576px) |
 | **Vector Dimensions** | 1024 (Titan embeddings) |
-| **Success Rate** | 99.9% (with retries) |
+| **Success Rate** | 99%+ (with exponential backoff retries) |
+| **Concurrent Processing** | 20 listings in parallel, 10 images per listing |
 
 ---
 
@@ -252,17 +262,21 @@ See [AWS_DEPLOYMENT_GUIDE.md](AWS_DEPLOYMENT_GUIDE.md) for production deployment
 
 ### One-Time Indexing Costs
 
-**Full re-index (1,588 listings):**
-- Text embeddings: 1,588 × $0.0001 = $0.16
-- Image embeddings: 15,880 × $0.0003 = $4.76
-- Claude Vision: 15,880 × $0.00025 = $3.97
-- **Total: ~$8.89** (without caching)
+**Full re-index (3,904 listings, ~39,040 images):**
+- Text embeddings: 3,904 × $0.0001 = $0.39
+- Image embeddings: 39,040 × $0.0008 = $31.23
+- Claude Haiku Vision: 39,040 × $0.00025 = $9.76
+- S3 data transfer: 26 GB × $0.09/GB = $2.34
+- **Total: ~$43.72** (first run, cold cache)
 
-**With DynamoDB caching (90% hit rate):**
-- Text: 159 × $0.0001 = $0.02
-- Images: 1,588 × $0.0003 = $0.48
-- Vision: 1,588 × $0.00025 = $0.40
-- **Total: ~$0.90** (90% savings!)
+**With unified caching (90%+ hit rate on re-index):**
+- Text: 390 × $0.0001 = $0.04
+- Images: 3,904 × $0.0008 = $3.12
+- Vision: 3,904 × $0.00025 = $0.98
+- S3 data transfer: ~$0.23
+- **Total: ~$4.37** (90% savings!)
+
+**Per-listing cost:** $0.0112 (first run), $0.0011 (cached)
 
 ---
 
@@ -296,22 +310,28 @@ hearth_backend_new/
 
 ```bash
 # Basic search
-curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search \
+curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search \
   -H 'Content-Type: application/json' \
-  -d '{"q": "granite countertops", "size": 10}'
+  -d '{"query": "granite countertops", "limit": 10, "index": "listings-v2"}'
 
 # Search with filters
-curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search \
+curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search \
   -H 'Content-Type: application/json' \
   -d '{
-    "q": "modern homes with pool",
-    "size": 15,
+    "query": "modern homes with pool",
+    "limit": 15,
+    "index": "listings-v2",
     "filters": {
       "price_max": 600000,
       "beds_min": 3,
       "baths_min": 2
     }
   }'
+
+# Search with boost mode enabled (better visual style matching)
+curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "craftsman style home", "limit": 10, "index": "listings-v2", "boost_mode": true}'
 ```
 
 ### Python
@@ -319,15 +339,23 @@ curl -X POST https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search 
 ```python
 import requests
 
+# Basic search
 response = requests.post(
-    "https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search",
-    json={"q": "vaulted ceilings", "size": 10}
+    "https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search",
+    json={
+        "query": "vaulted ceilings",
+        "limit": 10,
+        "index": "listings-v2"
+    }
 )
 
 data = response.json()
+print(f"Found {data['total']} results in {data['took_ms']}ms")
+
 for result in data["results"]:
-    print(f"{result['address']['streetAddress']} - ${result['price']:,}")
-    print(f"  Features: {', '.join(result['image_tags'][:5])}")
+    print(f"\n{result['address']['streetAddress']} - ${result['price']:,}")
+    print(f"  Bedrooms: {result['bedrooms']} | Bathrooms: {result['bathrooms']}")
+    print(f"  Features: {', '.join(result.get('image_tags', [])[:5])}")
     if "nearby_places" in result:
         print(f"  Nearby: {', '.join(p['name'] for p in result['nearby_places'][:3])}")
 ```
@@ -335,22 +363,36 @@ for result in data["results"]:
 ### JavaScript
 
 ```javascript
-async function searchProperties(query) {
+async function searchProperties(query, options = {}) {
   const response = await fetch(
-    'https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/search',
+    'https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search',
     {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({q: query, size: 15})
+      body: JSON.stringify({
+        query: query,
+        limit: options.limit || 15,
+        index: 'listings-v2',
+        boost_mode: options.boostMode || false,
+        filters: options.filters || {}
+      })
     }
   );
   const data = await response.json();
-  return data.results;
+  return data;
 }
 
-// Usage
+// Usage examples
 const results = await searchProperties('blue homes with garage');
-console.log(`Found ${results.length} properties`);
+console.log(`Found ${results.total} properties in ${results.took_ms}ms`);
+console.log(`Showing ${results.results.length} results`);
+
+// With filters
+const filtered = await searchProperties('modern homes', {
+  limit: 20,
+  boostMode: true,
+  filters: { price_max: 500000, beds_min: 3 }
+});
 ```
 
 See [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md) for complete examples.
@@ -365,21 +407,27 @@ See [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md) for complete examples.
 
 **Check:**
 ```bash
-# Count indexed listings
-curl https://search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com/listings/_count
+# Count indexed listings in listings-v2
+curl -X GET "https://search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com/listings-v2/_count" \
+  --aws-sigv4 "aws:amz:us-east-1:es" \
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY"
 ```
 
 **Fix:** Wait for indexing to complete or check [INDEXING_GUIDE.md](INDEXING_GUIDE.md)
 
-### Search is slow (>2s)
+### Search is slow (>30s) or timing out
 
-**Cause:** OpenSearch cold start or Lambda cold start
+**Cause:** Partial index or OpenSearch optimization needed
 
 **Check:**
-- CloudWatch metrics for OpenSearch CPU/JVM
-- Lambda cold start logs
+- Is indexing still in progress? (search slower on partial index)
+- Lambda timeout in CloudWatch logs
+- OpenSearch CPU/JVM metrics
 
-**Fix:** Use Lambda provisioned concurrency or scale up OpenSearch cluster
+**Fix:**
+- Wait for indexing to complete (search speeds improve dramatically)
+- Increase Lambda timeout: `aws lambda update-function-configuration --function-name hearth-search --timeout 300`
+- Increase OpenSearch client timeout in `common.py`
 
 ### Indexing stuck or looping
 
@@ -393,9 +441,23 @@ aws lambda put-function-concurrency \
   --reserved-concurrent-executions 0 \
   --region us-east-1
 
-# Use local indexing instead
-python index_local.py
+# Use local indexing instead (faster and more reliable)
+python3 index_local.py --file slc_listings.json --index listings-v2 --batch-size 20
 ```
+
+### Bedrock throttling errors
+
+**Cause:** Too many concurrent API calls to Bedrock
+
+**Symptoms:**
+```
+ThrottlingException: Too many requests, please wait before trying again
+```
+
+**Fix:**
+- Reduce `BEDROCK_SEMAPHORE` value in `upload_listings.py` (currently 10)
+- Built-in exponential backoff retry will handle occasional throttling
+- For very low limits, reduce to 5 or 8 concurrent calls
 
 See [docs/BACKEND_ARCHITECTURE.md#troubleshooting](docs/BACKEND_ARCHITECTURE.md#troubleshooting) for more.
 
@@ -403,15 +465,19 @@ See [docs/BACKEND_ARCHITECTURE.md#troubleshooting](docs/BACKEND_ARCHITECTURE.md#
 
 ## 📖 Additional Resources
 
-- **Live Demo:** http://34.228.111.56/
+- **Live Demo:** http://54.227.66.148/
+- **API Endpoint:** https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search
 - **API Status:** ✅ Fully operational
-- **Dataset:** 1,588 listings from Murray, UT (Zillow)
-- **Support:** Check documentation or review Lambda logs
+- **Current Index:** `listings-v2` (multi-vector, 3,904 listings)
+- **Dataset:** Salt Lake City, UT (Zillow)
+- **OpenSearch:** search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com
+- **Support:** Check documentation or review Lambda logs in CloudWatch
 
 **Next Steps:**
 1. Read [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md) to integrate the API
-2. Review [docs/BACKEND_ARCHITECTURE.md](docs/BACKEND_ARCHITECTURE.md) to understand the system
+2. Review [docs/SYSTEM_ARCHITECTURE.md](docs/SYSTEM_ARCHITECTURE.md) to understand the system
 3. Follow [INDEXING_GUIDE.md](INDEXING_GUIDE.md) to index your own listings
+4. Check [admin_ui/](admin_ui/) for management tools
 
 ---
 

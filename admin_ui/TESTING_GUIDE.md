@@ -112,10 +112,11 @@ python3 -m http.server 8000
 ```
 Form: Search Listings
 Query: "granite countertops"
-Size: 5
+Limit: 10
+Index: listings-v2
 Include Full Data: ✓
 
-Expected: Returns Murray County listings with granite countertops
+Expected: Returns Salt Lake City listings with granite countertops
 ```
 
 ### Test 2: Get Listing Details
@@ -255,7 +256,7 @@ Expected: Listing permanently removed
 
 **Test:**
 ```bash
-curl https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod/listings/12345
+curl https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/listings/448383785?index=listings-v2
 ```
 
 ### CORS Errors in Browser
@@ -278,7 +279,7 @@ aws lambda add-permission \
   --statement-id apigateway-invoke \
   --action lambda:InvokeFunction \
   --principal apigateway.amazonaws.com \
-  --source-arn "arn:aws:execute-api:us-east-1:692859949078:mqgsb4xb2g/*/*/*"
+  --source-arn "arn:aws:execute-api:us-east-1:692859949078:mwf1h5nbxe/*/*/*"
 
 # Repeat for hearth-crud-create and hearth-crud-delete
 ```
@@ -351,10 +352,11 @@ After completing tests 1-12, you should have:
 ## 🚀 Next Steps After Testing
 
 ### Ready for Production Use
-1. ✅ Index Salt Lake County (3,904 listings)
-2. ✅ Use improved vision analysis
-3. ✅ Add listings via admin UI as needed
-4. ✅ Update prices/status in real-time
+1. ✅ Index complete: 3,904 listings from Salt Lake City, UT
+2. ✅ Multi-vector image search with listings-v2 index
+3. ✅ Unified caching system with complete metadata
+4. ✅ Add listings via admin UI as needed
+5. ✅ Update prices/status in real-time
 
 ### Future Enhancements
 - Add authentication (API keys or Cognito)
