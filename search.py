@@ -370,7 +370,7 @@ def _os_search(body: Dict[str, Any], size: int = 50, index: str = None) -> List[
     return res.get("hits", {}).get("hits", [])
 
 
-def _rrf(*ranked_lists: List[List[Dict[str, Any]]], k: int = 60, k_values: List[int] = None, top: int = 50) -> List[Dict[str, Any]]:
+def _rrf(*ranked_lists: List[List[Dict[str, Any]]], k: int = 60, k_values: List[int] = None, top: int = 50, include_scoring_details: bool = False) -> List[Dict[str, Any]]:
     """
     Reciprocal Rank Fusion - Combine multiple ranked result lists into one.
 
@@ -392,6 +392,7 @@ def _rrf(*ranked_lists: List[List[Dict[str, Any]]], k: int = 60, k_values: List[
         k: Default RRF constant if k_values not provided (default 60)
         k_values: List of k values per result list for adaptive weighting (e.g., [30, 60, 120])
         top: Number of top results to return after fusion
+        include_scoring_details: If True, attach detailed scoring breakdown to each document
 
     Returns:
         Fused and re-ranked list of documents
@@ -405,18 +406,44 @@ def _rrf(*ranked_lists: List[List[Dict[str, Any]]], k: int = 60, k_values: List[
         logger.warning(f"k_values length ({len(k_values)}) != ranked_lists length ({len(ranked_lists)}), using default k={k}")
         k_values = [k] * len(ranked_lists)
 
-    def add(listing, rank, k_val):
+    # Strategy names for debugging
+    strategy_names = ["bm25", "knn_text", "knn_image"]
+
+    def add(listing, rank, k_val, strategy_idx):
         """Add a listing's score based on its rank in a result list."""
         _id = listing["_id"]
-        entry = scores.setdefault(_id, {"doc": listing, "score": 0.0})
+        entry = scores.setdefault(_id, {
+            "doc": listing,
+            "score": 0.0,
+            "scoring_details": {
+                "bm25": {"rank": None, "original_score": None, "rrf_contribution": 0.0, "k": k_values[0] if len(k_values) > 0 else k},
+                "knn_text": {"rank": None, "original_score": None, "rrf_contribution": 0.0, "k": k_values[1] if len(k_values) > 1 else k},
+                "knn_image": {"rank": None, "original_score": None, "rrf_contribution": 0.0, "k": k_values[2] if len(k_values) > 2 else k},
+                "rrf_total": 0.0
+            } if include_scoring_details else None
+        })
+
         # RRF formula: score += 1 / (k + rank)
         # Lower k = higher weight for that result list
-        entry["score"] += 1.0 / (k_val + rank)
+        rrf_contribution = 1.0 / (k_val + rank)
+        entry["score"] += rrf_contribution
+
+        # Store scoring details if requested
+        if include_scoring_details and strategy_idx < len(strategy_names):
+            strategy_name = strategy_names[strategy_idx]
+            entry["scoring_details"][strategy_name]["rank"] = rank
+            entry["scoring_details"][strategy_name]["original_score"] = listing.get("_score", 0.0)
+            entry["scoring_details"][strategy_name]["rrf_contribution"] = rrf_contribution
 
     # Process each ranked list with its corresponding k value
-    for lst, k_val in zip(ranked_lists, k_values):
+    for strategy_idx, (lst, k_val) in enumerate(zip(ranked_lists, k_values)):
         for i, h in enumerate(lst):
-            add(h, i + 1, k_val)  # rank is 1-indexed
+            add(h, i + 1, k_val, strategy_idx)  # rank is 1-indexed
+
+    # Update RRF totals in scoring details
+    if include_scoring_details:
+        for entry in scores.values():
+            entry["scoring_details"]["rrf_total"] = entry["score"]
 
     # Sort by fused score (descending) and return top results
     fused = list(scores.values())
@@ -721,8 +748,11 @@ def handler(event, context):
     query_type = constraints.get("query_type", "general")
     k_values = calculate_adaptive_weights(must_tags, query_type)
 
+    # Check if client wants detailed scoring breakdown
+    include_scoring_details = payload.get("include_scoring_details", False)
+
     # Fuse results using RRF with adaptive weights (only includes non-empty result lists)
-    fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, k_values=k_values, top=size * 3)
+    fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, k_values=k_values, top=size * 3, include_scoring_details=include_scoring_details)
     logger.info("RRF fusion produced %d results", len(fused))
 
     # Check if client wants full Zillow data from S3
@@ -738,6 +768,7 @@ def handler(event, context):
 
         # Calculate boost based on tag match percentage
         boost = 1.0
+        matched_tags = set()
         if expanded_must_tags:
             matched_tags = expanded_must_tags.intersection(tags)
             match_ratio = len(matched_tags) / len(expanded_must_tags)
@@ -766,6 +797,38 @@ def handler(event, context):
             "score": h.get("_score", 0.0) * boost,  # Apply multiplicative boost
             "boosted": boost > 1.0
         }
+
+        # Add scoring details if requested
+        if include_scoring_details:
+            # Get scoring details from RRF (stored in document by _rrf function)
+            scoring_details = h.get("scoring_details", {})
+
+            # Add tag boosting details
+            scoring_details["tag_boosting"] = {
+                "matched_tags": list(matched_tags),
+                "required_tags": list(expanded_must_tags),
+                "match_ratio": len(matched_tags) / len(expanded_must_tags) if expanded_must_tags else 0.0,
+                "boost_factor": boost,
+                "score_before_boost": h.get("_score", 0.0),
+                "score_after_boost": h.get("_score", 0.0) * boost
+            }
+
+            # Add query context
+            scoring_details["query_context"] = {
+                "query_type": query_type,
+                "k_values": {
+                    "bm25": k_values[0] if len(k_values) > 0 else 60,
+                    "knn_text": k_values[1] if len(k_values) > 1 else 60,
+                    "knn_image": k_values[2] if len(k_values) > 2 else 60
+                },
+                "adaptive_scoring_applied": k_values != [60, 60, 60]
+            }
+
+            # Add image vector count if multi-vector
+            if "image_vectors" in src:
+                scoring_details["image_vectors_count"] = len(src["image_vectors"])
+
+            result["_scoring_details"] = scoring_details
 
         # Add all OpenSearch fields (except vectors)
         # This automatically includes ANY custom fields added via CRUD API

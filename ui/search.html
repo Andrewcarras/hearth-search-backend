@@ -402,6 +402,90 @@
                 height: 300px;
             }
         }
+
+        /* Score Breakdown Styles */
+        .score-breakdown-btn {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 12px 24px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .score-breakdown-btn:hover {
+            background: #218838;
+        }
+        .score-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #006aff;
+        }
+        .score-section h4 {
+            color: #2a2a2a;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .score-metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .score-metric:last-child {
+            border-bottom: none;
+        }
+        .score-label {
+            font-weight: 500;
+            color: #495057;
+        }
+        .score-value {
+            font-weight: 600;
+            color: #212529;
+        }
+        .score-value.highlight {
+            color: #006aff;
+            font-size: 1.1em;
+        }
+        .score-value.success {
+            color: #28a745;
+        }
+        .score-value.warning {
+            color: #ffc107;
+        }
+        .score-value.danger {
+            color: #dc3545;
+        }
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .score-tag {
+            background: #e3f2ff;
+            color: #006aff;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .score-tag.matched {
+            background: #d4edda;
+            color: #155724;
+        }
+        .score-tag.missing {
+            background: #f8d7da;
+            color: #721c24;
+        }
     </style>
 </head>
 <body>
@@ -477,6 +561,21 @@
         </div>
     </div>
 
+    <!-- Score Breakdown Modal -->
+    <div id="scoreModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 Detailed Score Breakdown</h2>
+                <span class="close" onclick="closeScoreModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="detail-section" id="scoreBreakdownContent">
+                    <!-- Content populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentProperty = null;
         let currentImageIndex = 0;
@@ -501,7 +600,12 @@
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '<div class="loading">🔍 Searching properties...</div>';
 
-            const payload = { q: query, size: 30, index: selectedIndex };
+            const payload = {
+                q: query,
+                size: 30,
+                index: selectedIndex,
+                include_scoring_details: true  // Request detailed scoring breakdown
+            };
             const priceMin = document.getElementById('priceMin').value;
             const priceMax = document.getElementById('priceMax').value;
             const bedsMin = document.getElementById('bedsMin').value;
@@ -685,13 +789,20 @@
             const zillowUrl = currentProperty.hdpUrl ?
                 'https://www.zillow.com' + currentProperty.hdpUrl :
                 'https://www.zillow.com/homedetails/' + currentProperty.zpid + '_zipid/';
-            document.getElementById('modalActions').innerHTML =
-                `<div style="display:flex;gap:10px;margin-bottom:20px;">
-                    <button onclick="deleteListing('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#dc3545;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">🗑️ Delete Listing</button>
-                    <button onclick="editListing('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#ffc107;color:#000;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✏️ Edit Listing</button>
-                    <button onclick="markAsSold('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#28a745;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✓ Mark as Sold</button>
-                </div>
-                <a href="${zillowUrl}" target="_blank" class="zillow-btn">View Full Details on Zillow →</a>`;
+            let actionsHTML = `<div style="display:flex;gap:10px;margin-bottom:20px;">
+                <button onclick="deleteListing('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#dc3545;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">🗑️ Delete Listing</button>
+                <button onclick="editListing('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#ffc107;color:#000;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✏️ Edit Listing</button>
+                <button onclick="markAsSold('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#28a745;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✓ Mark as Sold</button>
+            </div>`;
+
+            // Add score breakdown button if scoring details available
+            if (currentProperty._scoring_details) {
+                actionsHTML += `<button onclick="showScoreBreakdown()" class="score-breakdown-btn">📊 View Detailed Score Breakdown</button><br>`;
+            }
+
+            actionsHTML += `<a href="${zillowUrl}" target="_blank" class="zillow-btn">View Full Details on Zillow →</a>`;
+
+            document.getElementById('modalActions').innerHTML = actionsHTML;
 
             modal.style.display = 'block';
             document.body.style.overflow = 'hidden';
@@ -826,6 +937,218 @@
                 alert('Error: ' + error.message);
             }
         }
+        // Score Breakdown Modal Functions
+        function showScoreBreakdown() {
+            if (!currentProperty._scoring_details) {
+                alert('No scoring details available for this property');
+                return;
+            }
+
+            const details = currentProperty._scoring_details;
+            const content = document.getElementById('scoreBreakdownContent');
+
+            let html = '';
+
+            // Overall Score Section
+            html += `<div class="score-section">
+                <h4>🎯 Final Score</h4>
+                <div class="score-metric">
+                    <span class="score-label">Final Ranking Score</span>
+                    <span class="score-value highlight">${currentProperty.score.toFixed(4)}</span>
+                </div>
+                ${currentProperty.boosted ? '<div class="score-metric"><span class="score-label">Tag Boost Applied</span><span class="score-value success">✓ Yes</span></div>' : ''}
+            </div>`;
+
+            // RRF Breakdown Section
+            if (details.bm25 || details.knn_text || details.knn_image) {
+                html += `<div class="score-section">
+                    <h4>🔀 Reciprocal Rank Fusion (RRF) Breakdown</h4>
+                    <div class="score-metric">
+                        <span class="score-label">Total RRF Score</span>
+                        <span class="score-value highlight">${details.rrf_total.toFixed(4)}</span>
+                    </div>`;
+
+                // BM25 Full-Text Search
+                if (details.bm25) {
+                    const bm25 = details.bm25;
+                    html += `<div style="margin-top:15px;padding-top:15px;border-top:2px solid #dee2e6;">
+                        <strong style="color:#2a2a2a;">BM25 Full-Text Search</strong>
+                        <div class="score-metric">
+                            <span class="score-label">Rank in Results</span>
+                            <span class="score-value ${bm25.rank ? 'success' : 'danger'}">${bm25.rank ? '#' + bm25.rank : 'Not found'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Original BM25 Score</span>
+                            <span class="score-value">${bm25.original_score ? bm25.original_score.toFixed(4) : 'N/A'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF k-value</span>
+                            <span class="score-value">${bm25.k}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF Contribution</span>
+                            <span class="score-value">${bm25.rrf_contribution.toFixed(4)} ${bm25.rank ? '(= 1/(' + bm25.k + '+' + bm25.rank + '))' : ''}</span>
+                        </div>
+                    </div>`;
+                }
+
+                // kNN Text Search
+                if (details.knn_text) {
+                    const knn_text = details.knn_text;
+                    html += `<div style="margin-top:15px;padding-top:15px;border-top:2px solid #dee2e6;">
+                        <strong style="color:#2a2a2a;">kNN Text Similarity Search</strong>
+                        <div class="score-metric">
+                            <span class="score-label">Rank in Results</span>
+                            <span class="score-value ${knn_text.rank ? 'success' : 'danger'}">${knn_text.rank ? '#' + knn_text.rank : 'Not found'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Cosine Similarity Score</span>
+                            <span class="score-value">${knn_text.original_score ? knn_text.original_score.toFixed(4) : 'N/A'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF k-value</span>
+                            <span class="score-value">${knn_text.k}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF Contribution</span>
+                            <span class="score-value">${knn_text.rrf_contribution.toFixed(4)} ${knn_text.rank ? '(= 1/(' + knn_text.k + '+' + knn_text.rank + '))' : ''}</span>
+                        </div>
+                    </div>`;
+                }
+
+                // kNN Image Search
+                if (details.knn_image) {
+                    const knn_image = details.knn_image;
+                    html += `<div style="margin-top:15px;padding-top:15px;border-top:2px solid #dee2e6;">
+                        <strong style="color:#2a2a2a;">kNN Image Similarity Search ${details.image_vectors_count ? '(' + details.image_vectors_count + ' images)' : ''}</strong>
+                        <div class="score-metric">
+                            <span class="score-label">Rank in Results</span>
+                            <span class="score-value ${knn_image.rank ? 'success' : 'danger'}">${knn_image.rank ? '#' + knn_image.rank : 'Not found'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Best Image Match Score</span>
+                            <span class="score-value">${knn_image.original_score ? knn_image.original_score.toFixed(4) : 'N/A'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF k-value</span>
+                            <span class="score-value">${knn_image.k}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF Contribution</span>
+                            <span class="score-value">${knn_image.rrf_contribution.toFixed(4)} ${knn_image.rank ? '(= 1/(' + knn_image.k + '+' + knn_image.rank + '))' : ''}</span>
+                        </div>
+                    </div>`;
+                }
+
+                html += `</div>`;
+            }
+
+            // Tag Boosting Section
+            if (details.tag_boosting) {
+                const tb = details.tag_boosting;
+                html += `<div class="score-section">
+                    <h4>🏷️ Tag Matching & Boosting</h4>
+                    <div class="score-metric">
+                        <span class="score-label">Match Ratio</span>
+                        <span class="score-value ${tb.match_ratio >= 1.0 ? 'success' : tb.match_ratio >= 0.5 ? 'warning' : 'danger'}">${(tb.match_ratio * 100).toFixed(0)}% (${tb.matched_tags.length}/${tb.required_tags.length})</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Boost Factor</span>
+                        <span class="score-value ${tb.boost_factor > 1 ? 'success' : ''}">${tb.boost_factor}x</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Score Before Boost</span>
+                        <span class="score-value">${tb.score_before_boost.toFixed(4)}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Score After Boost</span>
+                        <span class="score-value highlight">${tb.score_after_boost.toFixed(4)}</span>
+                    </div>`;
+
+                // Show matched vs required tags
+                if (tb.required_tags && tb.required_tags.length > 0) {
+                    html += `<div style="margin-top:15px;">
+                        <strong style="color:#2a2a2a;">Required Tags:</strong>
+                        <div class="tag-list">`;
+                    tb.required_tags.forEach(tag => {
+                        const matched = tb.matched_tags.includes(tag);
+                        html += `<span class="score-tag ${matched ? 'matched' : 'missing'}">${matched ? '✓' : '✗'} ${tag}</span>`;
+                    });
+                    html += `</div></div>`;
+                }
+
+                html += `</div>`;
+            }
+
+            // Query Context Section
+            if (details.query_context) {
+                const qc = details.query_context;
+                html += `<div class="score-section">
+                    <h4>🔍 Query Analysis</h4>
+                    <div class="score-metric">
+                        <span class="score-label">Query Type</span>
+                        <span class="score-value">${qc.query_type}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Adaptive Scoring</span>
+                        <span class="score-value ${qc.adaptive_scoring_applied ? 'success' : ''}">${qc.adaptive_scoring_applied ? '✓ Applied' : 'Not Applied'}</span>
+                    </div>`;
+
+                if (qc.k_values) {
+                    html += `<div style="margin-top:15px;">
+                        <strong style="color:#2a2a2a;">RRF k-values (lower = higher weight):</strong>
+                        <div class="score-metric">
+                            <span class="score-label">BM25 (full-text)</span>
+                            <span class="score-value">${qc.k_values.bm25}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">kNN Text (semantic)</span>
+                            <span class="score-value">${qc.k_values.knn_text}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">kNN Image (visual)</span>
+                            <span class="score-value">${qc.k_values.knn_image}</span>
+                        </div>
+                    </div>`;
+                }
+
+                html += `</div>`;
+            }
+
+            // Image Vectors Info
+            if (details.image_vectors_count) {
+                html += `<div class="score-section">
+                    <h4>🖼️ Image Vectors</h4>
+                    <div class="score-metric">
+                        <span class="score-label">Total Images Processed</span>
+                        <span class="score-value">${details.image_vectors_count}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Search Strategy</span>
+                        <span class="score-value">Multi-vector (max match)</span>
+                    </div>
+                    <p style="color:#666;font-size:13px;margin-top:10px;">Each image is searched independently. The best matching image determines the overall image similarity score.</p>
+                </div>`;
+            }
+
+            content.innerHTML = html;
+
+            // Show modal
+            document.getElementById('scoreModal').style.display = 'block';
+        }
+
+        function closeScoreModal() {
+            document.getElementById('scoreModal').style.display = 'none';
+        }
+
+        // Close score modal on escape or outside click
+        window.addEventListener('click', function(e) {
+            const scoreModal = document.getElementById('scoreModal');
+            if (e.target === scoreModal) {
+                closeScoreModal();
+            }
+        });
+
     </script>
 </body>
 </html>
