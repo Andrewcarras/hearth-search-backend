@@ -34,7 +34,8 @@ import boto3
 
 from common import (
     os_client, OS_INDEX, AWS_REGION,
-    embed_text, embed_image_bytes, detect_labels,
+    IMAGE_MODEL_ID, LLM_MODEL_ID,
+    embed_text, embed_image_bytes, detect_labels_with_response,
     vec_mean
 )
 
@@ -292,30 +293,61 @@ def add_listing_handler(event, context):
                 # Process up to 10 images (configurable limit to avoid timeout)
                 for url in image_urls[:10]:
                     try:
+                        # Import cache utilities
+                        from cache_utils import get_cached_image_data, cache_image_data
                         import requests
-                        resp = requests.get(url, timeout=8)
-                        resp.raise_for_status()
-                        img_bytes = resp.content
 
-                        # Generate embedding
-                        img_vec = embed_image_bytes(img_bytes)
-                        if img_vec:
-                            image_vecs.append(img_vec)
+                        img_vec = None
+                        analysis = None
+                        img_bytes = None
+
+                        # Try to get from unified cache first
+                        cached_data = get_cached_image_data(dynamodb, url)
+                        if cached_data:
+                            img_vec, analysis = cached_data
+                            logger.debug(f"💾 Cache hit for image: {url[:60]}...")
+                        else:
+                            # Cache miss - download and process
+                            logger.debug(f"📥 Downloading image (cache miss): {url[:60]}...")
+                            resp = requests.get(url, timeout=8)
+                            resp.raise_for_status()
+                            img_bytes = resp.content
+
+                            # Generate embedding
+                            img_vec = embed_image_bytes(img_bytes)
                             processing_cost += 0.0008
 
-                        # Run vision analysis
-                        analysis = detect_labels(img_bytes, image_url=url)
-                        for feature in analysis.get("features", []):
-                            img_tags.add(feature)
-                        for material in analysis.get("materials", []):
-                            img_tags.add(material)
-                        for visual_feature in analysis.get("visual_features", []):
-                            img_tags.add(visual_feature)
+                            # Run vision analysis with raw LLM response
+                            analysis_result = detect_labels_with_response(img_bytes, image_url=url)
+                            analysis = analysis_result["analysis"]
+                            llm_response = analysis_result["llm_response"]
+                            processing_cost += 0.00025
 
-                        processing_cost += 0.00025
+                            # Cache atomically in new unified cache
+                            cache_image_data(
+                                dynamodb,
+                                image_url=url,
+                                image_bytes=img_bytes,
+                                embedding=img_vec,
+                                analysis=analysis,
+                                llm_response=llm_response,
+                                embedding_model=IMAGE_MODEL_ID,
+                                analysis_model=LLM_MODEL_ID
+                            )
 
-                        # Store metadata for multi-vector schema
-                        if img_vec and analysis:
+                        # Process analysis results
+                        if img_vec:
+                            image_vecs.append(img_vec)
+
+                        if analysis:
+                            for feature in analysis.get("features", []):
+                                img_tags.add(feature)
+                            for material in analysis.get("materials", []):
+                                img_tags.add(material)
+                            for visual_feature in analysis.get("visual_features", []):
+                                img_tags.add(visual_feature)
+
+                            # Store metadata for multi-vector schema
                             image_vector_metadata.append({
                                 "image_url": url,
                                 "image_type": analysis.get("image_type", "unknown"),
