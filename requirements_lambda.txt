@@ -1,0 +1,8 @@
+# Lambda deployment requirements
+# These packages are installed in the Lambda package
+# numpy is NOT included - it comes from the scikit-numpy:3 layer
+
+boto3>=1.26.0
+opensearch-py>=2.0.0
+requests-aws4auth>=1.1.0
+pytz>=2023.3
