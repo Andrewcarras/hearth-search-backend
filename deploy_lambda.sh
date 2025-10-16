@@ -39,13 +39,14 @@ build_package() {
     rm -rf "$build_dir"
     mkdir -p "$build_dir"
 
-    # Install dependencies (numpy comes from layer, not package)
+    # Install dependencies (including numpy in package - layers are broken)
     echo "  Installing dependencies..."
     pip3 install --target "$build_dir" \
         boto3 \
         opensearch-py \
         requests-aws4auth \
         pytz \
+        numpy \
         --quiet
 
     # Copy source files
@@ -89,7 +90,6 @@ create_lambda() {
         --timeout ${TIMEOUT} \
         --memory-size ${MEMORY} \
         --environment "${ENV_VARS}" \
-        --layers "${NUMPY_LAYER}" \
         --region "${REGION}" \
         --output json \
         | jq '{FunctionName, Runtime, CodeSize, State}'
