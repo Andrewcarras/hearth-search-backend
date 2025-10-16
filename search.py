@@ -65,6 +65,26 @@ S3_CACHE_TTL = 3600  # 1 hour in seconds
 # Google Places API configuration (set via Lambda environment variable)
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
 
+# Feature terms that should be treated as required when mentioned in query
+# These are concrete property features, not stylistic attributes
+REQUIRED_FEATURE_TERMS = {
+    "pool", "pools", "swimming pool", "hot tub", "spa",
+    "garage", "attached garage", "detached garage", "2 car garage", "3 car garage",
+    "fireplace", "brick fireplace", "stone fireplace", "gas fireplace",
+    "basement", "finished basement", "walkout basement",
+    "deck", "patio", "balcony", "porch", "sunroom",
+    "fence", "fenced yard", "privacy fence",
+    "ac", "air conditioning", "central air",
+    "hardwood floors", "hardwood flooring",
+}
+
+# Construction indicators that should be filtered out for normal searches
+CONSTRUCTION_INDICATORS = [
+    "floor plan", "floorplan", "rendering", "to be built", "not yet built",
+    "under construction", "pre-construction", "coming soon", "model home",
+    "architectural rendering", "artist rendering", "conceptual"
+]
+
 
 # ===============================================
 # ON-DEMAND GEOLOCATION ENRICHMENT
@@ -290,6 +310,90 @@ def _fetch_listing_from_s3(zpid: str) -> Dict[str, Any]:
     except Exception as e:
         logger.warning("Failed to fetch listing %s from S3: %s", zpid, e)
         return {}
+
+
+def _detect_required_features(query: str) -> List[str]:
+    """
+    Detect required feature terms in the query that should be mandatory filters.
+
+    Args:
+        query: User search query
+
+    Returns:
+        List of required feature terms found in query
+    """
+    query_lower = query.lower()
+    required_features = []
+
+    for feature in REQUIRED_FEATURE_TERMS:
+        if feature in query_lower:
+            required_features.append(feature)
+
+    return required_features
+
+
+def _is_construction_listing(listing: Dict[str, Any]) -> bool:
+    """
+    Detect if a listing is under construction, not built, or showing renderings.
+
+    Args:
+        listing: OpenSearch hit document
+
+    Returns:
+        True if listing appears to be under construction or not built
+    """
+    source = listing.get("_source", {})
+    description = source.get("description", "").lower()
+
+    # Check description for construction indicators
+    for indicator in CONSTRUCTION_INDICATORS:
+        if indicator in description:
+            return True
+
+    return False
+
+
+def _build_required_feature_filter(required_features: List[str]) -> List[Dict[str, Any]]:
+    """
+    Build OpenSearch filter clauses to require certain features.
+
+    For features like "pool", we need to ensure the listing actually has a pool
+    by matching against description, image_tags, or feature_tags.
+
+    Args:
+        required_features: List of feature terms that must be present
+
+    Returns:
+        List of filter clauses for OpenSearch bool query
+    """
+    filters = []
+
+    for feature in required_features:
+        # Create normalized versions of the feature term
+        feature_normalized = feature.replace(" ", "_")
+        feature_spaced = feature.replace("_", " ")
+
+        # Each required feature must match in at least ONE of these fields:
+        # - description text
+        # - image_tags array
+        # - feature_tags array
+        filters.append({
+            "bool": {
+                "should": [
+                    # Match in description using match_phrase for exact phrase matching
+                    {"match_phrase": {"description": feature_spaced}},
+                    # Match in image_tags
+                    {"term": {"image_tags": feature_spaced}},
+                    {"term": {"image_tags": feature_normalized}},
+                    # Match in feature_tags
+                    {"term": {"feature_tags": feature_spaced}},
+                    {"term": {"feature_tags": feature_normalized}},
+                ],
+                "minimum_should_match": 1
+            }
+        })
+
+    return filters
 
 
 def _filters_to_bool(filter_obj: Dict[str, Any], require_embeddings: bool = True) -> Dict[str, Any]:
@@ -585,6 +689,11 @@ def handler(event, context):
     proximity = constraints.get("proximity")
     logger.info("Extracted constraints: %s", constraints)
 
+    # Detect required features that should be mandatory (pool, garage, etc.)
+    required_features = _detect_required_features(q)
+    if required_features:
+        logger.info("Required features detected (will be mandatory): %s", required_features)
+
     # Merge explicit filters from payload
     if "filters" in payload:
         hard_filters.update(payload["filters"])
@@ -617,6 +726,24 @@ def handler(event, context):
 
     q_vec = embed_text(q)
     filter_clauses = _filters_to_bool(hard_filters, require_embeddings=require_embeddings)["bool"]["filter"]
+
+    # Add required feature filters (pool, garage, etc. must be present)
+    if required_features:
+        feature_filters = _build_required_feature_filter(required_features)
+        filter_clauses.extend(feature_filters)
+        logger.info("Added %d required feature filters to query", len(feature_filters))
+
+    # Filter out construction/rendering listings by default
+    # These are properties that aren't built yet or only show floorplans/renderings
+    filter_clauses.append({
+        "bool": {
+            "must_not": [
+                {"match_phrase": {"description": indicator}}
+                for indicator in CONSTRUCTION_INDICATORS
+            ]
+        }
+    })
+    logger.info("Added construction listing filter (excluding %d indicators)", len(CONSTRUCTION_INDICATORS))
 
     # Note: Architecture style is NOT filtered here - it's a soft ranking signal
     # The style preference naturally influences ranking through:
@@ -674,7 +801,9 @@ def handler(event, context):
                                 "city^0.3",                # City name (low weight)
                                 "state^0.2"                # State (low weight)
                             ],
-                            "type": "best_fields"
+                            "type": "best_fields",
+                            "operator": "or",  # Match any terms, but with proper word boundaries
+                            "minimum_should_match": "50%"  # Require at least half of query terms to match
                         }
                     },
                     *([{"terms": {"feature_tags": list(expanded_must_tags)}}] if expanded_must_tags else []),
