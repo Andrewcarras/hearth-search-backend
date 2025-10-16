@@ -43,6 +43,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 import boto3
+import numpy as np
 
 from common import (
     os_client, OS_INDEX, embed_text,
@@ -122,7 +123,7 @@ def enrich_with_nearby_places(listing: Dict[str, Any]) -> Dict[str, Any]:
 
     # Extract coordinates from listing (handle both formats)
     # OpenSearch stores as geo.lat/geo.lon, raw Zillow JSON uses latitude/longitude
-    geo = listing.get("geo", {})
+    geo = listing.get("geo") or {}
     latitude = listing.get("latitude") or geo.get("lat")
     longitude = listing.get("longitude") or geo.get("lon")
 
@@ -442,12 +443,14 @@ def _rrf(*ranked_lists: List[List[Dict[str, Any]]], k: int = 60, k_values: List[
         for i, h in enumerate(lst):
             add(h, i + 1, k_val, strategy_idx)  # rank is 1-indexed
 
-    # Update RRF totals in scoring details
+    # Update RRF totals in scoring details and attach RRF score to document
     if include_scoring_details:
         for entry in scores.values():
             entry["scoring_details"]["rrf_total"] = entry["score"]
             # Attach scoring details to the document
             entry["doc"]["scoring_details"] = entry["scoring_details"]
+            # IMPORTANT: Also attach the RRF score itself so it can be used for final scoring
+            entry["doc"]["_rrf_score"] = entry["score"]
 
     # Sort by fused score (descending) and return top results
     fused = list(scores.values())
@@ -567,7 +570,10 @@ def handler(event, context):
 
     # Boost mode for A/B testing visual features weight
     boost_mode = payload.get("boost_mode", "standard")  # standard | conservative | aggressive
-    logger.info("Search query: '%s', size=%d, index=%s, boost_mode=%s", q, size, target_index, boost_mode)
+
+    # Search mode for A/B testing adaptive vs standard scoring
+    search_mode = payload.get("search_mode", "adaptive")  # adaptive | standard
+    logger.info("Search query: '%s', size=%d, index=%s, boost_mode=%s, search_mode=%s", q, size, target_index, boost_mode, search_mode)
 
     constraints = extract_query_constraints(q)
     hard_filters = constraints.get("hard_filters", {})
@@ -779,7 +785,13 @@ def handler(event, context):
 
     # Calculate adaptive RRF weights based on query characteristics
     query_type = constraints.get("query_type", "general")
-    k_values = calculate_adaptive_weights(must_tags, query_type)
+    if search_mode == "standard":
+        # Standard mode: equal weighting for all strategies
+        k_values = [60, 60, 60]
+        logger.info("📊 STANDARD mode - equal weighting: BM25=60, Text kNN=60, Image kNN=60")
+    else:
+        # Adaptive mode: query-type-aware weighting
+        k_values = calculate_adaptive_weights(must_tags, query_type)
 
     # Check if client wants detailed scoring breakdown
     include_scoring_details = payload.get("include_scoring_details", False)
@@ -796,7 +808,7 @@ def handler(event, context):
 
     # Check if client wants full Zillow data from S3
     include_full_data = payload.get("include_full_data", False)
-    include_nearby = payload.get("include_nearby_places", True)
+    include_nearby = payload.get("include_nearby_places", False)  # TEMPORARILY DISABLED for testing
 
     # Post-RRF tag boosting: Boost results matching exact must_have tags
     # More aggressive boosting for color/material queries where exact matches matter
@@ -830,10 +842,12 @@ def handler(event, context):
         zpid = h["_id"]
 
         # Build result from OpenSearch data
+        # Use RRF score (not original OpenSearch _score)
+        rrf_score = h.get("_rrf_score", h.get("_score", 0.0))
         result = {
             "zpid": zpid,
             "id": zpid,
-            "score": h.get("_score", 0.0) * boost,  # Apply multiplicative boost
+            "score": rrf_score * boost,  # Apply multiplicative boost to RRF score
             "boosted": boost > 1.0
         }
 
@@ -874,8 +888,8 @@ def handler(event, context):
                 "required_tags": list(unique_required_tags),
                 "match_ratio": len(matched_tags) / len(expanded_must_tags) if expanded_must_tags else 0.0,
                 "boost_factor": boost,
-                "score_before_boost": h.get("_score", 0.0),
-                "score_after_boost": h.get("_score", 0.0) * boost
+                "score_before_boost": rrf_score,
+                "score_after_boost": rrf_score * boost
             }
 
             # Add query context
@@ -893,24 +907,48 @@ def handler(event, context):
             if "image_vectors" in src:
                 scoring_details["image_vectors_count"] = len(src["image_vectors"])
 
-            # Extract individual image vector scores from inner_hits (if available)
-            # Get the original kNN image hit which has inner_hits
-            original_knn_hit = knn_img_map.get(zpid)
-            if original_knn_hit and "inner_hits" in original_knn_hit and "image_vectors" in original_knn_hit["inner_hits"]:
-                inner_hits_data = original_knn_hit["inner_hits"]["image_vectors"]["hits"]["hits"]
+            # Extract individual image vector scores from ALL images in the property
+            # For multi-vector index, compute similarity score for each image
+            # NOTE: This requires accessing image_vectors from src BEFORE we filter it out
+            if "image_vectors" in src and src["image_vectors"]:
+                # Get the query vector (already computed earlier in handler)
+                # q_vec is the text embedding of the search query
+                query_vec = q_vec
+
                 image_scores = []
-                for inner_hit in inner_hits_data:
-                    # inner_hit contains _nested with offset (array index) and _source with nested doc
-                    nested_info = inner_hit.get("_nested", {})
-                    inner_src = inner_hit.get("_source", {})
-                    image_scores.append({
-                        "index": nested_info.get("offset"),  # Array index of the image
-                        "url": inner_src.get("url"),
-                        "score": inner_hit.get("_score", 0.0)
-                    })
+                for idx, img_vec_obj in enumerate(src["image_vectors"]):
+                    # Each image_vectors element has: image_url, vector, etc.
+                    img_vec = img_vec_obj.get("vector")
+                    img_url = img_vec_obj.get("image_url")  # Field is "image_url" not "url"
+
+                    if img_vec and len(img_vec) == len(query_vec):
+                        # Compute cosine similarity manually
+                        # OpenSearch kNN score formula: score = (1 + cosine_similarity) / 2
+                        q_arr = np.array(query_vec, dtype=np.float32)
+                        i_arr = np.array(img_vec, dtype=np.float32)
+
+                        # Normalize vectors (L2 normalization)
+                        q_norm = q_arr / (np.linalg.norm(q_arr) + 1e-10)
+                        i_norm = i_arr / (np.linalg.norm(i_arr) + 1e-10)
+
+                        # Cosine similarity (dot product of normalized vectors)
+                        cosine_sim = np.dot(q_norm, i_norm)
+
+                        # Apply OpenSearch kNN score transformation
+                        score = (1.0 + float(cosine_sim)) / 2.0
+
+                        image_scores.append({
+                            "index": idx,
+                            "url": img_url,
+                            "score": score
+                        })
+
                 # Sort by score descending to show best matches first
                 image_scores.sort(key=lambda x: x["score"], reverse=True)
                 scoring_details["individual_image_scores"] = image_scores
+
+                if image_scores:
+                    logger.info(f"Computed {len(image_scores)} individual image scores for zpid={zpid}, top score: {image_scores[0]['score']:.6f}")
 
             result["_scoring_details"] = scoring_details
 
@@ -936,7 +974,7 @@ def handler(event, context):
         if include_nearby:
             result = enrich_with_nearby_places(result)
 
-        final.append((h.get("_score", 0.0) * boost, result))
+        final.append((rrf_score * boost, result))
 
     final.sort(key=lambda x: x[0], reverse=True)
     results = [x[1] for x in final[:size]]
@@ -1077,8 +1115,9 @@ def lambda_handler(event, context):
         "Access-Control-Allow-Methods": "POST, GET, OPTIONS"
     }
 
-    path = event.get('path', '')
-    method = event.get('httpMethod', '')
+    # Support both API Gateway v1.0 and v2.0 formats
+    path = event.get('path') or event.get('rawPath', '')
+    method = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method', '')
 
     # If no path/method (direct Lambda invocation), assume search
     if not path and not method and 'q' in event:
@@ -1089,6 +1128,10 @@ def lambda_handler(event, context):
 
     # POST /search → Search listings
     if method == 'POST' and path == '/search':
+        return handler(event, context)
+
+    # POST /search/debug → Search with debug info (same as regular search, UI handles it)
+    elif method == 'POST' and path == '/search/debug':
         return handler(event, context)
 
     # GET /listings/{zpid} → Get single listing

@@ -82,7 +82,7 @@ os_client = OpenSearch(
     use_ssl=True,
     verify_certs=True,
     connection_class=RequestsHttpConnection,
-    timeout=60,  # 60 second timeout for bulk operations
+    timeout=240,  # 240 second timeout (4 minutes) - allows slow queries on partial indexes
     max_retries=8,  # Retry failed requests up to 8 times
     retry_on_timeout=True,
     retry_on_status=(429, 502, 503, 504),  # Retry on rate limits and server errors
@@ -256,7 +256,7 @@ def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 100) 
 
     Args:
         img_bytes: Raw image bytes
-        image_url: URL of the image (used for caching)
+        image_url: URL of the image (for logging/debugging)
         max_labels: Maximum number of features to return (default 100)
 
     Returns:
@@ -271,20 +271,6 @@ def detect_labels(img_bytes: bytes, image_url: str = "", max_labels: int = 100) 
             "confidence": "high" or "medium" or "low"
         }
     """
-    # Check OLD cache first (backwards compatibility)
-    if image_url:
-        try:
-            cached = dynamodb.get_item(
-                TableName=CACHE_TABLE,
-                Key={"image_url": {"S": image_url}}
-            )
-            if "Item" in cached and "comprehensive_analysis" in cached["Item"]:
-                analysis_json = cached["Item"]["comprehensive_analysis"]["S"]
-                analysis = json.loads(analysis_json)
-                logger.debug(f"💾 Cache hit for comprehensive analysis: {image_url[:60]}")
-                return analysis
-        except Exception as e:
-            logger.warning(f"Cache read failed for {image_url}: {e}")
 
     # Analyze with Claude Haiku
     try:
@@ -420,21 +406,7 @@ IMPORTANT: Be thorough. A good analysis should have 30-50+ features for a detail
                 "confidence": "low"
             }
 
-        # Cache the comprehensive analysis
-        if image_url:
-            try:
-                dynamodb.put_item(
-                    TableName=CACHE_TABLE,
-                    Item={
-                        "image_url": {"S": image_url},
-                        "comprehensive_analysis": {"S": json.dumps(analysis)},
-                        "analyzed_at": {"N": str(int(time.time()))}
-                    }
-                )
-                logger.debug(f"💾 Cached comprehensive analysis: {image_url[:60]}")
-            except Exception as e:
-                logger.warning(f"Cache write failed: {e}")
-
+        # No caching here - use detect_labels_with_response() + cache_utils for caching
         return analysis
 
     except Exception as e:
@@ -459,13 +431,12 @@ def detect_labels_with_response(img_bytes: bytes, image_url: str = "", max_label
     - Debugging failed parses by inspecting raw LLM output
     - Re-parsing without re-calling the LLM
 
-    NOTE: This function checks the OLD cache (hearth-image-cache) for backwards
-    compatibility. The actual caching to the NEW cache (hearth-vision-cache) is
-    done by cache_utils.cache_image_data() in the calling code.
+    The actual caching to hearth-vision-cache is done by cache_utils.cache_image_data()
+    in the calling code.
 
     Args:
         img_bytes: Raw image bytes
-        image_url: URL of the image (for old cache lookup)
+        image_url: URL of the image (for logging/debugging)
         max_labels: Maximum number of features to return (default 100)
 
     Returns:
@@ -480,25 +451,11 @@ def detect_labels_with_response(img_bytes: bytes, image_url: str = "", max_label
                 "visual_features": [...],
                 "confidence": "high"/"medium"/"low"
             },
-            "llm_response": "raw response text from Claude (or empty if from old cache)"
+            "llm_response": "raw response text from Claude"
         }
     """
-    # Check OLD cache for backwards compatibility (during transition period)
-    if image_url:
-        try:
-            cached = dynamodb.get_item(
-                TableName=CACHE_TABLE,
-                Key={"image_url": {"S": image_url}}
-            )
-            if "Item" in cached and "comprehensive_analysis" in cached["Item"]:
-                analysis_json = cached["Item"]["comprehensive_analysis"]["S"]
-                analysis = json.loads(analysis_json)
-                # Old cache doesn't have LLM response, return empty string
-                return {"analysis": analysis, "llm_response": ""}
-        except Exception as e:
-            logger.warning(f"Cache read failed for {image_url}: {e}")
-
-    # Analyze with Claude Haiku (same logic as detect_labels)
+    # Always call LLM - no old cache fallback
+    # Analyze with Claude Haiku
     try:
         b64_image = base64.b64encode(img_bytes).decode("utf-8")
 
@@ -1013,8 +970,17 @@ def extract_zillow_images(listing: Dict[str, Any], target_width: int = 576) -> L
         urls.append(img_src)
 
     # Fallback 2: responsivePhotos - extract highest resolution from each unique photo
+    # WARNING: For lots/vacant land, responsivePhotos may contain nearby home images!
+    # Only use responsivePhotos if property has actual photos (photoCount > 0 and not vacant land)
     responsive = listing.get("responsivePhotos", [])
-    if responsive:
+    home_type = listing.get("homeType", "").lower()
+    photo_count = listing.get("photoCount", 0)
+
+    # Skip responsivePhotos for vacant land or lots with no photos
+    # These often contain misleading nearby property images from Zillow's UI
+    is_vacant_land = home_type in ["lot", "vacantland", "land", ""] or "vacant" in home_type
+
+    if responsive and not (is_vacant_land and photo_count == 0):
         seen_photos = set()  # Track photo IDs to avoid duplicates
         for photo in responsive:
             if not isinstance(photo, dict):

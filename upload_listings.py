@@ -49,6 +49,7 @@ import json
 import logging
 import os
 import uuid
+import threading
 from typing import Any, Dict, List
 
 import boto3
@@ -72,6 +73,43 @@ dynamodb = boto3.client("dynamodb", region_name=AWS_REGION)
 
 # Job tracking table for idempotency
 JOB_TRACKING_TABLE = "hearth-indexing-jobs"
+
+# BEDROCK API RATE LIMITING
+# Limit concurrent Bedrock API calls to avoid throttling
+# Conservative limit: 10 concurrent calls (adjusted based on actual rate limits observed)
+# This prevents: 20 listings × 10 images = 200 concurrent calls → throttling
+BEDROCK_SEMAPHORE = threading.Semaphore(10)
+
+
+def _bedrock_with_retry(func, max_retries=5):
+    """
+    Execute a Bedrock API call with exponential backoff retry.
+
+    Args:
+        func: Lambda function that makes the Bedrock API call
+        max_retries: Maximum number of retry attempts
+
+    Returns:
+        Result from func()
+
+    Raises:
+        Exception: If all retries exhausted
+    """
+    import time
+    import random
+
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            if "ThrottlingException" in str(e) or "Too many requests" in str(e):
+                if attempt < max_retries - 1:
+                    # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                    wait_time = (2 ** attempt) + random.uniform(0, 1)
+                    logger.debug(f"Bedrock throttled, retrying in {wait_time:.1f}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
+            raise
 
 
 # ===============================================
@@ -222,6 +260,95 @@ def _extract_core_fields(lst: Dict[str, Any]) -> Dict[str, Any]:
 # DOCUMENT BUILDING WITH EMBEDDINGS
 # ===============================================
 
+def _process_single_image(image_url: str, zpid: str) -> Dict[str, Any]:
+    """
+    Process a single image: download, embed, analyze, and cache.
+
+    This function is designed to be called in parallel for all images in a listing.
+
+    Args:
+        image_url: URL of the image to process
+        zpid: Property ID (for logging)
+
+    Returns:
+        Dictionary with:
+        {
+            "success": bool,
+            "image_url": str,
+            "embedding": List[float] or None,
+            "analysis": Dict or None,
+            "image_hash": str or None,
+            "error": str or None
+        }
+    """
+    from cache_utils import get_cached_image_data, cache_image_data
+    import hashlib
+
+    result = {
+        "success": False,
+        "image_url": image_url,
+        "embedding": None,
+        "analysis": None,
+        "image_hash": None,
+        "error": None
+    }
+
+    try:
+        # Try to get embedding, analysis, and hash from cache
+        cached_data = get_cached_image_data(dynamodb, image_url)
+        if cached_data:
+            img_vec, analysis, img_hash = cached_data
+            logger.debug(f"💾 Cache hit for image: {image_url[:60]}...")
+            result["embedding"] = img_vec
+            result["analysis"] = analysis
+            result["image_hash"] = img_hash
+            result["success"] = True
+            return result
+
+        # Cache miss - need to download and process
+        logger.debug(f"📥 Downloading image (cache miss): {image_url[:60]}...")
+        resp = requests.get(image_url, timeout=8)
+        resp.raise_for_status()
+        bb = resp.content
+
+        # Calculate hash immediately for dedup
+        img_hash = hashlib.md5(bb).hexdigest()
+        result["image_hash"] = img_hash
+
+        # RATE LIMITING: Acquire semaphore before Bedrock API calls
+        # This prevents too many concurrent requests and throttling
+        with BEDROCK_SEMAPHORE:
+            # Generate embedding with retry logic
+            img_vec = _bedrock_with_retry(lambda: embed_image_bytes(bb))
+            result["embedding"] = img_vec
+
+            # Get comprehensive analysis with retry logic
+            analysis_result = _bedrock_with_retry(lambda: detect_labels_with_response(bb, image_url=image_url))
+            analysis = analysis_result["analysis"]
+            llm_response = analysis_result["llm_response"]
+            result["analysis"] = analysis
+
+        # Cache both embedding and analysis atomically
+        cache_image_data(
+            dynamodb,
+            image_url=image_url,
+            image_bytes=bb,
+            embedding=img_vec,
+            analysis=analysis,
+            llm_response=llm_response,
+            embedding_model=IMAGE_MODEL_ID,
+            analysis_model=LLM_MODEL_ID
+        )
+
+        result["success"] = True
+
+    except Exception as e:
+        logger.warning(f"Failed to process image {image_url[:60]}: {e}")
+        result["error"] = str(e)
+
+    return result
+
+
 def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
     """
     Build a complete OpenSearch document with text and image embeddings.
@@ -264,128 +391,103 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
     best_exterior_score = 0
 
     if image_urls:
-        count = 0
-        for u in image_urls:
-            # MAX_IMAGES=0 means unlimited, otherwise stop at limit
-            if MAX_IMAGES > 0 and count >= MAX_IMAGES:
-                break
-            try:
-                # OPTIMIZATION: Check unified vision cache BEFORE downloading
-                # Cache contains both embedding AND analysis for each image
-                from cache_utils import get_cached_image_data, cache_image_data
+        # Apply MAX_IMAGES limit
+        urls_to_process = image_urls if MAX_IMAGES == 0 else image_urls[:MAX_IMAGES]
 
-                img_vec = None
-                analysis = None
-                bb = None  # Image bytes (only downloaded if needed)
+        # OPTIMIZATION: Process all images in parallel using ThreadPoolExecutor
+        # This provides massive speedup: 10 images × 1.5s each = 15s → 1.5s total
+        import concurrent.futures
+        import hashlib
 
-                # Try to get both embedding and analysis from cache
-                cached_data = get_cached_image_data(dynamodb, u)
-                if cached_data:
-                    img_vec, analysis = cached_data
-                    logger.debug(f"💾 Cache hit for image (embedding + analysis): {u[:60]}...")
+        zpid = base.get("zpid", "unknown")
 
-                # Cache miss - need to download and process
-                if img_vec is None or analysis is None:
-                    logger.debug(f"📥 Downloading image (cache miss): {u[:60]}...")
-                    resp = requests.get(u, timeout=8)
-                    resp.raise_for_status()
-                    bb = resp.content
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(urls_to_process), 20)) as executor:
+            # Submit all image processing tasks
+            future_to_url = {
+                executor.submit(_process_single_image, url, zpid): url
+                for url in urls_to_process
+            }
 
-                    # Generate embedding from downloaded bytes
-                    img_vec = embed_image_bytes(bb)
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    result = future.result()
 
-                    # Get comprehensive analysis (returns dict with analysis + raw LLM response)
-                    analysis_result = detect_labels_with_response(bb, image_url=u)
-                    analysis = analysis_result["analysis"]
-                    llm_response = analysis_result["llm_response"]
+                    if not result["success"]:
+                        logger.warning(f"Failed to process image: {result['error']}")
+                        continue
 
-                    # Cache both embedding and analysis atomically
-                    cache_image_data(
-                        dynamodb,
-                        image_url=u,
-                        image_bytes=bb,
-                        embedding=img_vec,
-                        analysis=analysis,
-                        llm_response=llm_response,
-                        embedding_model=IMAGE_MODEL_ID,
-                        analysis_model=LLM_MODEL_ID
-                    )
+                    img_vec = result["embedding"]
+                    analysis = result["analysis"]
+                    img_hash = result["image_hash"]
 
-                # Validate embedding before using
-                if not img_vec or len(img_vec) == 0:
-                    logger.warning("Empty/invalid embedding for zpid=%s, url=%s", base.get("zpid"), u)
-                    continue  # Skip this image entirely
+                    # Validate embedding
+                    if not img_vec or len(img_vec) == 0:
+                        logger.warning("Empty/invalid embedding for zpid=%s, url=%s", zpid, url)
+                        continue
 
-                # CRITICAL: Check for duplicate images BEFORE adding to vectors
-                # Download image bytes if we haven't already (for hash check)
-                if bb is None:
-                    logger.debug(f"📥 Downloading image for dedup check: {u[:60]}...")
-                    resp = requests.get(u, timeout=8)
-                    resp.raise_for_status()
-                    bb = resp.content
+                    # CRITICAL: Check for duplicate images BEFORE adding to vectors
+                    # Use hash from cache/processing (no need to re-download!)
+                    if img_hash in seen_hashes:
+                        logger.debug("⏭️  Skipping duplicate image (hash=%s) for zpid=%s", img_hash[:8], zpid)
+                        continue  # Skip BEFORE adding to vectors
+                    seen_hashes.add(img_hash)
 
-                import hashlib
-                img_hash = hashlib.md5(bb).hexdigest()
-                if img_hash in seen_hashes:
-                    logger.debug("⏭️  Skipping duplicate image (hash=%s) for zpid=%s", img_hash[:8], base.get("zpid"))
-                    continue  # Skip BEFORE adding to vectors
-                seen_hashes.add(img_hash)
+                    # NOW it's safe to add the embedding (after dedup check)
+                    image_vecs.append(img_vec)
 
-                # NOW it's safe to add the embedding (after dedup check)
-                image_vecs.append(img_vec)
+                    # Analysis was already obtained above (either from cache or freshly generated)
+                    # Store analysis for visual_features_text generation
+                    if analysis:
+                        all_image_analyses.append(analysis)
 
-                # Analysis was already obtained above (either from cache or freshly generated)
-                # Store analysis for visual_features_text generation
-                if analysis:
-                    all_image_analyses.append(analysis)
+                        # Extract all features from analysis
+                        features = analysis.get("features", [])
+                        for feature in features:
+                            img_tags.add(feature)
 
-                    # Extract all features from analysis
-                    features = analysis.get("features", [])
-                    for feature in features:
-                        img_tags.add(feature)
+                        # Extract materials and visual features
+                        for material in analysis.get("materials", []):
+                            img_tags.add(material)
+                        for visual_feature in analysis.get("visual_features", []):
+                            img_tags.add(visual_feature)
 
-                    # Extract materials and visual features
-                    for material in analysis.get("materials", []):
-                        img_tags.add(material)
-                    for visual_feature in analysis.get("visual_features", []):
-                        img_tags.add(visual_feature)
+                        # Add exterior color to tags if present
+                        if analysis.get("exterior_color"):
+                            img_tags.add(f"{analysis['exterior_color']} exterior")
+                            img_tags.add(f"{analysis['exterior_color']}_exterior")  # Both formats
 
-                    # Add exterior color to tags if present
-                    if analysis.get("exterior_color"):
-                        img_tags.add(f"{analysis['exterior_color']} exterior")
-                        img_tags.add(f"{analysis['exterior_color']}_exterior")  # Both formats
+                        # Track best exterior image for architecture style
+                        image_type = analysis.get("image_type", "unknown")
+                        if image_type == "exterior":
+                            # Score based on having architecture style detected
+                            exterior_score = 10 if analysis.get("architecture_style") else 5
 
-                    # Track best exterior image for architecture style
-                    image_type = analysis.get("image_type", "unknown")
-                    if image_type == "exterior":
-                        # Score based on having architecture style detected
-                        exterior_score = 10 if analysis.get("architecture_style") else 5
+                            if exterior_score > best_exterior_score:
+                                best_exterior_score = exterior_score
+                                style_from_vision = analysis.get("architecture_style")
 
-                        if exterior_score > best_exterior_score:
-                            best_exterior_score = exterior_score
-                            style_from_vision = analysis.get("architecture_style")
+                                logger.info("Best exterior for zpid=%s: style=%s, color=%s, confidence=%s, features=%d",
+                                           zpid,
+                                           style_from_vision,
+                                           analysis.get("exterior_color"),
+                                           analysis.get("confidence"),
+                                           len(features))
 
-                            logger.info("Best exterior for zpid=%s: style=%s, color=%s, confidence=%s, features=%d",
-                                       base.get("zpid"),
-                                       style_from_vision,
-                                       analysis.get("exterior_color"),
-                                       analysis.get("confidence"),
-                                       len(features))
+                        logger.debug("Analyzed image for zpid=%s: type=%s, features=%d, style=%s",
+                                   zpid, image_type, len(features), analysis.get("architecture_style"))
 
-                    logger.debug("Analyzed image for zpid=%s: type=%s, features=%d, style=%s",
-                               base.get("zpid"), image_type, len(features), analysis.get("architecture_style"))
+                    # Store image vector with metadata for multi-vector schema
+                    if img_vec and analysis:
+                        image_vector_metadata.append({
+                            "image_url": url,
+                            "image_type": analysis.get("image_type", "unknown"),
+                            "vector": img_vec
+                        })
 
-                # Store image vector with metadata for multi-vector schema
-                if img_vec and analysis:
-                    image_vector_metadata.append({
-                        "image_url": u,
-                        "image_type": analysis.get("image_type", "unknown"),
-                        "vector": img_vec
-                    })
-
-                count += 1
-            except Exception as e:
-                logger.warning("Image fetch failed for zpid=%s, url=%s: %s", base.get("zpid"), u, e)
+                except Exception as e:
+                    logger.warning("Image processing failed for zpid=%s, url=%s: %s", zpid, url, e)
 
     # Generate visual_features_text from all image analyses
     # IMPROVEMENT: Use majority voting to eliminate contradictory features

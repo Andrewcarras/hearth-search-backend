@@ -74,3 +74,4 @@ monitor*.sh
 *.bak
 *.old
 *.backup
+slc_listings.json

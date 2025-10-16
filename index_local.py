@@ -61,18 +61,25 @@ import concurrent.futures
 from requests_aws4auth import AWS4Auth
 
 # Parse command-line arguments FIRST (before importing common.py)
-parser = argparse.ArgumentParser(description='Index property listings from S3 to OpenSearch locally')
-parser.add_argument('--bucket', required=True, help='S3 bucket name (e.g., demo-hearth-data)')
-parser.add_argument('--key', required=True, help='S3 object key (e.g., slc_listings.json)')
+parser = argparse.ArgumentParser(description='Index property listings to OpenSearch locally')
+parser.add_argument('--file', help='Local JSON file path (e.g., ./slc_listings.json)')
+parser.add_argument('--bucket', help='S3 bucket name (e.g., demo-hearth-data) - alternative to --file')
+parser.add_argument('--key', help='S3 object key (e.g., slc_listings.json) - alternative to --file')
 parser.add_argument('--start', type=int, default=0, help='Starting index (default: 0)')
 parser.add_argument('--limit', type=int, default=None, help='Number of listings to process (default: all)')
 parser.add_argument('--index', default='listings', help='OpenSearch index name (default: listings)')
 parser.add_argument('--host', default='search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com',
                    help='OpenSearch host')
-parser.add_argument('--batch-size', type=int, default=5, help='Parallel batch size (default: 5)')
-parser.add_argument('--max-images', type=int, default=10, help='Max images per listing (default: 10)')
+parser.add_argument('--batch-size', type=int, default=20, help='Parallel batch size (default: 20)')
+parser.add_argument('--max-images', type=int, default=0, help='Max images per listing (0 = unlimited, default: 0)')
 
 args = parser.parse_args()
+
+# Validate that either --file or (--bucket and --key) are provided
+if not args.file and not (args.bucket and args.key):
+    parser.error("Must provide either --file or both --bucket and --key")
+if args.file and (args.bucket or args.key):
+    parser.error("Cannot use both --file and --bucket/--key together")
 
 # Set environment variables BEFORE importing common.py (it reads them at import time)
 os.environ['OS_HOST'] = args.host
@@ -133,12 +140,17 @@ class MockContext:
         return 900000  # 15 minutes
 
 
-def process_single_listing(listing_data, os_client):
+def process_single_listing(listing_data, os_client, should_verify=False):
     """
     Process a single listing by passing data directly to handler.
 
     OPTIMIZATION: Passes listing data directly instead of making handler
     re-download entire S3 file. 5-10x faster!
+
+    Args:
+        listing_data: Listing JSON data
+        os_client: OpenSearch client for verification
+        should_verify: If True, verify listing exists in OpenSearch (default: False)
     """
     payload = {
         "listings": [listing_data],
@@ -164,8 +176,8 @@ def process_single_listing(listing_data, os_client):
         zpid = body.get('zpid', listing_result['zpid'])
         listing_result['zpid'] = zpid
 
-        # Verify in OpenSearch
-        if zpid != 'unknown':
+        # Verify in OpenSearch only if requested (every 100 listings)
+        if should_verify and zpid != 'unknown':
             listing_result['verified'] = verify_listing_in_opensearch(zpid, os_client)
     else:
         body = json.loads(result.get('body', '{}'))
@@ -178,7 +190,12 @@ def main():
     """Main indexing function with full configurability."""
     print("🚀 Starting OPTIMIZED local indexing...")
     print("=" * 70)
-    print(f"Source: s3://{args.bucket}/{args.key}")
+
+    if args.file:
+        print(f"Source: Local file {args.file}")
+    else:
+        print(f"Source: s3://{args.bucket}/{args.key}")
+
     print(f"Target: OpenSearch index '{args.index}' @ {args.host}")
     print(f"Range: start={args.start}, limit={args.limit or 'ALL'}")
     print(f"Batch size: {args.batch_size} listings in parallel")
@@ -186,13 +203,19 @@ def main():
     print("=" * 70)
     print()
 
-    # Load all listings from S3 ONCE at startup
-    print(f"📥 Loading listings from s3://{args.bucket}/{args.key}...")
-    s3 = boto3.client('s3')
-
+    # Load all listings from either local file or S3
     try:
-        response = s3.get_object(Bucket=args.bucket, Key=args.key)
-        all_data = json.loads(response['Body'].read())
+        if args.file:
+            print(f"📥 Loading listings from local file: {args.file}...")
+            with open(args.file, 'r') as f:
+                all_data = json.load(f)
+            source_type = "local file"
+        else:
+            print(f"📥 Loading listings from s3://{args.bucket}/{args.key}...")
+            s3 = boto3.client('s3')
+            response = s3.get_object(Bucket=args.bucket, Key=args.key)
+            all_data = json.loads(response['Body'].read())
+            source_type = "S3"
 
         # Handle both wrapped and direct array formats
         if isinstance(all_data, dict) and "listings" in all_data:
@@ -203,7 +226,7 @@ def main():
             raise ValueError("Unexpected JSON format (expected array or {listings: []})")
 
         total_in_file = len(all_listings)
-        print(f"✅ Loaded {total_in_file:,} listings from S3")
+        print(f"✅ Loaded {total_in_file:,} listings from {source_type}")
 
         # Apply start/limit
         end_index = args.start + args.limit if args.limit else len(all_listings)
@@ -246,8 +269,14 @@ def main():
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=current_batch_size) as executor:
                 # Submit all listings in batch
+                # Verify every 100th listing to ensure indexing is working
                 futures = {
-                    executor.submit(process_single_listing, listing, os_client): idx
+                    executor.submit(
+                        process_single_listing,
+                        listing,
+                        os_client,
+                        should_verify=((args.start + batch_start + idx) % 100 == 0)  # Every 100th listing
+                    ): idx
                     for idx, listing in enumerate(batch_listings, start=batch_start)
                 }
 
@@ -263,13 +292,15 @@ def main():
 
                         # Show individual listing completion
                         if result['verified']:
-                            status_icon = "✅"
+                            status_icon = "✅"  # Verified in OpenSearch
                         elif result['error']:
-                            status_icon = "❌"
+                            status_icon = "❌"  # Error occurred
                         else:
-                            status_icon = "⚠️"
+                            status_icon = "✓"   # Success (not verified)
 
-                        print(f"  {status_icon} [{abs_idx:4d}] zpid={result['zpid']} completed")
+                        # Add verification indicator for every 100th
+                        verification_note = " [VERIFIED]" if result['verified'] else ""
+                        print(f"  {status_icon} [{abs_idx:4d}] zpid={result['zpid']} completed{verification_note}")
 
                     except Exception as e:
                         batch_results.append({

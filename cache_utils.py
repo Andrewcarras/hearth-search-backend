@@ -143,9 +143,9 @@ def cache_image_data(
 def get_cached_image_data(
     dynamodb_client,
     image_url: str
-) -> Optional[Tuple[List[float], Dict[str, Any]]]:
+) -> Optional[Tuple[List[float], Dict[str, Any], str]]:
     """
-    Retrieve cached image embedding and analysis.
+    Retrieve cached image embedding, analysis, and hash.
 
     Updates access tracking metrics (last_accessed, access_count, cost_saved).
 
@@ -154,7 +154,7 @@ def get_cached_image_data(
         image_url: URL of the image
 
     Returns:
-        Tuple of (embedding, analysis) if cached, None if not found
+        Tuple of (embedding, analysis, image_hash) if cached, None if not found
     """
     try:
         response = dynamodb_client.get_item(
@@ -172,9 +172,10 @@ def get_cached_image_data(
             logger.warning(f"Incomplete cache entry for {image_url}")
             return None
 
-        # Parse embedding and analysis
+        # Parse embedding, analysis, and hash
         embedding = json.loads(item["embedding"]["S"])
         analysis = json.loads(item["analysis"]["S"])
+        image_hash = item.get("image_hash", {}).get("S", "")  # Get hash if available
 
         # Update access tracking
         try:
@@ -199,7 +200,7 @@ def get_cached_image_data(
         except Exception as e:
             logger.debug(f"Failed to update access metrics: {e}")
 
-        return (embedding, analysis)
+        return (embedding, analysis, image_hash)
 
     except Exception as e:
         logger.debug(f"Cache read failed for {image_url}: {e}")
