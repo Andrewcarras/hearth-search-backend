@@ -1,6 +1,7 @@
 # Lambda deployment requirements
 # These packages are installed in the Lambda package
-# numpy is NOT included - it comes from the scikit-numpy:3 layer
+# NOTE: numpy is NOT included here - it comes from the scikit-numpy:3 layer
+# The layer is attached during Lambda creation in deploy_lambda.sh
 
 boto3>=1.26.0
 opensearch-py>=2.0.0

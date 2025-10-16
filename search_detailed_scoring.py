@@ -29,14 +29,13 @@ Example Usage:
     }
 """
 
-import numpy as np
-
 import json
 import logging
 import os
 from typing import Any, Dict, List, Optional
 
 import boto3
+import numpy as np
 
 from common import (
     os_client, OS_INDEX, embed_text,

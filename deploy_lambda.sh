@@ -6,9 +6,10 @@ set -e
 
 LAMBDA_ROLE="arn:aws:iam::692859949078:role/RealEstateListingsLambdaRole"
 REGION="us-east-1"
-RUNTIME="python3.13"
+RUNTIME="python3.11"
 TIMEOUT=300
 MEMORY=1024
+NUMPY_LAYER="arn:aws:lambda:us-east-1:692859949078:layer:scikit-numpy:2"
 
 # Environment variables for both Lambdas
 ENV_VARS="Variables={
@@ -38,14 +39,13 @@ build_package() {
     rm -rf "$build_dir"
     mkdir -p "$build_dir"
 
-    # Install dependencies
+    # Install dependencies (numpy comes from layer, not package)
     echo "  Installing dependencies..."
     pip3 install --target "$build_dir" \
         boto3 \
         opensearch-py \
         requests-aws4auth \
         pytz \
-        numpy \
         --quiet
 
     # Copy source files
@@ -89,6 +89,7 @@ create_lambda() {
         --timeout ${TIMEOUT} \
         --memory-size ${MEMORY} \
         --environment "${ENV_VARS}" \
+        --layers "${NUMPY_LAYER}" \
         --region "${REGION}" \
         --output json \
         | jq '{FunctionName, Runtime, CodeSize, State}'
