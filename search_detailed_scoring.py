@@ -35,7 +35,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 import boto3
-import numpy as np
+import math
 
 from common import (
     os_client, OS_INDEX, embed_text,
@@ -967,15 +967,16 @@ def handler(event, context):
                     if img_vec and len(img_vec) == len(query_vec):
                         # Compute cosine similarity manually
                         # OpenSearch kNN score formula: score = (1 + cosine_similarity) / 2
-                        q_arr = np.array(query_vec, dtype=np.float32)
-                        i_arr = np.array(img_vec, dtype=np.float32)
+                        # Compute cosine similarity manually (pure Python, no numpy)
+                        # Calculate dot product
+                        dot_product = sum(q * i for q, i in zip(query_vec, img_vec))
 
-                        # Normalize vectors (L2 normalization)
-                        q_norm = q_arr / (np.linalg.norm(q_arr) + 1e-10)
-                        i_norm = i_arr / (np.linalg.norm(i_arr) + 1e-10)
+                        # Calculate magnitudes
+                        q_magnitude = math.sqrt(sum(q * q for q in query_vec)) + 1e-10
+                        i_magnitude = math.sqrt(sum(i * i for i in img_vec)) + 1e-10
 
-                        # Cosine similarity (dot product of normalized vectors)
-                        cosine_sim = np.dot(q_norm, i_norm)
+                        # Cosine similarity
+                        cosine_sim = dot_product / (q_magnitude * i_magnitude)
 
                         # Apply OpenSearch kNN score transformation
                         score = (1.0 + float(cosine_sim)) / 2.0
