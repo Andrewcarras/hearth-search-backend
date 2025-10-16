@@ -562,7 +562,10 @@ def handler(event, context):
 
     # Search mode for A/B testing adaptive vs standard scoring
     search_mode = payload.get("search_mode", "adaptive")  # adaptive | standard
-    logger.info("Search query: '%s', size=%d, index=%s, boost_mode=%s, search_mode=%s", q, size, target_index, boost_mode, search_mode)
+
+    # Strategy selector for individual strategy evaluation
+    strategy = payload.get("strategy", "hybrid")  # hybrid | bm25 | knn_text | knn_image
+    logger.info("Search query: '%s', size=%d, index=%s, boost_mode=%s, search_mode=%s, strategy=%s", q, size, target_index, boost_mode, search_mode, strategy)
 
     # DEBUG: Start collecting diagnostic information
     debug_info = {
@@ -688,20 +691,27 @@ def handler(event, context):
         }
     }
     logger.info("BM25 query: %s", json.dumps(bm25_query))
-    bm25_hits = _os_search(bm25_query, size=size * 3, index=target_index)
-    logger.info("BM25 returned %d hits", len(bm25_hits))
 
-    # DEBUG: Store BM25 query and results
-    debug_info["bm25"] = {
-        "query": bm25_query,
-        "hits_count": len(bm25_hits),
-        "top_results": [{"zpid": h["_id"], "score": h.get("_score", 0.0)} for h in bm25_hits[:10]]
-    }
+    # Execute BM25 if strategy is hybrid or bm25
+    bm25_hits: List[Dict[str, Any]] = []
+    if strategy in ["hybrid", "bm25"]:
+        bm25_hits = _os_search(bm25_query, size=size * 3, index=target_index)
+        logger.info("BM25 returned %d hits", len(bm25_hits))
+
+        # DEBUG: Store BM25 query and results
+        debug_info["bm25"] = {
+            "query": bm25_query,
+            "hits_count": len(bm25_hits),
+            "top_results": [{"zpid": h["_id"], "score": h.get("_score", 0.0)} for h in bm25_hits[:10]]
+        }
+    else:
+        logger.info("Skipping BM25 search (strategy=%s)", strategy)
+        debug_info["bm25"] = {"skipped": True, "reason": f"strategy={strategy}"}
 
     # 2) kNN on text vector (only if semantic search is needed)
     # For geo-focused queries, skip kNN to avoid filtering out partially-indexed docs
     knn_text_hits: List[Dict[str, Any]] = []
-    if require_embeddings:
+    if require_embeddings and strategy in ["hybrid", "knn_text"]:
         knn_text_body = {
             "size": size * 3,
             "query": {
@@ -733,13 +743,16 @@ def handler(event, context):
         except Exception as e:
             logger.warning("kNN text search failed: %s", e)
             debug_info["knn_text"] = {"error": str(e)}
-    else:
+    elif not require_embeddings:
         logger.info("Skipping kNN text search (geo-focused query)")
         debug_info["knn_text"] = {"skipped": True, "reason": "geo-focused query"}
+    else:
+        logger.info("Skipping kNN text search (strategy=%s)", strategy)
+        debug_info["knn_text"] = {"skipped": True, "reason": f"strategy={strategy}"}
 
     # 3) kNN on image vector (only if semantic search is needed)
     knn_img_hits: List[Dict[str, Any]] = []
-    if require_embeddings:
+    if require_embeddings and strategy in ["hybrid", "knn_image"]:
         # Detect if using multi-vector schema
         is_multi_vector = target_index.endswith("-v2")
 
@@ -811,9 +824,12 @@ def handler(event, context):
         except Exception as e:
             logger.warning("Image kNN skipped (no mapping or field): %s", e)
             debug_info["knn_image"] = {"error": str(e)}
-    else:
+    elif not require_embeddings:
         logger.info("Skipping kNN image search (geo-focused query)")
         debug_info["knn_image"] = {"skipped": True, "reason": "geo-focused query"}
+    else:
+        logger.info("Skipping kNN image search (strategy=%s)", strategy)
+        debug_info["knn_image"] = {"skipped": True, "reason": f"strategy={strategy}"}
 
     # Calculate adaptive RRF weights based on query characteristics
     query_type = constraints.get("query_type", "general")
@@ -834,15 +850,38 @@ def handler(event, context):
         knn_img_map[hit["_id"]] = hit
 
     # Fuse results using RRF with adaptive weights (only includes non-empty result lists)
-    fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, k_values=k_values, top=size * 3, include_scoring_details=True)  # Always get scoring details for debug
-    logger.info("RRF fusion produced %d results", len(fused))
+    # For single-strategy mode, skip fusion and use results directly
+    if strategy == "hybrid":
+        fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, k_values=k_values, top=size * 3, include_scoring_details=True)  # Always get scoring details for debug
+        logger.info("RRF fusion produced %d results", len(fused))
+    else:
+        # Single strategy mode - use results directly with scoring details
+        if strategy == "bm25":
+            fused = bm25_hits[:size * 3]
+        elif strategy == "knn_text":
+            fused = knn_text_hits[:size * 3]
+        elif strategy == "knn_image":
+            fused = knn_img_hits[:size * 3]
+        else:
+            fused = []
+        # Add basic scoring details for single-strategy results
+        for hit in fused:
+            hit["scoring_details"] = {
+                "bm25": {"rank": None, "original_score": hit.get("_score", 0.0) if strategy == "bm25" else None, "rrf_contribution": 0.0, "k": k_values[0] if len(k_values) > 0 else 60},
+                "knn_text": {"rank": None, "original_score": hit.get("_score", 0.0) if strategy == "knn_text" else None, "rrf_contribution": 0.0, "k": k_values[1] if len(k_values) > 1 else 60},
+                "knn_image": {"rank": None, "original_score": hit.get("_score", 0.0) if strategy == "knn_image" else None, "rrf_contribution": 0.0, "k": k_values[2] if len(k_values) > 2 else 60},
+                "rrf_total": 0.0
+            }
+            hit["_rrf_score"] = hit.get("_score", 0.0)  # For single strategy, use OpenSearch score directly
+        logger.info("Single strategy mode (%s) produced %d results", strategy, len(fused))
 
     # DEBUG: Store RRF configuration and adaptive weights
     debug_info["rrf"] = {
+        "strategy": strategy,
         "k_values": {
-            "bm25": k_values[0],
-            "knn_text": k_values[1],
-            "knn_image": k_values[2]
+            "bm25": k_values[0] if len(k_values) > 0 else None,
+            "knn_text": k_values[1] if len(k_values) > 1 else None,
+            "knn_image": k_values[2] if len(k_values) > 2 else None
         },
         "query_type": query_type,
         "adaptive_scoring_applied": k_values != [60, 60, 60],

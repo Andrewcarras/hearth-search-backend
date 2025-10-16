@@ -573,7 +573,10 @@ def handler(event, context):
 
     # Search mode for A/B testing adaptive vs standard scoring
     search_mode = payload.get("search_mode", "adaptive")  # adaptive | standard
-    logger.info("Search query: '%s', size=%d, index=%s, boost_mode=%s, search_mode=%s", q, size, target_index, boost_mode, search_mode)
+
+    # Strategy selector for individual strategy evaluation
+    strategy = payload.get("strategy", "hybrid")  # hybrid | bm25 | knn_text | knn_image
+    logger.info("Search query: '%s', size=%d, index=%s, boost_mode=%s, search_mode=%s, strategy=%s", q, size, target_index, boost_mode, search_mode, strategy)
 
     constraints = extract_query_constraints(q)
     hard_filters = constraints.get("hard_filters", {})
@@ -682,13 +685,19 @@ def handler(event, context):
         }
     }
     logger.info("BM25 query: %s", json.dumps(bm25_query))
-    bm25_hits = _os_search(bm25_query, size=size * 3, index=target_index)
-    logger.info("BM25 returned %d hits", len(bm25_hits))
+
+    # Execute BM25 if strategy is hybrid or bm25
+    bm25_hits: List[Dict[str, Any]] = []
+    if strategy in ["hybrid", "bm25"]:
+        bm25_hits = _os_search(bm25_query, size=size * 3, index=target_index)
+        logger.info("BM25 returned %d hits", len(bm25_hits))
+    else:
+        logger.info("Skipping BM25 search (strategy=%s)", strategy)
 
     # 2) kNN on text vector (only if semantic search is needed)
     # For geo-focused queries, skip kNN to avoid filtering out partially-indexed docs
     knn_text_hits: List[Dict[str, Any]] = []
-    if require_embeddings:
+    if require_embeddings and strategy in ["hybrid", "knn_text"]:
         knn_text_body = {
             "size": size * 3,
             "query": {
@@ -712,12 +721,14 @@ def handler(event, context):
             logger.info("kNN text returned %d hits", len(knn_text_hits))
         except Exception as e:
             logger.warning("kNN text search failed: %s", e)
-    else:
+    elif not require_embeddings:
         logger.info("Skipping kNN text search (geo-focused query)")
+    else:
+        logger.info("Skipping kNN text search (strategy=%s)", strategy)
 
     # 3) kNN on image vector (only if semantic search is needed)
     knn_img_hits: List[Dict[str, Any]] = []
-    if require_embeddings:
+    if require_embeddings and strategy in ["hybrid", "knn_image"]:
         # Detect if using multi-vector schema
         is_multi_vector = target_index.endswith("-v2")
 
@@ -780,8 +791,10 @@ def handler(event, context):
             logger.info("kNN image returned %d hits", len(knn_img_hits))
         except Exception as e:
             logger.warning("Image kNN skipped (no mapping or field): %s", e)
-    else:
+    elif not require_embeddings:
         logger.info("Skipping kNN image search (geo-focused query)")
+    else:
+        logger.info("Skipping kNN image search (strategy=%s)", strategy)
 
     # Calculate adaptive RRF weights based on query characteristics
     query_type = constraints.get("query_type", "general")
@@ -803,8 +816,21 @@ def handler(event, context):
             knn_img_map[hit["_id"]] = hit
 
     # Fuse results using RRF with adaptive weights (only includes non-empty result lists)
-    fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, k_values=k_values, top=size * 3, include_scoring_details=include_scoring_details)
-    logger.info("RRF fusion produced %d results", len(fused))
+    # For single-strategy mode, skip fusion and use results directly
+    if strategy == "hybrid":
+        fused = _rrf(bm25_hits, knn_text_hits, knn_img_hits, k_values=k_values, top=size * 3, include_scoring_details=include_scoring_details)
+        logger.info("RRF fusion produced %d results", len(fused))
+    else:
+        # Single strategy mode - use results directly
+        if strategy == "bm25":
+            fused = bm25_hits[:size * 3]
+        elif strategy == "knn_text":
+            fused = knn_text_hits[:size * 3]
+        elif strategy == "knn_image":
+            fused = knn_img_hits[:size * 3]
+        else:
+            fused = []
+        logger.info("Single strategy mode (%s) produced %d results", strategy, len(fused))
 
     # Check if client wants full Zillow data from S3
     include_full_data = payload.get("include_full_data", False)

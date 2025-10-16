@@ -631,6 +631,19 @@
             <button class="info-button" onclick="showBoostInfo()" title="Learn about boost modes">?</button>
         </div>
 
+        <!-- Strategy Selector -->
+        <div class="boost-selector">
+            <label for="strategySelector">🔬 Search Strategy:</label>
+            <select id="strategySelector">
+                <option value="hybrid">Hybrid (All 3 Strategies)</option>
+                <option value="bm25">BM25 Only (Keyword Search)</option>
+                <option value="knn_text">kNN Text Only (Semantic Text)</option>
+                <option value="knn_image">kNN Image Only (Visual Search)</option>
+            </select>
+            <span class="boost-indicator" id="strategyIndicator">Strategy: <strong>Hybrid</strong></span>
+            <button class="info-button" onclick="showStrategyInfo()" title="Learn about search strategies">?</button>
+        </div>
+
         <div class="search-card">
             <div class="search-box">
                 <input type="text" id="searchQuery" placeholder="Try: modern home with mountain views" value="modern homes">
@@ -705,6 +718,7 @@
         let selectedIndex = 'listings';
         let selectedBoostMode = 'standard';
         let selectedSearchMode = 'adaptive';
+        let selectedStrategy = 'hybrid';
 
         // Update index when selector changes
         document.addEventListener('DOMContentLoaded', () => {
@@ -737,6 +751,17 @@
                 const modeName = e.target.options[e.target.selectedIndex].text.split(' (')[0];
                 boostIndicator.innerHTML = `Mode: <strong>${modeName}</strong>`;
                 console.log('Switched to boost mode:', selectedBoostMode);
+            });
+
+            // Update strategy when selector changes
+            const strategySelector = document.getElementById('strategySelector');
+            const strategyIndicator = document.getElementById('strategyIndicator');
+
+            strategySelector.addEventListener('change', (e) => {
+                selectedStrategy = e.target.value;
+                const strategyName = e.target.options[e.target.selectedIndex].text.split(' (')[0];
+                strategyIndicator.innerHTML = `Strategy: <strong>${strategyName}</strong>`;
+                console.log('Switched to strategy:', selectedStrategy);
             });
         });
 
@@ -790,6 +815,48 @@ VISUAL FEATURES INCLUDE:
 TIP: Try "modern white house" in different modes to see ranking changes!`);
         }
 
+        function showStrategyInfo() {
+            alert(`Search Strategy Options
+
+WHAT IT DOES:
+Choose which search strategies to use. Evaluate each individually or combine them.
+
+🔬 STRATEGIES:
+
+1️⃣ HYBRID (All 3 Strategies):
+   - Combines BM25 + kNN Text + kNN Image
+   - Uses Reciprocal Rank Fusion (RRF) to merge results
+   - Best overall results (default)
+   - Adaptive weighting based on query type
+
+2️⃣ BM25 ONLY (Keyword Search):
+   - Traditional keyword matching
+   - Searches: description, tags, address
+   - Fast and interpretable
+   - Best for: exact feature matches ("pool", "garage")
+   - Misses: semantic similarity, visual style
+
+3️⃣ kNN TEXT ONLY (Semantic Text):
+   - Vector similarity on text embeddings
+   - Captures semantic meaning
+   - Best for: conceptual queries ("luxury home", "cozy")
+   - Misses: exact keywords, visual features
+
+4️⃣ kNN IMAGE ONLY (Visual Search):
+   - Vector similarity on image embeddings
+   - Purely visual matching
+   - Best for: architectural style, visual aesthetics
+   - Misses: text descriptions, specific features not visible
+
+USE CASES:
+• Debug why a property ranks high/low
+• Compare strategy effectiveness for your queries
+• A/B test which strategy works best for specific search types
+• Understand what each strategy contributes to final ranking
+
+TIP: Try "modern architecture" with each strategy to see different results!`);
+        }
+
         async function performSearch() {
             const query = document.getElementById('searchQuery').value.trim();
             if (!query) { alert('Please enter a search query'); return; }
@@ -802,7 +869,8 @@ TIP: Try "modern white house" in different modes to see ranking changes!`);
                 size: 10,
                 index: selectedIndex,
                 boost_mode: selectedBoostMode,
-                search_mode: selectedSearchMode
+                search_mode: selectedSearchMode,
+                strategy: selectedStrategy
             };
             const priceMin = document.getElementById('priceMin').value;
             const priceMax = document.getElementById('priceMax').value;
@@ -1155,7 +1223,8 @@ TIP: Try "modern white house" in different modes to see ranking changes!`);
                         size: 10,
                         index: selectedIndex,
                         boost_mode: selectedBoostMode,  // Include the selected boost mode
-                        search_mode: selectedSearchMode  // Include the selected search mode
+                        search_mode: selectedSearchMode,  // Include the selected search mode
+                        strategy: selectedStrategy  // Include the selected strategy
                     })
                 });
 
@@ -1173,24 +1242,54 @@ TIP: Try "modern white house" in different modes to see ranking changes!`);
 
                 let html = '';
 
-            // SEARCH MODE INDICATOR AT TOP
-            const searchModeDisplay = selectedSearchMode === 'adaptive' ? 'Adaptive (Query-Type Aware)' : 'Standard (Equal Weighting)';
-            const searchModeColor = selectedSearchMode === 'adaptive' ? '#28a745' : '#6c757d';
-            const searchModeIcon = selectedSearchMode === 'adaptive' ? '🎯' : '📊';
-            const searchModeTooltip = selectedSearchMode === 'adaptive'
-                ? 'Adaptive mode: System automatically adjusts scoring weights based on query type (visual style, features, color, etc.)'
-                : 'Standard mode: All three strategies (BM25, text kNN, image kNN) equally weighted with k=60';
+            // STRATEGY SELECTOR INDICATOR AT TOP
+            const strategyNames = {
+                'hybrid': 'Hybrid (All 3 Strategies)',
+                'bm25': 'BM25 Only (Keyword Search)',
+                'knn_text': 'kNN Text Only (Semantic Text)',
+                'knn_image': 'kNN Image Only (Visual Search)'
+            };
+            const strategyDisplay = strategyNames[selectedStrategy] || selectedStrategy;
+            const strategyColor = selectedStrategy === 'hybrid' ? '#6f42c1' : selectedStrategy === 'bm25' ? '#28a745' : selectedStrategy === 'knn_text' ? '#007bff' : '#dc3545';
+            const strategyIcon = selectedStrategy === 'hybrid' ? '🔀' : selectedStrategy === 'bm25' ? '📝' : selectedStrategy === 'knn_text' ? '🧠' : '🖼️';
 
-            html += `<div class="score-section" style="background:${searchModeColor === '#28a745' ? '#d4edda' : '#e2e3e5'};border-left-color:${searchModeColor};border-width:4px;">
-                <h4 style="color:${searchModeColor};font-size:16px;">${searchModeIcon} Search Mode: <strong>${searchModeDisplay}</strong></h4>
-                <p style="color:#666;font-size:13px;margin:8px 0 0 0;line-height:1.6;">
-                    ${searchModeTooltip}
-                    ${selectedSearchMode === 'adaptive' ? '<br><strong>Result:</strong> k-values vary by query type. See details below.' : '<br><strong>Result:</strong> BM25, text kNN, and image kNN all use k=60.'}
+            html += `<div class="score-section" style="background:${strategyColor === '#6f42c1' ? '#e7d9f7' : strategyColor === '#28a745' ? '#d4edda' : strategyColor === '#007bff' ? '#cfe2ff' : '#f8d7da'};border-left-color:${strategyColor};border-width:5px;">
+                <h4 style="color:${strategyColor};font-size:18px;">${strategyIcon} Search Strategy: <strong>${strategyDisplay}</strong></h4>
+                <p style="color:#333;font-size:14px;margin:8px 0 0 0;line-height:1.7;">
+                    ${selectedStrategy === 'hybrid'
+                        ? '<strong>Hybrid mode</strong> combines all three search strategies (BM25, kNN text, kNN image) using Reciprocal Rank Fusion. This provides the best overall results by leveraging keyword matching, semantic understanding, and visual similarity together.'
+                        : selectedStrategy === 'bm25'
+                        ? '<strong>BM25 Only mode</strong> uses traditional keyword matching on text fields. Results are ranked purely by term frequency and document relevance. No semantic embeddings or image analysis is used.'
+                        : selectedStrategy === 'knn_text'
+                        ? '<strong>kNN Text Only mode</strong> uses semantic text embeddings (1024-dim vectors). Results are ranked by cosine similarity to your query embedding. No keyword matching or image analysis is used.'
+                        : '<strong>kNN Image Only mode</strong> uses visual image embeddings (1024-dim vectors). Results are ranked by visual similarity between your query and property images. No text matching is used - purely visual search.'}
                 </p>
-                <button onclick="showRawListingData()" style="margin-top:10px;padding:8px 16px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;">
-                    📄 View Raw Listing Data (JSON)
-                </button>
             </div>`;
+
+            // SEARCH MODE INDICATOR (only show for hybrid mode)
+            if (selectedStrategy === 'hybrid') {
+                const searchModeDisplay = selectedSearchMode === 'adaptive' ? 'Adaptive (Query-Type Aware)' : 'Standard (Equal Weighting)';
+                const searchModeColor = selectedSearchMode === 'adaptive' ? '#28a745' : '#6c757d';
+                const searchModeIcon = selectedSearchMode === 'adaptive' ? '🎯' : '📊';
+                const searchModeTooltip = selectedSearchMode === 'adaptive'
+                    ? 'Adaptive mode: System automatically adjusts scoring weights based on query type (visual style, features, color, etc.)'
+                    : 'Standard mode: All three strategies (BM25, text kNN, image kNN) equally weighted with k=60';
+
+                html += `<div class="score-section" style="background:${searchModeColor === '#28a745' ? '#d4edda' : '#e2e3e5'};border-left-color:${searchModeColor};border-width:4px;">
+                    <h4 style="color:${searchModeColor};font-size:16px;">${searchModeIcon} Search Mode: <strong>${searchModeDisplay}</strong></h4>
+                    <p style="color:#666;font-size:13px;margin:8px 0 0 0;line-height:1.6;">
+                        ${searchModeTooltip}
+                        ${selectedSearchMode === 'adaptive' ? '<br><strong>Result:</strong> k-values vary by query type. See details below.' : '<br><strong>Result:</strong> BM25, text kNN, and image kNN all use k=60.'}
+                    </p>
+                    <button onclick="showRawListingData()" style="margin-top:10px;padding:8px 16px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;">
+                        📄 View Raw Listing Data (JSON)
+                    </button>
+                </div>`;
+            } else {
+                html += `<button onclick="showRawListingData()" style="margin-top:10px;padding:8px 16px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;">
+                    📄 View Raw Listing Data (JSON)
+                </button>`;
+            }
 
             // QUERY INFORMATION SECTION
             html += `<div class="score-section" style="background:#fff3cd;border-left-color:#ffc107;">
@@ -1318,61 +1417,143 @@ TIP: Try "modern white house" in different modes to see ranking changes!`);
                 }
             }
 
-            html += `<div class="score-section" style="background:#e8f4f8;border-left-color:#0066cc;border-width:3px;">
-                <h4 style="color:#0066cc;font-size:18px;">🧠 Why You're Seeing These Results</h4>
-                <div style="background:#fff;padding:15px;border-radius:6px;margin:10px 0;">
-                    <p style="color:#333;line-height:1.7;margin:0 0 12px 0;font-size:14px;">
-                        ${queryExplanation}
-                    </p>
-                    <div style="background:#f0f8ff;padding:10px;border-left:3px solid #0066cc;margin:10px 0;">
-                        <strong style="color:#0066cc;">For this property:</strong>
-                        <p style="margin:5px 0 0 0;color:#333;">${strategyHighlight}</p>
+            // Strategy-specific explanation section
+            let strategyExplanationHTML = '';
+            if (selectedStrategy === 'hybrid') {
+                strategyExplanationHTML = `<div class="score-section" style="background:#e8f4f8;border-left-color:#0066cc;border-width:3px;">
+                    <h4 style="color:#0066cc;font-size:18px;">🧠 Why You're Seeing These Results</h4>
+                    <div style="background:#fff;padding:15px;border-radius:6px;margin:10px 0;">
+                        <p style="color:#333;line-height:1.7;margin:0 0 12px 0;font-size:14px;">
+                            ${queryExplanation}
+                        </p>
+                        <div style="background:#f0f8ff;padding:10px;border-left:3px solid #0066cc;margin:10px 0;">
+                            <strong style="color:#0066cc;">For this property:</strong>
+                            <p style="margin:5px 0 0 0;color:#333;">${strategyHighlight}</p>
+                        </div>
                     </div>
-                </div>
 
-                <h5 style="color:#0066cc;margin:15px 0 10px 0;">📚 How Multi-Strategy Search Works</h5>
-                <p style="color:#555;line-height:1.6;margin:10px 0;font-size:13px;">
-                    Every search runs <strong>three independent strategies</strong> in parallel:
-                </p>
-                <ul style="color:#555;line-height:1.7;margin:10px 0;padding-left:25px;font-size:13px;">
-                    <li><strong>BM25 Full-Text Search</strong> - Keyword matching in descriptions and visual features (k=${kValues.bm25})</li>
-                    <li><strong>kNN Text Similarity</strong> - Semantic understanding via 1024-dim embeddings (k=${kValues.knn_text})</li>
-                    <li><strong>kNN Image Similarity</strong> - Visual matching across ${currentProperty.image_vectors_count || '~20'} property images (k=${kValues.knn_image})</li>
-                </ul>
-                <p style="color:#555;line-height:1.6;margin:10px 0;font-size:13px;">
-                    Results are combined using <strong>Reciprocal Rank Fusion (RRF)</strong>: <code>Score = Σ[1/(k + rank)]</code>.
-                    ${selectedSearchMode === 'adaptive'
-                        ? 'Lower k-values = higher weight for that strategy. The adaptive k-values above show which strategies are prioritized for your query type.'
-                        : 'In Standard mode, all strategies use k=60 (equal weighting), so every strategy contributes proportionally based on rank only.'}
-                </p>
-                <div style="background:#fff3cd;padding:12px;border-radius:6px;margin-top:15px;">
-                    <strong style="color:#856404;">💡 Why "Not found in top results" is normal:</strong>
-                    <p style="color:#856404;font-size:12px;margin:5px 0 0 0;line-height:1.6;">
-                        ${selectedSearchMode === 'adaptive'
-                            ? 'Not every property matches all three strategies! A visual style query might only use image kNN. A keyword query might only use BM25. That\'s intentional - each strategy specializes in different query types. The system automatically emphasizes the most relevant strategies for your specific search.'
-                            : 'Even in Standard mode with equal weighting, not every property appears in all three strategy results. Each strategy (BM25, text kNN, image kNN) searches independently and returns its own top results. A property only contributes to the final RRF score if it appears in at least one strategy\'s top results. Properties can still rank well overall even if they only match via one or two strategies.'}
+                    <h5 style="color:#0066cc;margin:15px 0 10px 0;">📚 How Multi-Strategy Search Works</h5>
+                    <p style="color:#555;line-height:1.6;margin:10px 0;font-size:13px;">
+                        Every search runs <strong>three independent strategies</strong> in parallel:
                     </p>
-                </div>
-            </div>`;
+                    <ul style="color:#555;line-height:1.7;margin:10px 0;padding-left:25px;font-size:13px;">
+                        <li><strong>BM25 Full-Text Search</strong> - Keyword matching in descriptions and visual features (k=${kValues.bm25})</li>
+                        <li><strong>kNN Text Similarity</strong> - Semantic understanding via 1024-dim embeddings (k=${kValues.knn_text})</li>
+                        <li><strong>kNN Image Similarity</strong> - Visual matching across ${currentProperty.image_vectors_count || '~20'} property images (k=${kValues.knn_image})</li>
+                    </ul>
+                    <p style="color:#555;line-height:1.6;margin:10px 0;font-size:13px;">
+                        Results are combined using <strong>Reciprocal Rank Fusion (RRF)</strong>: <code>Score = Σ[1/(k + rank)]</code>.
+                        ${selectedSearchMode === 'adaptive'
+                            ? 'Lower k-values = higher weight for that strategy. The adaptive k-values above show which strategies are prioritized for your query type.'
+                            : 'In Standard mode, all strategies use k=60 (equal weighting), so every strategy contributes proportionally based on rank only.'}
+                    </p>
+                    <div style="background:#fff3cd;padding:12px;border-radius:6px;margin-top:15px;">
+                        <strong style="color:#856404;">💡 Why "Not found in top results" is normal:</strong>
+                        <p style="color:#856404;font-size:12px;margin:5px 0 0 0;line-height:1.6;">
+                            ${selectedSearchMode === 'adaptive'
+                                ? 'Not every property matches all three strategies! A visual style query might only use image kNN. A keyword query might only use BM25. That\'s intentional - each strategy specializes in different query types. The system automatically emphasizes the most relevant strategies for your specific search.'
+                                : 'Even in Standard mode with equal weighting, not every property appears in all three strategy results. Each strategy (BM25, text kNN, image kNN) searches independently and returns its own top results. A property only contributes to the final RRF score if it appears in at least one strategy\'s top results. Properties can still rank well overall even if they only match via one or two strategies.'}
+                        </p>
+                    </div>
+                </div>`;
+            } else if (selectedStrategy === 'bm25') {
+                strategyExplanationHTML = `<div class="score-section" style="background:#d4edda;border-left-color:#28a745;border-width:3px;">
+                    <h4 style="color:#28a745;font-size:18px;">📝 BM25 Keyword Search Results</h4>
+                    <p style="color:#333;line-height:1.7;margin:10px 0;font-size:14px;">
+                        You're viewing results from <strong>BM25 keyword matching only</strong>. Properties are ranked based on how well they match your query terms in their text fields (description, visual features, tags, address).
+                    </p>
+                    <div style="background:#fff;padding:15px;border-radius:6px;margin:10px 0;">
+                        <strong style="color:#28a745;">How BM25 Works:</strong>
+                        <ul style="margin:8px 0 0 0;padding-left:20px;line-height:1.8;">
+                            <li><strong>Term Frequency:</strong> Properties mentioning your query words more frequently rank higher</li>
+                            <li><strong>Field Boosting:</strong> Matches in description (3.0x) weighted higher than address (0.5x)</li>
+                            <li><strong>Document Length:</strong> Shorter documents with keyword matches rank higher (less dilution)</li>
+                            <li><strong>Tag Matching:</strong> Exact matches in feature_tags and image_tags get additional boost</li>
+                        </ul>
+                    </div>
+                    <div style="background:#fff3cd;padding:12px;border-radius:6px;">
+                        <strong style="color:#856404;">⚠️ Limitations of BM25 Only:</strong>
+                        <p style="color:#856404;font-size:13px;margin:5px 0 0 0;line-height:1.6;">
+                            BM25 only finds exact keyword matches. It won't find synonyms (e.g., "cozy" won't match "comfortable") or visual similarity (e.g., modern architecture not described as "modern"). Use Hybrid mode for best results.
+                        </p>
+                    </div>
+                </div>`;
+            } else if (selectedStrategy === 'knn_text') {
+                strategyExplanationHTML = `<div class="score-section" style="background:#cfe2ff;border-left-color:#007bff;border-width:3px;">
+                    <h4 style="color:#007bff;font-size:18px;">🧠 kNN Text Semantic Search Results</h4>
+                    <p style="color:#333;line-height:1.7;margin:10px 0;font-size:14px;">
+                        You're viewing results from <strong>kNN text semantic search only</strong>. Properties are ranked based on how semantically similar their text embeddings are to your query embedding.
+                    </p>
+                    <div style="background:#fff;padding:15px;border-radius:6px;margin:10px 0;">
+                        <strong style="color:#007bff;">How kNN Text Works:</strong>
+                        <ul style="margin:8px 0 0 0;padding-left:20px;line-height:1.8;">
+                            <li><strong>Embedding:</strong> Your query is converted to a 1024-dimensional vector using Amazon Titan</li>
+                            <li><strong>Property Vectors:</strong> Each property's description + visual_features_text is embedded similarly</li>
+                            <li><strong>Similarity:</strong> Cosine similarity measures how close vectors are in 1024-dim space</li>
+                            <li><strong>Semantic Understanding:</strong> Captures meaning, not just exact keywords (e.g., "cozy" ≈ "comfortable")</li>
+                        </ul>
+                    </div>
+                    <div style="background:#fff3cd;padding:12px;border-radius:6px;">
+                        <strong style="color:#856404;">⚠️ Limitations of kNN Text Only:</strong>
+                        <p style="color:#856404;font-size:13px;margin:5px 0 0 0;line-height:1.6;">
+                            Text embeddings capture semantic meaning but may miss exact keyword requirements or visual features not described in text. Use Hybrid mode for comprehensive matching.
+                        </p>
+                    </div>
+                </div>`;
+            } else if (selectedStrategy === 'knn_image') {
+                strategyExplanationHTML = `<div class="score-section" style="background:#f8d7da;border-left-color:#dc3545;border-width:3px;">
+                    <h4 style="color:#dc3545;font-size:18px;">🖼️ kNN Image Visual Search Results</h4>
+                    <p style="color:#333;line-height:1.7;margin:10px 0;font-size:14px;">
+                        You're viewing results from <strong>kNN image visual search only</strong>. Properties are ranked based on how visually similar their images are to your query concept.
+                    </p>
+                    <div style="background:#fff;padding:15px;border-radius:6px;margin:10px 0;">
+                        <strong style="color:#dc3545;">How kNN Image Works:</strong>
+                        <ul style="margin:8px 0 0 0;padding-left:20px;line-height:1.8;">
+                            <li><strong>Query Embedding:</strong> Your text query is converted to a 1024-dimensional image concept vector</li>
+                            <li><strong>Image Vectors:</strong> Each property image (${currentProperty.image_vectors_count || '~20'} per property) is embedded separately</li>
+                            <li><strong>Multi-Vector Search:</strong> ALL images searched independently, best match determines property score</li>
+                            <li><strong>Pure Visual:</strong> Matches architectural style, colors, materials visible in images - no text required</li>
+                        </ul>
+                    </div>
+                    <div style="background:#fff3cd;padding:12px;border-radius:6px;">
+                        <strong style="color:#856404;">⚠️ Limitations of kNN Image Only:</strong>
+                        <p style="color:#856404;font-size:13px;margin:5px 0 0 0;line-height:1.6;">
+                            Image embeddings capture visual appearance but can't find specific features not visible in photos (e.g., "granite countertops" if kitchen not photographed). Use Hybrid mode to combine visual + text signals.
+                        </p>
+                    </div>
+                </div>`;
+            }
+            html += strategyExplanationHTML;
 
-            // Overall Score Section
+            // Overall Score Section (strategy-aware)
+            const scoreDescription = selectedStrategy === 'hybrid'
+                ? 'This is the final score after combining all search strategies (RRF) and applying tag boost multiplier. Higher scores rank first.'
+                : selectedStrategy === 'bm25'
+                ? 'This is the BM25 relevance score from OpenSearch, optionally multiplied by tag boost. Higher scores indicate better keyword match.'
+                : selectedStrategy === 'knn_text'
+                ? 'This is the cosine similarity score between your query and this property\'s text embedding, optionally multiplied by tag boost. Higher scores indicate better semantic similarity.'
+                : 'This is the best image match score from visual similarity search, optionally multiplied by tag boost. Higher scores indicate better visual match.';
+
+            const scoreCalc = selectedStrategy === 'hybrid'
+                ? `Final Score = RRF Total Score × Tag Boost Factor<br>${currentProperty.boosted && details.tag_boosting ? `= ${details.tag_boosting.score_before_boost.toFixed(6)} × ${details.tag_boosting.boost_factor} = ${currentProperty.score.toFixed(6)}` : `= ${currentProperty.score.toFixed(6)} (no boost applied)`}`
+                : selectedStrategy === 'bm25'
+                ? `Final Score = BM25 Score ${currentProperty.boosted && details.tag_boosting ? `× Tag Boost Factor<br>= ${details.tag_boosting.score_before_boost.toFixed(6)} × ${details.tag_boosting.boost_factor} = ${currentProperty.score.toFixed(6)}` : `<br>= ${currentProperty.score.toFixed(6)} (no boost applied)`}`
+                : `Final Score = OpenSearch kNN Score ${currentProperty.boosted && details.tag_boosting ? `× Tag Boost Factor<br>= ${details.tag_boosting.score_before_boost.toFixed(6)} × ${details.tag_boosting.boost_factor} = ${currentProperty.score.toFixed(6)}` : `<br>= ${currentProperty.score.toFixed(6)} (no boost applied)`}`;
+
             html += `<div class="score-section">
                 <h4>🎯 Final Score</h4>
                 <div class="score-metric">
-                    <span class="score-label">Final Ranking Score ${infoTooltip('This is the final score after combining all search strategies (RRF) and applying tag boost multiplier. Higher scores rank first.')}</span>
+                    <span class="score-label">Final Ranking Score ${infoTooltip(scoreDescription)}</span>
                     <span class="score-value highlight" style="font-size:24px;">${currentProperty.score.toFixed(6)}</span>
                 </div>
                 ${currentProperty.boosted ? '<div class="score-metric"><span class="score-label">Tag Boost Applied ' + infoTooltip('Properties matching more required tags get multiplicative boosts: 100%=2.0x, 75%=1.5x, 50%=1.25x') + '</span><span class="score-value success">✓ Yes</span></div>' : ''}
                 <p style="color:#666;font-size:13px;margin-top:10px;line-height:1.5;">
-                    <strong>How it's calculated:</strong> Final Score = RRF Total Score × Tag Boost Factor<br>
-                    ${currentProperty.boosted && details.tag_boosting ?
-                        `= ${details.tag_boosting.score_before_boost.toFixed(6)} × ${details.tag_boosting.boost_factor} = ${currentProperty.score.toFixed(6)}` :
-                        `= ${currentProperty.score.toFixed(6)} (no boost applied)`}
+                    <strong>How it's calculated:</strong> ${scoreCalc}
                 </p>
             </div>`;
 
-            // RRF Breakdown Section
-            if (details.bm25 || details.knn_text || details.knn_image) {
+            // Strategy Details Section (adapt based on selected strategy)
+            if (selectedStrategy === 'hybrid' && (details.bm25 || details.knn_text || details.knn_image)) {
                 html += `<div class="score-section">
                     <h4>🔀 Reciprocal Rank Fusion (RRF) Breakdown</h4>
                     <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
@@ -1390,8 +1571,8 @@ TIP: Try "modern white house" in different modes to see ranking changes!`);
                         ${details.knn_image?.rrf_contribution?.toFixed(6) || '0'} (kNN image)
                     </p>`;
 
-                // BM25 Full-Text Search
-                if (details.bm25) {
+                // BM25 Full-Text Search (show in hybrid mode)
+                if (details.bm25 && selectedStrategy === 'hybrid') {
                     const bm25 = details.bm25;
                     const bm25_debug = debug_info.bm25;
                     html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #28a745;border-radius:4px;">
@@ -1430,8 +1611,8 @@ TIP: Try "modern white house" in different modes to see ranking changes!`);
                     </div>`;
                 }
 
-                // kNN Text Search
-                if (details.knn_text) {
+                // kNN Text Search (show in hybrid mode)
+                if (details.knn_text && selectedStrategy === 'hybrid') {
                     const knn_text = details.knn_text;
                     const knn_text_debug = debug_info.knn_text;
                     html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #007bff;border-radius:4px;">
@@ -1476,8 +1657,8 @@ TIP: Try "modern white house" in different modes to see ranking changes!`);
                     </div>`;
                 }
 
-                // kNN Image Search
-                if (details.knn_image) {
+                // kNN Image Search (show in hybrid mode)
+                if (details.knn_image && selectedStrategy === 'hybrid') {
                     const knn_image = details.knn_image;
                     const knn_image_debug = debug_info.knn_image;
                     html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #dc3545;border-radius:4px;">
@@ -1522,6 +1703,93 @@ TIP: Try "modern white house" in different modes to see ranking changes!`);
                 }
 
                 html += `</div>`;
+            }
+
+            // Single-strategy detail sections
+            if (selectedStrategy === 'bm25' && details.bm25 && debug_info.bm25) {
+                const bm25 = details.bm25;
+                const bm25_debug = debug_info.bm25;
+                html += `<div class="score-section">
+                    <h4 style="color:#28a745;">📝 BM25 Search Details</h4>
+                    <p style="color:#666;font-size:13px;margin:8px 0 15px 0;line-height:1.5;">
+                        Showing details for BM25 keyword matching. This search returned <strong>${bm25_debug.hits_count} total results</strong>.
+                    </p>
+                    <div class="score-metric">
+                        <span class="score-label">Rank in BM25 Results ${infoTooltip('Position of this property in BM25 search results (1=best keyword match).')}</span>
+                        <span class="score-value ${bm25.rank ? 'success' : 'danger'}">${bm25.rank ? '#' + bm25.rank : 'Not found in top results'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">BM25 Relevance Score ${infoTooltip('Raw BM25 score from OpenSearch measuring keyword match quality.')}</span>
+                        <span class="score-value">${bm25.original_score ? bm25.original_score.toFixed(6) : 'N/A'}</span>
+                    </div>
+                    <details style="margin-top:15px;">
+                        <summary style="cursor:pointer;color:#28a745;font-weight:600;">View OpenSearch Query</summary>
+                        <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(bm25_debug.query, null, 2)}</pre>
+                    </details>
+                </div>`;
+            }
+
+            if (selectedStrategy === 'knn_text' && details.knn_text && debug_info.knn_text) {
+                const knn_text = details.knn_text;
+                const knn_text_debug = debug_info.knn_text;
+                html += `<div class="score-section">
+                    <h4 style="color:#007bff;">🧠 kNN Text Search Details</h4>
+                    <p style="color:#666;font-size:13px;margin:8px 0 15px 0;line-height:1.5;">
+                        Showing details for kNN text semantic search. This search returned <strong>${knn_text_debug.hits_count} total results</strong>.
+                    </p>
+                    <div class="score-metric">
+                        <span class="score-label">Rank in kNN Text Results ${infoTooltip('Position of this property in text embedding similarity rankings (1=most semantically similar).')}</span>
+                        <span class="score-value ${knn_text.rank ? 'success' : 'danger'}">${knn_text.rank ? '#' + knn_text.rank : 'Not found in top results'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Cosine Similarity Score ${infoTooltip('Similarity score between query embedding and property text embedding (0-1 scale).')}</span>
+                        <span class="score-value">${knn_text.original_score ? knn_text.original_score.toFixed(6) : 'N/A'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Query Vector ${infoTooltip('Your query converted to 1024-dimensional vector via Amazon Titan.')}</span>
+                        <span class="score-value">1024-dim embedding from: "${debug_info.query.original_query}"</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Property Vector ${infoTooltip('Property text (description + visual_features_text) embedded to 1024 dimensions.')}</span>
+                        <span class="score-value">1024-dim from: description + visual_features_text</span>
+                    </div>
+                    <details style="margin-top:15px;">
+                        <summary style="cursor:pointer;color:#007bff;font-weight:600;">View OpenSearch Query</summary>
+                        <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(knn_text_debug.query, null, 2)}</pre>
+                    </details>
+                </div>`;
+            }
+
+            if (selectedStrategy === 'knn_image' && details.knn_image && debug_info.knn_image) {
+                const knn_image = details.knn_image;
+                const knn_image_debug = debug_info.knn_image;
+                html += `<div class="score-section">
+                    <h4 style="color:#dc3545;">🖼️ kNN Image Search Details</h4>
+                    <p style="color:#666;font-size:13px;margin:8px 0 15px 0;line-height:1.5;">
+                        Showing details for kNN image visual search. This search returned <strong>${knn_image_debug.hits_count} total results</strong>.
+                        Property has <strong>${details.image_vectors_count || '~20'} images</strong> embedded separately.
+                    </p>
+                    <div class="score-metric">
+                        <span class="score-label">Rank in kNN Image Results ${infoTooltip('Position of this property in image similarity rankings (1=most visually similar).')}</span>
+                        <span class="score-value ${knn_image.rank ? 'success' : 'danger'}">${knn_image.rank ? '#' + knn_image.rank : 'Not found in top results'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Best Image Match Score ${infoTooltip('Highest similarity score among all property images (score_mode: max).')}</span>
+                        <span class="score-value">${knn_image.original_score ? knn_image.original_score.toFixed(6) : 'N/A'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Search Mode ${infoTooltip('Multi-vector: Each image searched independently. Single: All images averaged.')}</span>
+                        <span class="score-value">${knn_image_debug.is_multi_vector ? 'Multi-vector (score_mode: max)' : 'Single averaged vector'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Query Vector ${infoTooltip('Your query converted to 1024-dimensional image concept vector.')}</span>
+                        <span class="score-value">1024-dim embedding from: "${debug_info.query.original_query}"</span>
+                    </div>
+                    <details style="margin-top:15px;">
+                        <summary style="cursor:pointer;color:#dc3545;font-weight:600;">View OpenSearch Query</summary>
+                        <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(knn_image_debug.query, null, 2)}</pre>
+                    </details>
+                </div>`;
             }
 
             // Individual Image Scores Section
