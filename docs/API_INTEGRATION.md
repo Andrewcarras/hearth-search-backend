@@ -41,7 +41,7 @@ curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search 
 
 ### Live Demo
 
-**UI:** http://54.227.66.148/
+**UI:** http://54.234.198.245/
 
 Try these searches:
 - "granite countertops"

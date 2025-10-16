@@ -1551,3 +1551,343 @@ Hearth's scoring system is a **multi-stage adaptive fusion algorithm** that:
 - **Scale-invariant fusion** works regardless of individual score ranges
 
 **Result:** A search engine that automatically adapts to find the most relevant properties for any natural language query, whether searching by color ("white house"), visual style ("modern architecture"), specific features ("granite countertops"), or combinations thereof.
+
+---
+
+## Known Issues & Limitations
+
+### Issue 1: "Not Found in Top Results" for kNN Image Searches
+
+**Problem:** Listings that score highly in isolated kNN image searches may rank poorly or disappear entirely in the final fused results.
+
+**Example Scenario:**
+```
+Query: "modern architecture with clean lines"
+
+Individual Search Results:
+- kNN Image Search: Property A ranks #3 (score: 0.86)
+- BM25 Search: Property A ranks #45 (score: 2.1)
+- kNN Text Search: Property A ranks #38 (score: 0.62)
+
+Final Fused Results: Property A ranks #27 (RRF score: 0.03)
+```
+
+**Root Cause Analysis:**
+1. **Strategy Overlap:** BM25 and kNN text search both evaluate the same `description` field
+   - BM25 uses keyword matching on description
+   - kNN text embeds the description
+   - Both return similar rankings for text-heavy queries
+   - Image kNN becomes minority voice (1 out of 3)
+
+2. **Equal Weighting Issue:** Current RRF uses k=60 for all three strategies
+   - Each strategy gets equal weight in fusion
+   - 2 text-based strategies vs 1 visual strategy = 2:1 text bias
+   - Even with adaptive weighting, bias remains
+
+3. **RRF Rank Sensitivity:** RRF heavily penalizes low ranks
+   ```
+   Property A contributions:
+   - Image: 1/(60+3) = 0.0159 (strong)
+   - BM25: 1/(60+45) = 0.0095 (weak - low rank hurts badly)
+   - Text: 1/(60+38) = 0.0102 (weak)
+   - Total: 0.0356 (mediocre despite strong image match)
+   ```
+
+**Why This Matters:**
+- Visual queries like "modern architecture" should primarily use image similarity
+- Current system over-weights text relevance even for visual queries
+- Listings with poor descriptions but great visual matches are disadvantaged
+
+**Status:** ⚠️ Under Investigation
+
+**Proposed Solutions:**
+
+**Option 1: Reduce Text Strategy Weight for Visual Queries**
+```python
+if query_type == "visual_style" or architecture_style:
+    bm25_k = 90      # Reduce BM25 weight
+    text_k = 90      # Reduce text kNN weight
+    image_k = 30     # Boost image kNN weight (3x impact vs text)
+```
+
+**Option 2: Use Score-Based Fusion Instead of Rank-Based**
+```python
+# Instead of RRF (rank-based), use weighted score fusion
+final_score = (w_bm25 * normalize(bm25_score) +
+               w_text * text_score +
+               w_image * image_score)
+```
+
+**Option 3: Remove kNN Text Search for Visual Queries**
+```python
+if query_type in ["visual_style", "color", "material"]:
+    # Only run BM25 (for tags) + image kNN
+    # Skip text kNN entirely (reduces strategy overlap)
+```
+
+**Option 4: Multi-Stage Fusion**
+```python
+# Stage 1: Fuse BM25 + text kNN (both text-based)
+text_fusion_score = rrf([bm25_results, text_knn_results], k=60)
+
+# Stage 2: Fuse text results with image results
+final_score = rrf([text_fusion_results, image_knn_results], k=60)
+
+# Now it's 1:1 (text vs visual), not 2:1
+```
+
+---
+
+### Issue 2: Strategy Overlap Between BM25 and kNN Text
+
+**Problem:** BM25 and kNN text search produce highly correlated rankings because they both analyze the same `description` field.
+
+**Correlation Analysis:**
+```
+Query: "granite countertops with stainless steel appliances"
+
+BM25 Top 10:          kNN Text Top 10:      Overlap:
+1. zpid=12345         1. zpid=12345         ✓ (exact match)
+2. zpid=67890         3. zpid=67890         ✓ (off by 1)
+3. zpid=54321         2. zpid=54321         ✓ (off by 1)
+4. zpid=99999         4. zpid=99999         ✓ (exact match)
+5. zpid=11111         6. zpid=11111         ✓ (off by 1)
+6. zpid=22222         5. zpid=22222         ✓ (off by 1)
+7. zpid=33333         8. zpid=33333         ✓ (off by 1)
+8. zpid=44444         7. zpid=44444         ✓ (off by 1)
+9. zpid=55555         10. zpid=55555        ✓ (off by 1)
+10. zpid=66666        9. zpid=66666         ✓ (off by 1)
+
+Rank Correlation: 0.98 (Spearman's ρ)
+```
+
+**Why This Happens:**
+- **BM25** scores based on keyword frequency in description
+- **kNN Text** scores based on semantic similarity of description embedding
+- Listings with many query keywords naturally embed closer to query
+- Result: Both strategies favor the same listings
+
+**Impact on Fusion:**
+- Image kNN's unique signal gets diluted
+- Text relevance is effectively double-counted
+- Visual matches without keyword-rich descriptions are penalized twice
+
+**Example:**
+```
+Property X: Modern glass architecture, minimal description ("Beautiful home")
+- BM25: Rank 80 (no keywords → poor score)
+- kNN Text: Rank 75 (short description → poor embedding match)
+- kNN Image: Rank 2 (perfect visual match!)
+
+RRF Score: 1/(60+80) + 1/(60+75) + 1/(60+2) = 0.0071 + 0.0074 + 0.0161 = 0.0306
+
+Property Y: Traditional home, rich description with keywords
+- BM25: Rank 2 (many keywords → great score)
+- kNN Text: Rank 3 (detailed description → good embedding)
+- kNN Image: Rank 45 (poor visual match)
+
+RRF Score: 1/(60+2) + 1/(60+3) + 1/(60+45) = 0.0161 + 0.0159 + 0.0095 = 0.0415
+
+Property Y wins (0.0415 > 0.0306) despite poor visual match!
+```
+
+**Status:** ⚠️ Known Limitation
+
+**Potential Solutions:**
+1. **Remove kNN text** for queries where visual matching is primary
+2. **Use different text sources:**
+   - BM25 on description
+   - kNN text on AI-generated `visual_features_text` (image analysis captions)
+   - This would reduce correlation
+3. **De-duplicate signals** by detecting high correlation and down-weighting
+
+---
+
+### Issue 3: Adaptive Weighting Not Aggressive Enough
+
+**Problem:** Current adaptive k-values provide modest weight adjustments (1.5x-2x), but strategy overlap requires more dramatic shifts.
+
+**Current Adaptive Logic:**
+```python
+# Color query
+bm25_k = 30      # 2x weight vs default (60)
+image_k = 120    # 0.5x weight vs default (60)
+
+# Impact on RRF scores:
+# BM25 rank 10: 1/(30+10) = 0.025 (boosted)
+# Image rank 10: 1/(120+10) = 0.0077 (reduced)
+# Ratio: 0.025 / 0.0077 = 3.2x
+
+# But with 2 text strategies + 1 visual strategy:
+# Text contribution: 0.025 + 0.0167 (text kNN) = 0.0417
+# Visual contribution: 0.0077
+# Effective ratio: 0.0417 / 0.0077 = 5.4x text bias (too high!)
+```
+
+**Observation:** Even "aggressive" adaptive weighting doesn't overcome 2:1 strategy imbalance.
+
+**Status:** ⚠️ Design Limitation
+
+**Solution:** Combine adaptive weighting with strategy selection (remove redundant searches for certain queries).
+
+---
+
+### Issue 4: Tag Boosting Masks Relevance Issues
+
+**Problem:** Tag boosting (2.0x multiplier) can elevate listings with perfect tag matches but poor overall relevance.
+
+**Example:**
+```
+Query: "modern white house with pool"
+
+Property A (mediocre relevance, perfect tags):
+- RRF: 0.03 (low - bad visual/text match)
+- Tags: 3/3 match → 2.0x boost
+- Final: 0.03 × 2.0 = 0.06
+
+Property B (excellent relevance, partial tags):
+- RRF: 0.08 (high - great visual/text match!)
+- Tags: 2/3 match → 1.25x boost
+- Final: 0.08 × 1.25 = 0.10
+
+Property B wins (correct), but gap is narrow (0.10 vs 0.06)
+```
+
+**Issue:** Tag boosting can compensate for poor fundamental relevance. If Property A's RRF were 0.04 instead of 0.03, it would win despite being a worse match overall.
+
+**Why This Happens:**
+- Tags are binary (match or no match)
+- Doesn't account for "how well" the property matches the visual/semantic intent
+- 2.0x boost is very aggressive
+
+**Status:** ⚠️ Potential Over-Weighting
+
+**Proposed Adjustments:**
+```python
+# Option 1: Reduce boost multipliers
+if match_ratio >= 1.0:
+    boost = 1.5  # Instead of 2.0
+elif match_ratio >= 0.75:
+    boost = 1.3  # Instead of 1.5
+elif match_ratio >= 0.5:
+    boost = 1.15 # Instead of 1.25
+
+# Option 2: Make boost additive instead of multiplicative
+final_score = rrf_score + (match_ratio * 0.02)
+```
+
+---
+
+## Recommended Fixes (Prioritized)
+
+### Priority 1: Address Strategy Overlap (High Impact)
+**Fix:** For visual queries, remove kNN text search:
+```python
+def select_strategies(query_type, architecture_style):
+    if query_type in ["visual_style", "color"] or architecture_style:
+        return ["bm25", "image_knn"]  # Skip text kNN
+    else:
+        return ["bm25", "text_knn", "image_knn"]  # All three
+```
+
+**Impact:** Eliminates 2:1 text bias for visual queries, allows image similarity to have equal weight with text.
+
+**Effort:** Low (1-2 hours implementation, 1-2 days testing)
+
+### Priority 2: Implement More Aggressive Adaptive Weighting (Medium Impact)
+**Fix:** Increase k-value range for dramatic weight shifts:
+```python
+if query_type == "visual_style":
+    bm25_k = 120     # 0.5x weight (was 60)
+    image_k = 20     # 3x weight (was 40)
+    # Ratio: 120/20 = 6x favor visual
+
+if query_type == "color":
+    bm25_k = 15      # 4x weight (was 30)
+    image_k = 180    # 0.33x weight (was 120)
+    # Ratio: 15/180 = 12x favor text (colors in tags)
+```
+
+**Impact:** Stronger signal from primary strategy for each query type.
+
+**Effort:** Low (1 hour implementation, 1-2 days testing)
+
+### Priority 3: Reduce Tag Boost Multipliers (Low Impact)
+**Fix:** Use more conservative boosting:
+```python
+if match_ratio >= 1.0:
+    boost = 1.5  # Down from 2.0
+elif match_ratio >= 0.75:
+    boost = 1.3  # Down from 1.5
+elif match_ratio >= 0.5:
+    boost = 1.15 # Down from 1.25
+```
+
+**Impact:** Prevents tag matches from overriding fundamental relevance.
+
+**Effort:** Low (5 minutes implementation, 1 day testing)
+
+---
+
+## Testing Plan for Fixes
+
+### Test Suite 1: Visual Query Improvement
+```python
+queries = [
+    "modern architecture with clean lines",
+    "craftsman style home",
+    "mid-century modern design",
+    "contemporary glass house"
+]
+
+# For each query:
+# 1. Run with current system
+# 2. Run with strategy selection fix
+# 3. Compare: Are visually similar homes ranking higher?
+# 4. Metric: Image kNN top 5 should appear in final top 10
+```
+
+### Test Suite 2: Color Query Preservation
+```python
+queries = [
+    "white house with blue door",
+    "gray exterior",
+    "beige home"
+]
+
+# Ensure color-based adaptive weighting still works correctly
+# BM25 should still dominate (tags have exact colors)
+```
+
+### Test Suite 3: Balanced Query Stability
+```python
+queries = [
+    "3 bedroom house with pool",
+    "granite countertops and hardwood floors",
+    "homes with mountain views"
+]
+
+# Ensure changes don't break feature-based queries
+# All three strategies should contribute reasonably
+```
+
+---
+
+## Path Forward
+
+**Immediate Actions:**
+1. ✅ Document all known issues (this section)
+2. ⬜ Implement Priority 1 fix (strategy selection)
+3. ⬜ Run Test Suite 1-3
+4. ⬜ Deploy to staging Lambda for A/B testing
+5. ⬜ Compare results with production system
+6. ⬜ If successful, implement Priority 2 fix
+7. ⬜ Repeat testing and comparison
+8. ⬜ Deploy to production
+
+**Success Metrics:**
+- Visual queries: Top 10 results should have 50%+ overlap with image kNN top 10 (currently ~20%)
+- Color queries: BM25 dominance preserved (>60% of RRF score from BM25)
+- Balanced queries: No single strategy contributes >50% of RRF score
+
+**Timeline:** 2-3 weeks for full implementation and validation

@@ -6,7 +6,7 @@ Advanced multimodal AI-powered real estate search combining natural language pro
 
 ## 🚀 Quick Start
 
-**Live Demo:** http://54.227.66.148/
+**Live Demo:** http://54.234.198.245/
 **Search API:** https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search
 **Current Index:** `listings-v2` (multi-vector image search enabled)
 **Status:** ✅ Production Ready - 3,904 listings from Salt Lake City, UT
@@ -68,7 +68,7 @@ curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         USER INTERFACE                           │
-│  http://54.227.66.148/ (Property search with modal details)     │
+│  http://54.234.198.245/ (Property search with modal details)    │
 └───────────────────────────┬──────────────────────────────────────┘
                             │ HTTP POST
                             ▼
@@ -130,7 +130,7 @@ curl -X POST https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search 
 - **Amazon Bedrock** - Titan embeddings (1024-dim) + Claude Haiku for vision/NLP
 - **DynamoDB** - Unified caching (embeddings + vision + geolocation)
 - **Google Places API** - On-demand nearby places enrichment
-- **Python 3.13** - Lambda runtime with optimized parallel processing
+- **Python 3.11** - Lambda runtime with pure Python math (no numpy)
 
 See [docs/BACKEND_ARCHITECTURE.md](docs/BACKEND_ARCHITECTURE.md) for detailed architecture.
 
@@ -465,13 +465,68 @@ See [docs/BACKEND_ARCHITECTURE.md#troubleshooting](docs/BACKEND_ARCHITECTURE.md#
 
 ## 📖 Additional Resources
 
-- **Live Demo:** http://54.227.66.148/
+- **Live Demo:** http://54.234.198.245/
 - **API Endpoint:** https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod/search
 - **API Status:** ✅ Fully operational
 - **Current Index:** `listings-v2` (multi-vector, 3,904 listings)
 - **Dataset:** Salt Lake City, UT (Zillow)
 - **OpenSearch:** search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com
 - **Support:** Check documentation or review Lambda logs in CloudWatch
+
+## ⚠️ Known Issues & Limitations
+
+### Lambda Deployment Issue: Numpy Incompatibility
+**Issue:** AWS Lambda Python runtimes (both 3.11 and 3.13) currently have issues with numpy imports, causing "Error importing numpy: you should not try to import numpy from its source directory" errors.
+
+**Workaround Implemented:**
+- Removed numpy dependency entirely from search Lambdas
+- Implemented cosine similarity in pure Python using standard `math` module
+- Both `hearth-search-v2` and `hearth-search-detailed-scoring` now use pure Python (18MB each)
+- No functionality lost - mathematically equivalent to numpy implementation
+
+**Impact:**
+- Slightly slower cosine similarity calculations (~5-10% overhead)
+- More maintainable - no complex numpy packaging issues
+- Deploy using `deploy_simple.sh` script
+
+**Note:** If AWS fixes numpy support in the future, numpy can be re-added for marginal performance gains.
+
+### Scoring System Issues
+
+#### Issue 1: "Not found in top results" for kNN Searches
+**Problem:** Some listings that should rank highly based on image similarity appear low or missing in final results.
+
+**Root Cause:** Current RRF (Reciprocal Rank Fusion) implementation may not be correctly weighting the three search strategies (BM25, text kNN, image kNN). Adaptive k-values may need tuning.
+
+**Status:** Under investigation. Affects visual style queries ("modern architecture") more than feature queries ("granite countertops").
+
+**Temporary Workaround:** Use boost_mode parameter for visual queries: `{"query": "modern home", "boost_mode": true}`
+
+#### Issue 2: Strategy Overlap
+**Problem:** BM25 text search and kNN text search often return very similar rankings, potentially double-counting text relevance.
+
+**Analysis:**
+- BM25 searches `description` field with keyword matching
+- kNN text searches `vector_text` which is embedding of same `description`
+- Both strategies favor listings with query keywords in description
+- Image kNN gets diluted in RRF fusion
+
+**Proposed Solutions (not yet implemented):**
+1. **Reduce BM25 weight** for queries where visual matching is primary intent
+2. **Increase image kNN weight** for architecture/style queries
+3. **Implement query classification** to detect visual vs text-heavy queries
+4. **Test different RRF k-values** - current: k=60 for all strategies
+
+**Impact:** Visual search (image embeddings) is underutilized. Listings with great visual matches but poor text descriptions may rank lower than expected.
+
+### Deployment Scripts
+**Current Scripts:**
+- `deploy_simple.sh` - ✅ Working deployment script (use this)
+- `deploy_lambda.sh` - ❌ Outdated, attempts to use numpy
+- `deploy_lambda_clean.sh` - ❌ Outdated, attempts numpy cleanup
+- `build_lambda_docker.sh` - ❌ Not functional (requires Docker)
+
+**Always use `deploy_simple.sh` for deployments.**
 
 **Next Steps:**
 1. Read [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md) to integrate the API
