@@ -226,6 +226,10 @@ def cache_text_embedding(
         # Calculate hash as primary key
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
 
+        # Create composite key: text_hash + model_id
+        # This ensures different models cache separately
+        cache_key = f"{text_hash}#{model}"
+
         # Get timestamps
         utc_time = int(time.time())
         edt_time = get_edt_timestamp(utc_time)
@@ -234,7 +238,7 @@ def cache_text_embedding(
         text_sample = text[:200] if len(text) > 200 else text
 
         item = {
-            "text_hash": {"S": text_hash},
+            "text_hash": {"S": cache_key},  # Composite key with model
             "text_sample": {"S": text_sample},
             "embedding": {"S": json.dumps(embedding)},
             "embedding_model": {"S": model},
@@ -249,7 +253,7 @@ def cache_text_embedding(
             Item=item
         )
 
-        logger.debug(f"💾 Cached text embedding: {text_sample[:40]}...")
+        logger.debug(f"💾 Cached text embedding ({model}): {text_sample[:40]}...")
 
     except Exception as e:
         logger.warning(f"Failed to cache text embedding: {e}")
@@ -257,7 +261,8 @@ def cache_text_embedding(
 
 def get_cached_text_embedding(
     dynamodb_client,
-    text: str
+    text: str,
+    model: str = None
 ) -> Optional[List[float]]:
     """
     Retrieve cached text embedding.
@@ -267,6 +272,7 @@ def get_cached_text_embedding(
     Args:
         dynamodb_client: Boto3 DynamoDB client
         text: Input text to look up
+        model: Model ID to look up (if None, tries without model key for backward compatibility)
 
     Returns:
         Embedding vector if cached, None if not found
@@ -275,9 +281,15 @@ def get_cached_text_embedding(
         # Calculate hash
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
 
+        # Create composite key if model provided
+        if model:
+            cache_key = f"{text_hash}#{model}"
+        else:
+            cache_key = text_hash
+
         response = dynamodb_client.get_item(
             TableName=TEXT_CACHE_TABLE,
-            Key={"text_hash": {"S": text_hash}}
+            Key={"text_hash": {"S": cache_key}}
         )
 
         if "Item" not in response:

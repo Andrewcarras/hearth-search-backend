@@ -46,7 +46,7 @@ import boto3
 import math
 
 from common import (
-    os_client, OS_INDEX, embed_text,
+    os_client, OS_INDEX, embed_text_multimodal,
     extract_query_constraints, AWS_REGION
 )
 
@@ -724,7 +724,8 @@ def handler(event, context):
     else:
         logger.info("Semantic search required - filtering for valid embeddings")
 
-    q_vec = embed_text(q)
+    # CRITICAL FIX: Use multimodal embedding to match image embedding space
+    q_vec = embed_text_multimodal(q)
     filter_clauses = _filters_to_bool(hard_filters, require_embeddings=require_embeddings)["bool"]["filter"]
 
     # Add required feature filters (pool, garage, etc. must be present)

@@ -154,8 +154,8 @@ def embed_text(text: str) -> List[float]:
     # Import cache utilities
     from cache_utils import get_cached_text_embedding, cache_text_embedding
 
-    # Check cache first
-    cached_embedding = get_cached_text_embedding(dynamodb, text)
+    # Check cache first (with model ID to avoid cross-model cache hits)
+    cached_embedding = get_cached_text_embedding(dynamodb, text, TEXT_MODEL_ID)
     if cached_embedding:
         return cached_embedding
 
@@ -165,8 +165,51 @@ def embed_text(text: str) -> List[float]:
     out = json.loads(resp["body"].read().decode("utf-8"))
     vec = _parse_embed_response(out)
 
-    # Store in cache
+    # Store in cache with model ID
     cache_text_embedding(dynamodb, text, vec, TEXT_MODEL_ID)
+
+    return vec
+
+
+def embed_text_multimodal(text: str) -> List[float]:
+    """
+    Generate text embedding using the MULTIMODAL Titan model (amazon.titan-embed-image-v1).
+
+    This function embeds text using the same model that embeds images, ensuring that
+    query text and image embeddings exist in the SAME vector space. This enables
+    proper cross-modal similarity comparison in kNN image search.
+
+    KEY DIFFERENCE from embed_text():
+    - embed_text() uses amazon.titan-embed-text-v2:0 (text-only model)
+    - embed_text_multimodal() uses amazon.titan-embed-image-v1 (multimodal model, text input)
+
+    Results are cached separately from embed_text() to avoid model confusion.
+
+    Args:
+        text: Input text to embed (search query, etc.)
+
+    Returns:
+        1024-dimensional vector in the multimodal embedding space
+    """
+    if not text:
+        return [0.0] * IMAGE_DIM
+
+    # Import cache utilities
+    from cache_utils import get_cached_text_embedding, cache_text_embedding
+
+    # Check cache first (with model ID to avoid cross-model cache hits)
+    cached_embedding = get_cached_text_embedding(dynamodb, text, IMAGE_MODEL_ID)
+    if cached_embedding:
+        return cached_embedding
+
+    # Cache miss - generate embedding using multimodal model
+    body = json.dumps({"inputText": text})
+    resp = brt.invoke_model(modelId=IMAGE_MODEL_ID, body=body)  # Using IMAGE model for text!
+    out = json.loads(resp["body"].read().decode("utf-8"))
+    vec = _parse_embed_response(out)
+
+    # Store in cache with IMAGE_MODEL_ID to separate from text-v2 embeddings
+    cache_text_embedding(dynamodb, text, vec, IMAGE_MODEL_ID)
 
     return vec
 

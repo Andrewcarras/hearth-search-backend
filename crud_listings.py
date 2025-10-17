@@ -35,7 +35,7 @@ import boto3
 from common import (
     os_client, OS_INDEX, AWS_REGION,
     IMAGE_MODEL_ID, LLM_MODEL_ID,
-    embed_text, embed_image_bytes, detect_labels_with_response,
+    embed_text_multimodal, embed_image_bytes, detect_labels_with_response,
     vec_mean
 )
 
@@ -272,7 +272,7 @@ def add_listing_handler(event, context):
         # Generate text embedding if description provided
         if generate_embeddings and doc.get("description"):
             try:
-                vec_text = embed_text(doc["description"])
+                vec_text = embed_text_multimodal(doc["description"])
                 if vec_text:
                     doc["vector_text"] = vec_text
                     processing_cost += 0.0001

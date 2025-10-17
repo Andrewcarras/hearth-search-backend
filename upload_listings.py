@@ -59,7 +59,7 @@ from common import (
     AWS_REGION, OS_INDEX, MAX_IMAGES, EMBEDDING_IMAGE_WIDTH,
     IMAGE_MODEL_ID, LLM_MODEL_ID,
     create_index_if_needed, bulk_upsert,
-    embed_text, embed_image_bytes, detect_labels_with_response,
+    embed_text_multimodal, embed_image_bytes, detect_labels_with_response,
     extract_zillow_images, vec_mean
 )
 
@@ -606,7 +606,7 @@ def _build_doc(base: Dict[str, Any], image_urls: List[str]) -> Dict[str, Any]:
             combined_text = text_for_embed
 
         if combined_text:
-            vec_text = embed_text(combined_text)
+            vec_text = embed_text_multimodal(combined_text)
             if not vec_text or len(vec_text) == 0:
                 raise ValueError("Empty vector returned from embed_text")
             logger.debug(f"Embedded {len(combined_text)} chars (desc: {len(text_for_embed)}, visual: {len(visual_features_text)})")

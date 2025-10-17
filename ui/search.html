@@ -1214,8 +1214,11 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
             document.getElementById('scoreModal').style.display = 'block';
 
             try {
-                // Call the debug endpoint to get comprehensive diagnostic information
-                const response = await fetch('https://f2o144zh31.execute-api.us-east-1.amazonaws.com/search/debug', {
+                console.log('=== Score Breakdown Debug ===');
+                console.log('Current property:', currentProperty);
+
+                // Call the search endpoint to get comprehensive diagnostic information (returns embeddings_data too!)
+                const response = await fetch('https://f2o144zh31.execute-api.us-east-1.amazonaws.com/search', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1224,21 +1227,34 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
                         index: selectedIndex,
                         boost_mode: selectedBoostMode,  // Include the selected boost mode
                         search_mode: selectedSearchMode,  // Include the selected search mode
-                        strategy: selectedStrategy  // Include the selected strategy
+                        strategy: selectedStrategy,  // Include the selected strategy
+                        include_scoring_details: true  // Request detailed scoring breakdown
                     })
                 });
 
                 const debugData = await response.json();
+                console.log('Response data:', debugData);
+                console.log('Has results?', !!debugData.results);
+                console.log('Results length:', debugData.results?.length);
+
+                // Check if response is valid
+                if (!debugData || !debugData.ok || !debugData.results) {
+                    content.innerHTML = '<div class="no-results"><h3>Could not load score breakdown</h3><p>API returned invalid response. Check that include_scoring_details is supported.</p></div>';
+                    console.error('Invalid API response:', debugData);
+                    return;
+                }
 
                 // Find the current property in the debug results
                 const debugProperty = debugData.results.find(r => r.zpid === currentProperty.zpid);
                 if (!debugProperty || !debugProperty._scoring_details) {
-                    content.innerHTML = '<div class="no-results"><h3>Could not load score breakdown</h3></div>';
+                    content.innerHTML = '<div class="no-results"><h3>Could not load score breakdown</h3><p>Property not found in results or missing scoring details.</p></div>';
+                    console.error('Debug property:', debugProperty);
                     return;
                 }
 
                 const details = debugProperty._scoring_details;
-                const debug_info = debugData.debug_info;
+                const debug_info = debugData.debug_info || {};
+                const queryInfo = debug_info.query || {};
 
                 let html = '';
 
@@ -1291,35 +1307,37 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
                 </button>`;
             }
 
-            // QUERY INFORMATION SECTION
-            html += `<div class="score-section" style="background:#fff3cd;border-left-color:#ffc107;">
-                <h4 style="color:#856404;">🔍 Query Information</h4>
-                <div class="score-metric">
-                    <span class="score-label">Original Query ${infoTooltip('The exact search query you entered.')}</span>
-                    <span class="score-value">"${debug_info.query.original_query}"</span>
-                </div>
-                <div class="score-metric">
-                    <span class="score-label">Query Type ${infoTooltip('Classified by the LLM: specific_feature (like "modern kitchen"), color, material, visual_style, or general. Determines which search strategies get boosted.')}</span>
-                    <span class="score-value">${debug_info.query.extracted_constraints.query_type}</span>
-                </div>
-                <div class="score-metric">
-                    <span class="score-label">Must-Have Tags Extracted ${infoTooltip('Feature tags extracted from your query by the LLM. Properties are filtered to match these tags for ranking.')}</span>
-                    <span class="score-value">${debug_info.query.must_tags.length > 0 ? debug_info.query.must_tags.join(', ') : 'None'}</span>
-                </div>
-                <div class="score-metric">
-                    <span class="score-label">Architecture Style ${infoTooltip('Detected architectural style filter (modern, colonial, craftsman, etc.) applied as a hard filter.')}</span>
-                    <span class="score-value">${debug_info.query.architecture_style || 'None'}</span>
-                </div>
-                ${debug_info.query.hard_filters && Object.keys(debug_info.query.hard_filters).length > 0 ? `
-                <div class="score-metric">
-                    <span class="score-label">Filters Applied</span>
-                    <span class="score-value">${JSON.stringify(debug_info.query.hard_filters)}</span>
-                </div>` : ''}
-                <p style="color:#666;font-size:12px;margin-top:10px;line-height:1.5;">
-                    <strong>What this means:</strong> The system analyzed your natural language query and extracted structured filters,
-                    required tags, and determined the query type to apply adaptive scoring weights.
-                </p>
-            </div>`;
+            // QUERY INFORMATION SECTION (only show if debug_info available)
+            if (queryInfo.original_query) {
+                html += `<div class="score-section" style="background:#fff3cd;border-left-color:#ffc107;">
+                    <h4 style="color:#856404;">🔍 Query Information</h4>
+                    <div class="score-metric">
+                        <span class="score-label">Original Query ${infoTooltip('The exact search query you entered.')}</span>
+                        <span class="score-value">"${queryInfo.original_query}"</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Query Type ${infoTooltip('Classified by the LLM: specific_feature (like "modern kitchen"), color, material, visual_style, or general. Determines which search strategies get boosted.')}</span>
+                        <span class="score-value">${queryInfo.extracted_constraints?.query_type || 'Unknown'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Must-Have Tags Extracted ${infoTooltip('Feature tags extracted from your query by the LLM. Properties are filtered to match these tags for ranking.')}</span>
+                        <span class="score-value">${queryInfo.must_tags?.length > 0 ? queryInfo.must_tags.join(', ') : 'None'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Architecture Style ${infoTooltip('Detected architectural style filter (modern, colonial, craftsman, etc.) applied as a hard filter.')}</span>
+                        <span class="score-value">${queryInfo.architecture_style || 'None'}</span>
+                    </div>
+                    ${queryInfo.hard_filters && Object.keys(queryInfo.hard_filters).length > 0 ? `
+                    <div class="score-metric">
+                        <span class="score-label">Filters Applied</span>
+                        <span class="score-value">${JSON.stringify(queryInfo.hard_filters)}</span>
+                    </div>` : ''}
+                    <p style="color:#666;font-size:12px;margin-top:10px;line-height:1.5;">
+                        <strong>What this means:</strong> The system analyzed your natural language query and extracted structured filters,
+                        required tags, and determined the query type to apply adaptive scoring weights.
+                    </p>
+                </div>`;
+            }
 
             // PROPERTY TEXT CONTENT SECTION (NEW)
             html += `<div class="score-section" style="background:#f0f8ff;border-left-color:#4a90e2;">
@@ -1365,7 +1383,7 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
             </div>`;
 
             // QUERY TYPE EXPLANATION HEADER
-            const queryType = debug_info.query.extracted_constraints.query_type;
+            const queryType = debug_info.query?.extracted_constraints?.query_type || 'general';
             const kValues = details.query_context?.k_values || {bm25: 60, knn_text: 60, knn_image: 60};
 
             // Determine which strategies contributed
@@ -1574,7 +1592,8 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
                 // BM25 Full-Text Search (show in hybrid mode)
                 if (details.bm25 && selectedStrategy === 'hybrid') {
                     const bm25 = details.bm25;
-                    const bm25_debug = debug_info.bm25;
+                    const bm25_debug = debug_info.bm25 || {};
+                    const bm25HitsCount = bm25_debug.hits_count || 'unknown';
                     html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #28a745;border-radius:4px;">
                         <strong style="color:#28a745;font-size:16px;">📝 BM25 Full-Text Search</strong>
                         <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
@@ -1583,7 +1602,7 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
                             • <strong>visual_features_text</strong> (weight: 2.5) - AI-generated from image analysis (NEW!)<br>
                             • <strong>address, city, state</strong> (weights: 0.5-0.2) - Location fields<br>
                             Plus: Exact matches on feature_tags and image_tags get additional boost.<br>
-                            This search returned <strong>${bm25_debug.hits_count} total results</strong>.
+                            This search returned <strong>${bm25HitsCount} total results</strong>.
                         </p>
                         <div class="score-metric">
                             <span class="score-label">Rank in BM25 Results ${infoTooltip('Position of this property in the BM25-only search results (1=best match). Properties not found didn\'t match the text query well enough.')}</span>
@@ -1614,14 +1633,14 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
                 // kNN Text Search (show in hybrid mode)
                 if (details.knn_text && selectedStrategy === 'hybrid') {
                     const knn_text = details.knn_text;
-                    const knn_text_debug = debug_info.knn_text;
+                    const knn_text_debug = debug_info.knn_text || {};
                     html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #007bff;border-radius:4px;">
                         <strong style="color:#007bff;font-size:16px;">🧠 kNN Text Similarity Search</strong>
                         <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
                             kNN text search converts the query into a 1024-dimensional vector and finds properties
                             with similar text embeddings using cosine similarity. This captures semantic meaning beyond exact keywords.<br>
                             <strong>Property vectors embed:</strong> description + visual_features_text (NEW! - includes image analysis)<br>
-                            This search returned <strong>${knn_text_debug.hits_count} total results</strong>.
+                            This search returned <strong>${knn_text_debug.hits_count || 'unknown'} total results</strong>.
                         </p>
                         <div class="score-metric">
                             <span class="score-label">Query Vector ${infoTooltip('Your query converted into a 1024-dimensional vector using Amazon Titan text embedding model. This captures semantic meaning.')}</span>
@@ -1660,13 +1679,13 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
                 // kNN Image Search (show in hybrid mode)
                 if (details.knn_image && selectedStrategy === 'hybrid') {
                     const knn_image = details.knn_image;
-                    const knn_image_debug = debug_info.knn_image;
+                    const knn_image_debug = debug_info.knn_image || {};
                     html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #dc3545;border-radius:4px;">
                         <strong style="color:#dc3545;font-size:16px;">🖼️ kNN Image Similarity Search ${details.image_vectors_count ? '(' + details.image_vectors_count + ' images)' : ''}</strong>
                         <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
                             kNN image search compares the query vector against ALL ${details.image_vectors_count || 'property'} image vectors independently.
                             The <strong>highest-scoring image</strong> determines the overall image similarity score (score_mode: "max").
-                            This search returned <strong>${knn_image_debug.hits_count} total results</strong>.
+                            This search returned <strong>${knn_image_debug.hits_count || 'unknown'} total results</strong>.
                         </p>
                         <div class="score-metric">
                             <span class="score-label">Query Vector ${infoTooltip('Your query converted into a 1536-dimensional image embedding using Amazon Titan multimodal model. Captures visual concepts from text.')}</span>
@@ -1708,11 +1727,12 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
             // Single-strategy detail sections
             if (selectedStrategy === 'bm25' && details.bm25 && debug_info.bm25) {
                 const bm25 = details.bm25;
-                const bm25_debug = debug_info.bm25;
+                const bm25_debug = debug_info.bm25 || {};
+                const hitsCount = bm25_debug.hits_count || 'unknown';
                 html += `<div class="score-section">
                     <h4 style="color:#28a745;">📝 BM25 Search Details</h4>
                     <p style="color:#666;font-size:13px;margin:8px 0 15px 0;line-height:1.5;">
-                        Showing details for BM25 keyword matching. This search returned <strong>${bm25_debug.hits_count} total results</strong>.
+                        Showing details for BM25 keyword matching. This search returned <strong>${hitsCount} total results</strong>.
                     </p>
                     <div class="score-metric">
                         <span class="score-label">Rank in BM25 Results ${infoTooltip('Position of this property in BM25 search results (1=best keyword match).')}</span>
@@ -1731,11 +1751,11 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
 
             if (selectedStrategy === 'knn_text' && details.knn_text && debug_info.knn_text) {
                 const knn_text = details.knn_text;
-                const knn_text_debug = debug_info.knn_text;
+                const knn_text_debug = debug_info.knn_text || {};
                 html += `<div class="score-section">
                     <h4 style="color:#007bff;">🧠 kNN Text Search Details</h4>
                     <p style="color:#666;font-size:13px;margin:8px 0 15px 0;line-height:1.5;">
-                        Showing details for kNN text semantic search. This search returned <strong>${knn_text_debug.hits_count} total results</strong>.
+                        Showing details for kNN text semantic search. This search returned <strong>${knn_text_debug.hits_count || 'unknown'} total results</strong>.
                     </p>
                     <div class="score-metric">
                         <span class="score-label">Rank in kNN Text Results ${infoTooltip('Position of this property in text embedding similarity rankings (1=most semantically similar).')}</span>
@@ -1762,11 +1782,11 @@ TIP: Try "modern architecture" with each strategy to see different results!`);
 
             if (selectedStrategy === 'knn_image' && details.knn_image && debug_info.knn_image) {
                 const knn_image = details.knn_image;
-                const knn_image_debug = debug_info.knn_image;
+                const knn_image_debug = debug_info.knn_image || {};
                 html += `<div class="score-section">
                     <h4 style="color:#dc3545;">🖼️ kNN Image Search Details</h4>
                     <p style="color:#666;font-size:13px;margin:8px 0 15px 0;line-height:1.5;">
-                        Showing details for kNN image visual search. This search returned <strong>${knn_image_debug.hits_count} total results</strong>.
+                        Showing details for kNN image visual search. This search returned <strong>${knn_image_debug.hits_count || 'unknown'} total results</strong>.
                         Property has <strong>${details.image_vectors_count || '~20'} images</strong> embedded separately.
                     </p>
                     <div class="score-metric">
