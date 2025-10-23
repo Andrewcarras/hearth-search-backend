@@ -1,0 +1,181 @@
+================================================================================
+SEARCH QUALITY DEGRADATION TIMELINE
+White Homes with Granite Countertops and Wood Floors Query
+================================================================================
+
+TIME PERIOD 1: EARLY DEGRADATION (21:07)
+────────────────────────────────────────────────────────────────────────────────
+21:07:06 | ❌ DEGRADED (Sources: BM25 only)
+         | Top 5: 12877768, 12753427, 12861297, 79525695, 70592220
+         |                                                ^^^^^^^^ BLUE BRICK!
+         | Avg Score: 0.034500
+         | Status: Only BM25 working, Text/Image KNN failed
+
+TIME PERIOD 2: RECOVERY (21:19 - 22:06)
+────────────────────────────────────────────────────────────────────────────────
+21:19:19 | ✅ GOOD (Sources: BM25, Text, Image all working)
+         | Top 5: 35978674, 12859702, 12863530, 12739168, 12877768
+         | Avg Score: 0.030300
+
+21:27:35 | ✅ GOOD
+         | Top 5: 12881898, 445695114, 12863530, 12848910, 456992052
+         | Avg Score: 0.044200
+
+21:30:20 | ✅ GOOD
+         | Top 5: 2080387168, 12721617, 12881898, 445695114, 456992052
+         | Avg Score: 0.046100
+
+21:34:10 | ✅ GOOD
+         | Top 5: 12787813, 12721617, 12780060, 456963404, 455537877
+         | Avg Score: 0.034800
+
+21:37:13 | ✅ GOOD (Last fully healthy search)
+         | Top 5: 2080387168, 454833364, 12787813, 12721617, 2057875868
+         | Avg Score: 0.037000
+         | Sources: BM25 + Text KNN + Image KNN ✅
+
+[... Normal searches continue through 22:06:03 ...]
+
+22:06:03 | ✅ GOOD (Last good before major degradation)
+         | Top 5: 12863530, 12772463, 305056825, 12721617, 12780060
+         | Avg Score: 0.036300
+
+⏰ TIME GAP: 90 MINUTES (22:06 → 23:36)
+🚨 SUSPECTED: Lambda deployment or OpenSearch cluster issue
+
+TIME PERIOD 3: MAJOR DEGRADATION (23:36 - 00:10)
+────────────────────────────────────────────────────────────────────────────────
+23:36:03 | ❌ CRITICAL FAILURE (Sources: ALL NONE!)
+         | Top 5: 2080387168, 12778555, 70592220, 12717999, 12792227
+         |                    ^^^^^^^^  ^^^^^^^^
+         |                    RED BRICK! BLUE BRICK!
+         | Avg Score: 0.051200 (HIGHER than good searches!)
+         | Status: NO BM25, NO Text KNN, NO Image KNN
+         | Query ID: 31e68fba-4297-4e0e-bab7-c1c08f1d00e5
+
+23:40:13 | ❌ DEGRADED (Identical results - likely cached)
+         | Top 5: 2080387168, 12778555, 70592220, 12717999, 12792227
+         | Avg Score: 0.051200
+
+23:44:35 | ✅ Different query (granite only, no wood)
+         | Top 5: 12854231, 448479405, 456225418, 12749918, 12874030
+         | Avg Score: 0.046600
+
+23:47:28 | ❌ DEGRADED (Same bad results return)
+         | Top 5: 2080387168, 12778555, 70592220, 12717999, 12792227
+         | Avg Score: 0.051200
+
+23:49:14 | ❌ DEGRADED
+         | Top 5: 2080387168, 12778555, 70592220, 12717999, 12792227
+         | Avg Score: 0.051200
+
+23:52:05 | ❌ DEGRADED (Last confirmed degraded search)
+         | Top 5: 2080387168, 12778555, 70592220, 12717999, 12792227
+         | Avg Score: 0.051200
+         | Query ID: cb535cbc-dbfc-4ae8-bf2a-8cad84c9f980
+
+23:56:19 | ❌ DEGRADED
+         | Top 5: 2080387168, 12778555, 70592220, 12717999, 12792227
+
+00:01:04 | ❌ DEGRADED
+         | Top 5: 2080387168, 12778555, 70592220, 12717999, 12792227
+
+00:04:18 | ❌ DEGRADED
+         | Top 5: 2080387168, 12778555, 70592220, 12717999, 12792227
+
+TIME PERIOD 4: PARTIAL RECOVERY (00:10+)
+────────────────────────────────────────────────────────────────────────────────
+00:10:44 | ⚠️ RECOVERING (Sources still "None" but different results)
+         | Top 5: 2080387168, 454833364, 2057875868, 453896301, 12792227
+         | Avg Score: 0.057700
+         | No red/blue brick zpids!
+         | Query ID: 7bfee84d-c610-427c-903d-d5195eddf317
+
+00:14:16 | ⚠️ PARTIAL (Sources: None, but better results)
+         | Top 5: 2080387168, 454833364, 2057875868, 453896301, 12792227
+         | Avg Score: 0.046300
+         | Note: 70592220 now in position 7 (outside top 5)
+
+00:14:50 | ⚠️ PARTIAL (Different results, still "None" sources)
+         | Top 5: 12780060, 455537877, 12818543, 2084386025, 12778315
+
+00:15:11 | ⚠️ PARTIAL
+         | Top 5: 12780060, 455537877, 12818543, 2084386025, 12778315
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+Total Duration: ~180 minutes (3 hours)
+
+Degradation Periods:
+  1. Early: 21:07 - 21:19 (12 minutes) - Minor, BM25 only
+  2. Major: 23:36 - 00:10 (34 minutes) - Critical, all sources failed
+
+Bad zpids Appearances:
+  - zpid 70592220 (blue brick): 21:07, 23:36-00:04 (multiple times)
+  - zpid 12778555 (red brick): 23:36-00:04 (multiple times)
+
+Source Status:
+  - All working: 21:19 - 22:06
+  - BM25 only: 21:07
+  - ALL NONE: 23:36 - 00:15+ (CRITICAL FAILURE)
+
+Quality Metrics:
+  - Good searches: 0.030-0.046 avg score, varied zpids
+  - Bad searches: 0.051-0.057 avg score, IDENTICAL zpids repeated
+
+Perfect Feature Matches: 0 (ALL SEARCHES - SEPARATE BUG!)
+
+================================================================================
+KEY INSIGHTS
+================================================================================
+
+1. DEGRADATION WAS REAL AND MEASURABLE
+   ✅ Bad zpids appeared consistently in positions 2-3
+   ✅ Identical results repeated (not random variation)
+   ✅ Higher scores during degradation (incorrect boosting)
+
+2. ROOT CAUSE: COMPLETE SEARCH PIPELINE FAILURE
+   ❌ All sources showing "None" = NO search strategies working
+   ❌ Not multi-query issue (it wasn't even enabled)
+   ❌ Likely OpenSearch connectivity or cluster health problem
+
+3. FAULTY FALLBACK MECHANISM
+   ⚠️ When OpenSearch failed, system fell back to unknown source
+   ⚠️ Fallback contained bad data (red/blue brick for white query)
+   ⚠️ Fallback results were cached (~34 min duration)
+
+4. TRIGGER EVENT
+   🚨 90-minute gap before degradation (22:06 → 23:36)
+   🚨 Suggests Lambda deployment or infrastructure change
+   🚨 Check deployment logs and OpenSearch cluster health
+
+5. FEATURE MATCHING IS BROKEN
+   ⚠️ ZERO perfect matches across ALL searches
+   ⚠️ Not finding properties with requested features
+   ⚠️ Separate critical bug needing immediate attention
+
+================================================================================
+NEXT ACTIONS
+================================================================================
+
+CRITICAL (Do First):
+  [ ] Check OpenSearch cluster health logs (22:00-00:00 on Oct 22)
+  [ ] Review Lambda CloudWatch logs for errors at 23:35-23:37
+  [ ] Identify fallback mechanism in search.py
+  [ ] Add validation to reject results with "Sources: None"
+
+HIGH PRIORITY:
+  [ ] Fix feature matching (zero perfect matches is unacceptable)
+  [ ] Add error logging for each search strategy failure
+  [ ] Add monitoring/alerts for pipeline failures
+  [ ] Remove or fix multi-query feature (currently disabled)
+
+MEDIUM PRIORITY:
+  [ ] Improve fallback strategy (use good cached results)
+  [ ] Add health checks before running searches
+  [ ] Increase result overlap between strategies
+  [ ] Document why bad zpids were in fallback data
+
+================================================================================

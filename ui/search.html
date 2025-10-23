@@ -1,0 +1,2177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hearth Search - Property Search Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Open Sans', sans-serif;
+            background: #f7f8fa;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #006aff 0%, #0056cc 100%);
+            color: white;
+            padding: 25px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header h1 { font-size: 2em; margin-bottom: 8px; }
+        .header p { font-size: 1em; opacity: 0.95; }
+
+        .nav-menu {
+            background: white;
+            border-radius: 8px;
+            padding: 12px 20px;
+            margin: 15px auto 0;
+            max-width: 1400px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-menu a {
+            text-decoration: none;
+            color: #006aff;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background 0.3s;
+            font-size: 14px;
+        }
+
+        .nav-menu a:hover {
+            background: #f0f0f0;
+        }
+
+        .nav-menu a.active {
+            background: #006aff;
+            color: white;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        .search-card {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        .search-box input[type="text"] {
+            width: 100%;
+            padding: 14px 18px;
+            font-size: 15px;
+            border: 2px solid #d8d8d8;
+            border-radius: 6px;
+            transition: border-color 0.2s;
+        }
+        .search-box input[type="text"]:focus {
+            outline: none;
+            border-color: #006aff;
+        }
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin: 18px 0;
+        }
+        .filter-group label {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 5px;
+            display: block;
+            font-weight: 500;
+        }
+        .filter-group input {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            border: 1px solid #d8d8d8;
+            border-radius: 4px;
+        }
+        .search-button {
+            width: 100%;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            color: white;
+            background: #006aff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .search-button:hover { background: #0056cc; }
+        .search-button:active { transform: translateY(1px); }
+
+        .comparison-button {
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            background: #00a86b;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+        .comparison-button:hover { background: #008c5a; }
+        .comparison-button:active { transform: translateY(1px); }
+
+        .results-summary {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+        .results-summary h2 { font-size: 1.5em; color: #2a2a2a; margin-bottom: 10px; }
+        .tag {
+            background: #e3f2ff;
+            color: #006aff;
+            padding: 6px 14px;
+            border-radius: 16px;
+            font-size: 13px;
+            margin: 4px 4px 4px 0;
+            display: inline-block;
+            font-weight: 500;
+        }
+
+        .property-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 20px;
+        }
+
+        .property-card {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+        .property-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        .property-image {
+            width: 100%;
+            height: 240px;
+            object-fit: cover;
+            background: #f0f0f0;
+        }
+        .property-info {
+            padding: 18px;
+        }
+        .property-price {
+            font-size: 1.6em;
+            font-weight: 700;
+            color: #2a2a2a;
+            margin-bottom: 8px;
+        }
+        .property-address {
+            font-size: 0.95em;
+            color: #555;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        .property-stats {
+            display: flex;
+            gap: 16px;
+            padding: 12px 0;
+            border-top: 1px solid #f0f0f0;
+            border-bottom: 1px solid #f0f0f0;
+            margin-bottom: 12px;
+        }
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9em;
+            color: #2a2a2a;
+        }
+        .stat-value { font-weight: 600; }
+        .property-score {
+            display: inline-block;
+            background: #f0f0f0;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #555;
+        }
+        .property-score.boosted {
+            background: #ffd700;
+            color: #2a2a2a;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.8);
+            animation: fadeIn 0.2s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: 2% auto;
+            max-width: 1100px;
+            border-radius: 8px;
+            overflow: hidden;
+            animation: slideIn 0.3s;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-header {
+            background: #2a2a2a;
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 { font-size: 1.8em; }
+        .close {
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .close:hover { color: #ccc; }
+
+        .modal-body {
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        /* Image Gallery */
+        .image-gallery {
+            position: relative;
+            background: #000;
+        }
+        .gallery-main {
+            width: 100%;
+            height: 500px;
+            object-fit: contain;
+            background: #000;
+        }
+        .gallery-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0,0,0,0.5);
+            color: white;
+            border: none;
+            font-size: 32px;
+            padding: 20px 15px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .gallery-nav:hover { background: rgba(0,0,0,0.8); }
+        .gallery-prev { left: 0; }
+        .gallery-next { right: 0; }
+        .gallery-counter {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        .gallery-thumbnails {
+            display: flex;
+            gap: 8px;
+            padding: 15px;
+            background: #f7f8fa;
+            overflow-x: auto;
+        }
+        .gallery-thumb {
+            width: 80px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .gallery-thumb:hover { border-color: #006aff; }
+        .gallery-thumb.active { border-color: #006aff; }
+
+        .detail-section {
+            padding: 30px;
+        }
+        .detail-section h3 {
+            font-size: 1.4em;
+            color: #2a2a2a;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .detail-item {
+            background: #f7f8fa;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .detail-label {
+            font-size: 12px;
+            color: #777;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+        .detail-value {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #2a2a2a;
+        }
+        .description {
+            line-height: 1.7;
+            color: #555;
+            margin: 15px 0;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .feature-tag {
+            background: #e3f2ff;
+            color: #006aff;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            text-align: center;
+        }
+        .zillow-btn {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 14px 28px;
+            background: #006aff;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 15px;
+            transition: background 0.2s;
+        }
+        .zillow-btn:hover { background: #0056cc; }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #555;
+            font-size: 1.2em;
+        }
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .no-results h3 { color: #555; font-size: 1.5em; }
+
+        .index-selector {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .index-selector label {
+            font-weight: 600;
+            color: #856404;
+            font-size: 14px;
+        }
+        .index-selector select {
+            padding: 8px 12px;
+            border: 2px solid #ffc107;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            background: white;
+            cursor: pointer;
+        }
+        .index-indicator {
+            color: #856404;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .boost-selector {
+            background: #e3f2ff;
+            border: 2px solid #006aff;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .boost-selector label {
+            font-weight: 600;
+            color: #004494;
+            font-size: 14px;
+        }
+        .boost-selector select {
+            padding: 8px 12px;
+            border: 2px solid #006aff;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            background: white;
+            cursor: pointer;
+        }
+        .boost-indicator {
+            color: #004494;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .info-button {
+            background: #006aff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .info-button:hover {
+            background: #0056cc;
+        }
+
+        @media (max-width: 768px) {
+            .property-grid {
+                grid-template-columns: 1fr;
+            }
+            .modal-content {
+                margin: 0;
+                max-width: 100%;
+                border-radius: 0;
+            }
+            .gallery-main {
+                height: 300px;
+            }
+        }
+
+        /* Score Breakdown Styles */
+        .score-breakdown-btn {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 12px 24px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .score-breakdown-btn:hover {
+            background: #218838;
+        }
+        .score-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #006aff;
+        }
+        .score-section h4 {
+            color: #2a2a2a;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .score-metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .score-metric:last-child {
+            border-bottom: none;
+        }
+        .score-label {
+            font-weight: 500;
+            color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .info-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #007bff;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            font-family: serif;
+            font-style: italic;
+            cursor: help;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .info-icon:hover {
+            background: #0056b3;
+            transform: scale(1.1);
+        }
+        .info-tooltip {
+            visibility: hidden;
+            position: absolute;
+            z-index: 1000;
+            background: #2d2d2d;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: normal;
+            width: 280px;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 8px;
+            line-height: 1.4;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .info-tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: #2d2d2d;
+        }
+        .info-icon:hover .info-tooltip {
+            visibility: visible;
+        }
+        .score-value {
+            font-weight: 600;
+            color: #212529;
+        }
+        .score-value.highlight {
+            color: #006aff;
+            font-size: 1.1em;
+        }
+        .score-value.success {
+            color: #28a745;
+        }
+        .score-value.warning {
+            color: #ffc107;
+        }
+        .score-value.danger {
+            color: #dc3545;
+        }
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .score-tag {
+            background: #e3f2ff;
+            color: #006aff;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .score-tag.matched {
+            background: #d4edda;
+            color: #155724;
+        }
+        .score-tag.missing {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>🏠 Hearth Search</h1>
+            <p>AI-powered natural language property search</p>
+        </div>
+        <nav class="nav-menu">
+            <a href="search.html" class="active">Main Search</a>
+            <a href="test_bm25.html">BM25 Test</a>
+            <a href="test_knn_text.html">kNN Text Test</a>
+            <a href="test_knn_image.html">kNN Image Test</a>
+            <a href="admin.html">Admin Lookup</a>
+            <a href="crud.html">CRUD Manager</a>
+            <a href="analytics.html">Analytics</a>
+            <a href="public_analytics.html">Public Testing</a>
+        </nav>
+    </div>
+
+    <div class="container">
+        <!-- Index Selector -->
+        <div class="index-selector">
+            <label for="indexSelector">🔄 Search Index:</label>
+            <select id="indexSelector">
+                <option value="listings">listings (v1 - Single Vector)</option>
+                <option value="listings-v2" selected>listings-v2 (Multi-Vector)</option>
+            </select>
+            <span class="index-indicator" id="indexIndicator">Currently using: <strong>listings-v2</strong></span>
+        </div>
+
+        <!-- Search Mode Selector -->
+        <div class="boost-selector">
+            <label for="searchModeSelector">🎯 Search Mode:</label>
+            <select id="searchModeSelector">
+                <option value="adaptive">Adaptive (Query-Type Aware)</option>
+                <option value="standard">Standard (Equal Weighting)</option>
+            </select>
+            <span class="boost-indicator" id="searchModeIndicator">Mode: <strong>Adaptive</strong></span>
+            <button class="info-button" onclick="showSearchModeInfo()" title="Learn about search modes">?</button>
+        </div>
+
+        <!-- Boost Mode Selector -->
+        <div class="boost-selector">
+            <label for="boostSelector">⚡ Visual Features Boost:</label>
+            <select id="boostSelector">
+                <option value="standard">Standard (2.5x)</option>
+                <option value="conservative">Conservative (3.5x)</option>
+                <option value="aggressive">Aggressive (5.0x)</option>
+            </select>
+            <span class="boost-indicator" id="boostIndicator">Mode: <strong>Standard</strong></span>
+            <button class="info-button" onclick="showBoostInfo()" title="Learn about boost modes">?</button>
+        </div>
+
+        <!-- Strategy Selector -->
+        <div class="boost-selector">
+            <label for="strategySelector">🔬 Search Strategy:</label>
+            <select id="strategySelector">
+                <option value="hybrid">Hybrid (All 3 Strategies)</option>
+                <option value="bm25">BM25 Only (Keyword Search)</option>
+                <option value="knn_text">kNN Text Only (Semantic Text)</option>
+                <option value="knn_image">kNN Image Only (Visual Search)</option>
+            </select>
+            <span class="boost-indicator" id="strategyIndicator">Strategy: <strong>Hybrid</strong></span>
+            <button class="info-button" onclick="showStrategyInfo()" title="Learn about search strategies">?</button>
+        </div>
+
+        <div class="search-card">
+            <div class="search-box">
+                <input type="text" id="searchQuery" placeholder="Try: modern home with mountain views" value="modern homes">
+            </div>
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Min Price</label>
+                    <input type="number" id="priceMin" placeholder="e.g. 200000">
+                </div>
+                <div class="filter-group">
+                    <label>Max Price</label>
+                    <input type="number" id="priceMax" placeholder="e.g. 2000000">
+                </div>
+                <div class="filter-group">
+                    <label>Min Bedrooms</label>
+                    <input type="number" id="bedsMin" placeholder="e.g. 3">
+                </div>
+                <div class="filter-group">
+                    <label>Min Bathrooms</label>
+                    <input type="number" id="bathsMin" placeholder="e.g. 2">
+                </div>
+            </div>
+            <button class="search-button" onclick="performSearch()">Search Properties</button>
+            <button class="comparison-button" onclick="openComparison()">🔀 Compare Multi-Query vs Standard</button>
+        </div>
+        <div id="results"></div>
+    </div>
+
+    <!-- Property Detail Modal -->
+    <div id="propertyModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalAddress">Property Details</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="image-gallery">
+                    <img id="modalMainImage" class="gallery-main" src="" alt="Property image">
+                    <button class="gallery-nav gallery-prev" onclick="previousImage()">‹</button>
+                    <button class="gallery-nav gallery-next" onclick="nextImage()">›</button>
+                    <div class="gallery-counter" id="imageCounter">1 / 1</div>
+                </div>
+                <div class="gallery-thumbnails" id="thumbnails"></div>
+                <div class="detail-section">
+                    <div class="detail-grid" id="modalStats"></div>
+                    <h3>Description</h3>
+                    <div class="description" id="modalDescription"></div>
+                    <div id="modalFeatures"></div>
+                    <div id="modalActions"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Score Breakdown Modal -->
+    <div id="scoreModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 Detailed Score Breakdown</h2>
+                <span class="close" onclick="closeScoreModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="detail-section" id="scoreBreakdownContent">
+                    <!-- Content populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentProperty = null;
+        let currentImageIndex = 0;
+        let selectedIndex = 'listings-v2';
+        let selectedBoostMode = 'standard';
+        let selectedSearchMode = 'adaptive';
+        let selectedStrategy = 'hybrid';
+
+        /**
+         * Normalize RRF scores to 0-100 scale for UI display
+         *
+         * RRF scores typically range from 0 to ~0.07 (theoretical max with k=60 is 0.049)
+         * We normalize to 0-100 where:
+         * - 0.07 (excellent match) → 100
+         * - 0.035 (good match) → 50
+         * - 0.0 (no match) → 0
+         *
+         * This is purely cosmetic - does NOT affect ranking logic
+         */
+        function normalizeScore(rawScore) {
+            // Scale factor: 0.07 → 100, so multiply by (100 / 0.07) ≈ 1428.57
+            const MAX_RRF_SCORE = 0.07;
+            const normalized = (rawScore / MAX_RRF_SCORE) * 100;
+            // Cap at 100 for scores above theoretical max
+            return Math.min(100, Math.max(0, normalized));
+        }
+
+        /**
+         * Format normalized score for display
+         * Shows as integer with "/100" suffix
+         */
+        function formatNormalizedScore(rawScore) {
+            const normalized = normalizeScore(rawScore);
+            return Math.round(normalized);
+        }
+
+        // Update index when selector changes
+        document.addEventListener('DOMContentLoaded', () => {
+            const selector = document.getElementById('indexSelector');
+            const indicator = document.getElementById('indexIndicator');
+
+            selector.addEventListener('change', (e) => {
+                selectedIndex = e.target.value;
+                indicator.innerHTML = `Currently using: <strong>${selectedIndex}</strong>`;
+                console.log('Switched to index:', selectedIndex);
+            });
+
+            // Update search mode when selector changes
+            const searchModeSelector = document.getElementById('searchModeSelector');
+            const searchModeIndicator = document.getElementById('searchModeIndicator');
+
+            searchModeSelector.addEventListener('change', (e) => {
+                selectedSearchMode = e.target.value;
+                const modeName = selectedSearchMode === 'adaptive' ? 'Adaptive' : 'Standard';
+                searchModeIndicator.innerHTML = `Mode: <strong>${modeName}</strong>`;
+                console.log('Switched to search mode:', selectedSearchMode);
+            });
+
+            // Update boost mode when selector changes
+            const boostSelector = document.getElementById('boostSelector');
+            const boostIndicator = document.getElementById('boostIndicator');
+
+            boostSelector.addEventListener('change', (e) => {
+                selectedBoostMode = e.target.value;
+                const modeName = e.target.options[e.target.selectedIndex].text.split(' (')[0];
+                boostIndicator.innerHTML = `Mode: <strong>${modeName}</strong>`;
+                console.log('Switched to boost mode:', selectedBoostMode);
+            });
+
+            // Update strategy when selector changes
+            const strategySelector = document.getElementById('strategySelector');
+            const strategyIndicator = document.getElementById('strategyIndicator');
+
+            strategySelector.addEventListener('change', (e) => {
+                selectedStrategy = e.target.value;
+                const strategyName = e.target.options[e.target.selectedIndex].text.split(' (')[0];
+                strategyIndicator.innerHTML = `Strategy: <strong>${strategyName}</strong>`;
+                console.log('Switched to strategy:', selectedStrategy);
+            });
+        });
+
+        function showSearchModeInfo() {
+            alert(`Search Mode Options
+
+WHAT IT DOES:
+Controls whether the search system adapts its scoring strategy based on your query type.
+
+🎯 ADAPTIVE MODE (Recommended):
+- System detects your query type (visual style, features, color, etc.)
+- Automatically adjusts scoring weights for each strategy
+- Example: "modern home" → prioritizes image kNN (k=40)
+- Example: "pool and garage" → prioritizes BM25 keywords (k=40)
+- Different queries use different k-values for optimal results
+
+📊 STANDARD MODE (Equal Weighting):
+- All three strategies equally weighted (k=60 for all)
+- BM25, text kNN, and image kNN always have same importance
+- Simpler, more predictable scoring
+- Use for comparison/testing
+
+RECOMMENDATION: Use Adaptive for best results. Standard mode is for A/B testing.`);
+        }
+
+        function showBoostInfo() {
+            alert(`Visual Features Boost Modes
+
+WHAT IT DOES:
+Controls how much weight is given to AI-generated visual features vs. original property descriptions in search ranking.
+
+MODES:
+• Standard (2.5x): Description=3x, Visual Features=2.5x
+  - Default balanced mode
+  - Descriptions slightly prioritized
+
+• Conservative (3.5x): Description=3x, Visual Features=3.5x
+  - Visual features slightly prioritized
+  - Better for architectural/style queries
+
+• Aggressive (5.0x): Description=3x, Visual Features=5.0x
+  - Visual features heavily prioritized
+  - Best for finding specific styles/materials
+
+VISUAL FEATURES INCLUDE:
+- Architecture style (modern, craftsman, ranch, etc.)
+- Exterior color (white, gray, brick, etc.)
+- Materials (wood, stone, vinyl, etc.)
+- Interior features from images
+
+TIP: Try "modern white house" in different modes to see ranking changes!`);
+        }
+
+        function showStrategyInfo() {
+            alert(`Search Strategy Options
+
+WHAT IT DOES:
+Choose which search strategies to use. Evaluate each individually or combine them.
+
+🔬 STRATEGIES:
+
+1️⃣ HYBRID (All 3 Strategies):
+   - Combines BM25 + kNN Text + kNN Image
+   - Uses Reciprocal Rank Fusion (RRF) to merge results
+   - Best overall results (default)
+   - Adaptive weighting based on query type
+
+2️⃣ BM25 ONLY (Keyword Search):
+   - Traditional keyword matching
+   - Searches: description, tags, address
+   - Fast and interpretable
+   - Best for: exact feature matches ("pool", "garage")
+   - Misses: semantic similarity, visual style
+
+3️⃣ kNN TEXT ONLY (Semantic Text):
+   - Vector similarity on text embeddings
+   - Captures semantic meaning
+   - Best for: conceptual queries ("luxury home", "cozy")
+   - Misses: exact keywords, visual features
+
+4️⃣ kNN IMAGE ONLY (Visual Search):
+   - Vector similarity on image embeddings
+   - Purely visual matching
+   - Best for: architectural style, visual aesthetics
+   - Misses: text descriptions, specific features not visible
+
+USE CASES:
+• Debug why a property ranks high/low
+• Compare strategy effectiveness for your queries
+• A/B test which strategy works best for specific search types
+• Understand what each strategy contributes to final ranking
+
+TIP: Try "modern architecture" with each strategy to see different results!`);
+        }
+
+        function openComparison() {
+            const query = document.getElementById('searchQuery').value.trim();
+            const url = new URL('multi_query_comparison.html', window.location.href);
+            if (query) {
+                url.searchParams.set('q', query);
+            }
+            window.location.href = url.toString();
+        }
+
+        async function performSearch() {
+            const query = document.getElementById('searchQuery').value.trim();
+            if (!query) { alert('Please enter a search query'); return; }
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">🔍 Searching properties...</div>';
+
+            const payload = {
+                q: query,
+                size: 10,
+                index: selectedIndex,
+                boost_mode: selectedBoostMode,
+                search_mode: selectedSearchMode,
+                strategy: selectedStrategy
+            };
+            const priceMin = document.getElementById('priceMin').value;
+            const priceMax = document.getElementById('priceMax').value;
+            const bedsMin = document.getElementById('bedsMin').value;
+            const bathsMin = document.getElementById('bathsMin').value;
+
+            if (priceMin) payload.price_min = priceMin;
+            if (priceMax) payload.price_max = priceMax;
+            if (bedsMin) payload.beds_min = bedsMin;
+            if (bathsMin) payload.baths_min = bathsMin;
+
+            try {
+                const response = await fetch('https://f2o144zh31.execute-api.us-east-1.amazonaws.com/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.error) {
+                    resultsDiv.innerHTML = '<div class="no-results"><h3>Error: ' + data.error + '</h3></div>';
+                    return;
+                }
+                displayResults(data);
+            } catch (error) {
+                resultsDiv.innerHTML = '<div class="no-results"><h3>Error: ' + error.message + '</h3></div>';
+            }
+        }
+
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            if (!data.results || data.results.length === 0) {
+                resultsDiv.innerHTML = '<div class="no-results"><h3>No properties found</h3><p>Try adjusting your search criteria</p></div>';
+                return;
+            }
+
+            let html = '<div class="results-summary"><h2>Found ' + data.total + ' properties</h2>';
+            if (data.must_have && data.must_have.length > 0) {
+                html += '<p style="margin:10px 0;color:#555;">Must-have features:</p>';
+                data.must_have.forEach(tag => html += '<span class="tag">' + tag.replace(/_/g, ' ') + '</span>');
+            }
+            html += '</div><div class="property-grid">';
+
+            data.results.forEach((listing, index) => {
+                // Get the first image (prefer responsivePhotos from Zillow data, fallback to our images array)
+                let imageUrl = '//:0'; // blank image placeholder
+                if (listing.responsivePhotos && listing.responsivePhotos.length > 0) {
+                    imageUrl = listing.responsivePhotos[0].mixedSources?.jpeg?.[0]?.url || imageUrl;
+                } else if (listing.images && listing.images.length > 0) {
+                    imageUrl = listing.images[0];
+                }
+
+                // Use Zillow data structure if available, fallback to our indexed data
+                const bedrooms = listing.bedrooms || listing.beds || 'N/A';
+                const bathrooms = listing.bathrooms || listing.baths || 'N/A';
+                const price = listing.price || 'N/A';
+                const address = listing.address?.streetAddress || listing.address || 'Address not available';
+                const city = listing.address?.city || listing.city || '';
+                const state = listing.address?.state || listing.state || '';
+                const zipcode = listing.address?.zipcode || listing.zip_code || '';
+
+                html += `
+                    <div class="property-card" onclick="showPropertyDetails(${index})">
+                        <img class="property-image" src="${imageUrl}" alt="Property" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22%3E%3Crect fill=%22%23f0f0f0%22 width=%22400%22 height=%22300%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22%3ENo Image%3C/text%3E%3C/svg%3E'">
+                        <div class="property-info">
+                            <div class="property-price">$${price.toLocaleString ? price.toLocaleString() : price}</div>
+                            <div class="property-address">
+                                ${address}<br>
+                                ${city}${city && state ? ', ' : ''}${state} ${zipcode}<br>
+                                <small style="color: #666; font-size: 0.85em;">ZPID: ${listing.zpid || listing.id}</small>
+                            </div>
+                            <div class="property-stats">
+                                <div class="stat">
+                                    <span class="stat-value">${bedrooms}</span> beds
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-value">${bathrooms}</span> baths
+                                </div>
+                                ${listing.acreage ? `<div class="stat"><span class="stat-value">${listing.acreage.toLocaleString()}</span> sqft</div>` : ''}
+                            </div>
+                            <span class="property-score ${listing.boosted ? 'boosted' : ''}">
+                                Match Score: ${formatNormalizedScore(listing.score)}/100${listing.boosted ? ' ⭐' : ''}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+
+            // Store results for modal access
+            window.searchResults = data.results;
+        }
+
+        function showPropertyDetails(index) {
+            currentProperty = window.searchResults[index];
+            currentImageIndex = 0;
+
+            const modal = document.getElementById('propertyModal');
+
+            // Set address with ZPID
+            const address = currentProperty.address?.streetAddress || currentProperty.address || 'Property Details';
+            const zpid = currentProperty.zpid || currentProperty.id || 'Unknown';
+            document.getElementById('modalAddress').innerHTML = `${address} <small style="color: #888;">(ZPID: ${zpid})</small>`;
+
+            // Build images array
+            let images = [];
+            if (currentProperty.responsivePhotos && currentProperty.responsivePhotos.length > 0) {
+                images = currentProperty.responsivePhotos.map(photo =>
+                    photo.mixedSources?.jpeg?.[0]?.url || ''
+                ).filter(url => url);
+            } else if (currentProperty.images && currentProperty.images.length > 0) {
+                images = currentProperty.images;
+            }
+
+            if (images.length === 0) {
+                images = ['data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22%3E%3Crect fill=%22%23f0f0f0%22 width=%22800%22 height=%22600%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2224%22%3ENo Images Available%3C/text%3E%3C/svg%3E'];
+            }
+
+            window.currentImages = images;
+            updateModalImage();
+
+            // Build thumbnails
+            const thumbsHtml = images.map((img, i) =>
+                `<img src="${img}" class="gallery-thumb ${i === 0 ? 'active' : ''}" onclick="setImageIndex(${i})" alt="Thumbnail ${i+1}">`
+            ).join('');
+            document.getElementById('thumbnails').innerHTML = thumbsHtml;
+
+            // Stats
+            const bedrooms = currentProperty.bedrooms || currentProperty.beds || 'N/A';
+            const bathrooms = currentProperty.bathrooms || currentProperty.baths || 'N/A';
+            const price = currentProperty.price || 'N/A';
+            const acreage = currentProperty.livingArea || currentProperty.acreage || 'N/A';
+            const yearBuilt = currentProperty.yearBuilt || 'N/A';
+
+            document.getElementById('modalStats').innerHTML = `
+                <div class="detail-item">
+                    <div class="detail-label">Price</div>
+                    <div class="detail-value">$${price.toLocaleString ? price.toLocaleString() : price}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Bedrooms</div>
+                    <div class="detail-value">${bedrooms}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Bathrooms</div>
+                    <div class="detail-value">${bathrooms}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Square Feet</div>
+                    <div class="detail-value">${acreage.toLocaleString ? acreage.toLocaleString() : acreage}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Year Built</div>
+                    <div class="detail-value">${yearBuilt}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Match Score</div>
+                    <div class="detail-value">${formatNormalizedScore(currentProperty.score)}/100${currentProperty.boosted ? ' ⭐' : ''}</div>
+                </div>
+            `;
+
+            // Description
+            const description = currentProperty.description || 'No description available.';
+            document.getElementById('modalDescription').textContent = description;
+
+            // Features
+            let featuresHtml = '';
+            if (currentProperty.feature_tags && currentProperty.feature_tags.length > 0) {
+                featuresHtml = '<h3>Features</h3><div class="features-grid">';
+                currentProperty.feature_tags.forEach(tag => {
+                    featuresHtml += '<div class="feature-tag">' + tag.replace(/_/g, ' ') + '</div>';
+                });
+                featuresHtml += '</div>';
+            }
+            if (currentProperty.architecture_style) {
+                if (!featuresHtml) featuresHtml = '<h3>Additional Info</h3>';
+                featuresHtml += '<p style="margin-top:15px;"><strong>Architecture Style:</strong> ' +
+                    currentProperty.architecture_style.replace(/_/g, ' ') + '</p>';
+            }
+            document.getElementById('modalFeatures').innerHTML = featuresHtml;
+
+            // Zillow link and action buttons
+            const zillowUrl = currentProperty.hdpUrl ?
+                'https://www.zillow.com' + currentProperty.hdpUrl :
+                'https://www.zillow.com/homedetails/' + currentProperty.zpid + '_zipid/';
+            let actionsHTML = `<div style="display:flex;gap:10px;margin-bottom:20px;">
+                <button onclick="deleteListing('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#dc3545;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">🗑️ Delete Listing</button>
+                <button onclick="editListing('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#ffc107;color:#000;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✏️ Edit Listing</button>
+                <button onclick="markAsSold('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#28a745;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✓ Mark as Sold</button>
+            </div>`;
+
+            // Always show score breakdown button (fetches data on demand from debug endpoint)
+            actionsHTML += `<button onclick="showScoreBreakdown()" class="score-breakdown-btn">📊 View Detailed Score Breakdown</button><br>`;
+
+            actionsHTML += `<a href="${zillowUrl}" target="_blank" class="zillow-btn">View Full Details on Zillow →</a>`;
+
+            document.getElementById('modalActions').innerHTML = actionsHTML;
+
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function updateModalImage() {
+            const img = document.getElementById('modalMainImage');
+            img.src = window.currentImages[currentImageIndex];
+            document.getElementById('imageCounter').textContent =
+                `${currentImageIndex + 1} / ${window.currentImages.length}`;
+
+            // Update thumbnail active state
+            document.querySelectorAll('.gallery-thumb').forEach((thumb, i) => {
+                thumb.classList.toggle('active', i === currentImageIndex);
+            });
+        }
+
+        function previousImage() {
+            currentImageIndex = (currentImageIndex - 1 + window.currentImages.length) % window.currentImages.length;
+            updateModalImage();
+        }
+
+        function nextImage() {
+            currentImageIndex = (currentImageIndex + 1) % window.currentImages.length;
+            updateModalImage();
+        }
+
+        function setImageIndex(index) {
+            currentImageIndex = index;
+            updateModalImage();
+        }
+
+        function closeModal() {
+            document.getElementById('propertyModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('propertyModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (document.getElementById('propertyModal').style.display === 'block') {
+                if (e.key === 'ArrowLeft') previousImage();
+                if (e.key === 'ArrowRight') nextImage();
+                if (e.key === 'Escape') closeModal();
+            }
+        });
+
+        // Search on Enter key
+        document.getElementById('searchQuery').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        // Action handlers
+        async function deleteListing(zpid) {
+            if (!confirm(`Are you sure you want to PERMANENTLY delete listing ${zpid}?`)) return;
+
+            try {
+                const response = await fetch(`https://f2o144zh31.execute-api.us-east-1.amazonaws.com/listings/${zpid}?soft=false&index=${selectedIndex}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Listing deleted successfully!');
+                    closeModal();
+                    performSearch(); // Refresh results
+                } else {
+                    alert('Error deleting listing: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function editListing(zpid) {
+            const newPrice = prompt('Enter new price (leave blank to skip):');
+            const newStatus = prompt('Enter new status (active/pending/sold, leave blank to skip):');
+
+            const updates = {};
+            if (newPrice) updates.price = parseInt(newPrice);
+            if (newStatus) updates.status = newStatus;
+
+            if (Object.keys(updates).length === 0) {
+                alert('No changes made');
+                return;
+            }
+
+            fetch(`https://f2o144zh31.execute-api.us-east-1.amazonaws.com/listings/${zpid}?index=${selectedIndex}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ updates })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error updating listing: ' + data.error);
+                } else {
+                    alert('Listing updated successfully!');
+                    closeModal();
+                    performSearch(); // Refresh results
+                }
+            })
+            .catch(error => alert('Error: ' + error.message));
+        }
+
+        async function markAsSold(zpid) {
+            if (!confirm(`Mark listing ${zpid} as SOLD?`)) return;
+
+            try {
+                const response = await fetch(`https://f2o144zh31.execute-api.us-east-1.amazonaws.com/listings/${zpid}?index=${selectedIndex}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates: { status: 'sold' } })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Listing marked as sold!');
+                    closeModal();
+                    performSearch(); // Refresh results
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+        // Helper function to create info tooltip
+        function infoTooltip(text) {
+            return `<span class="info-icon">ⓘ<span class="info-tooltip">${text}</span></span>`;
+        }
+
+        // Score Breakdown Modal Functions
+        async function showScoreBreakdown() {
+            // Show loading state
+            const content = document.getElementById('scoreBreakdownContent');
+            content.innerHTML = '<div class="loading">Loading detailed score breakdown...</div>';
+            document.getElementById('scoreModal').style.display = 'block';
+
+            try {
+                console.log('=== Score Breakdown Debug ===');
+                console.log('Current property:', currentProperty);
+
+                // Call the search endpoint to get comprehensive diagnostic information (returns embeddings_data too!)
+                const response = await fetch('https://f2o144zh31.execute-api.us-east-1.amazonaws.com/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        q: document.getElementById('searchQuery').value.trim(),
+                        size: 10,
+                        index: selectedIndex,
+                        boost_mode: selectedBoostMode,  // Include the selected boost mode
+                        search_mode: selectedSearchMode,  // Include the selected search mode
+                        strategy: selectedStrategy,  // Include the selected strategy
+                        include_scoring_details: true  // Request detailed scoring breakdown
+                    })
+                });
+
+                const debugData = await response.json();
+                console.log('Response data:', debugData);
+                console.log('Has results?', !!debugData.results);
+                console.log('Results length:', debugData.results?.length);
+
+                // Check if response is valid
+                if (!debugData || !debugData.ok || !debugData.results) {
+                    content.innerHTML = '<div class="no-results"><h3>Could not load score breakdown</h3><p>API returned invalid response. Check that include_scoring_details is supported.</p></div>';
+                    console.error('Invalid API response:', debugData);
+                    return;
+                }
+
+                // Find the current property in the debug results
+                const debugProperty = debugData.results.find(r => r.zpid === currentProperty.zpid);
+                if (!debugProperty || !debugProperty._scoring_details) {
+                    content.innerHTML = '<div class="no-results"><h3>Could not load score breakdown</h3><p>Property not found in results or missing scoring details.</p></div>';
+                    console.error('Debug property:', debugProperty);
+                    return;
+                }
+
+                const details = debugProperty._scoring_details;
+                // Use query_context from scoring_details if debug_info not available
+                const debug_info = debugData.debug_info || {};
+                const queryInfo = debug_info.query || details.query_context || {};
+
+                // Get the actual query text for display
+                const actualQuery = queryInfo.original_query || document.getElementById('searchQuery').value.trim();
+
+                let html = '';
+
+            // STRATEGY SELECTOR INDICATOR AT TOP
+            const strategyNames = {
+                'hybrid': 'Hybrid (All 3 Strategies)',
+                'bm25': 'BM25 Only (Keyword Search)',
+                'knn_text': 'kNN Text Only (Semantic Text)',
+                'knn_image': 'kNN Image Only (Visual Search)'
+            };
+            const strategyDisplay = strategyNames[selectedStrategy] || selectedStrategy;
+            const strategyColor = selectedStrategy === 'hybrid' ? '#6f42c1' : selectedStrategy === 'bm25' ? '#28a745' : selectedStrategy === 'knn_text' ? '#007bff' : '#dc3545';
+            const strategyIcon = selectedStrategy === 'hybrid' ? '🔀' : selectedStrategy === 'bm25' ? '📝' : selectedStrategy === 'knn_text' ? '🧠' : '🖼️';
+
+            html += `<div class="score-section" style="background:${strategyColor === '#6f42c1' ? '#e7d9f7' : strategyColor === '#28a745' ? '#d4edda' : strategyColor === '#007bff' ? '#cfe2ff' : '#f8d7da'};border-left-color:${strategyColor};border-width:5px;">
+                <h4 style="color:${strategyColor};font-size:18px;">${strategyIcon} Search Strategy: <strong>${strategyDisplay}</strong></h4>
+                <p style="color:#333;font-size:14px;margin:8px 0 0 0;line-height:1.7;">
+                    ${selectedStrategy === 'hybrid'
+                        ? '<strong>Hybrid mode</strong> combines all three search strategies (BM25, kNN text, kNN image) using Reciprocal Rank Fusion. This provides the best overall results by leveraging keyword matching, semantic understanding, and visual similarity together.'
+                        : selectedStrategy === 'bm25'
+                        ? '<strong>BM25 Only mode</strong> uses traditional keyword matching on text fields. Results are ranked purely by term frequency and document relevance. No semantic embeddings or image analysis is used.'
+                        : selectedStrategy === 'knn_text'
+                        ? '<strong>kNN Text Only mode</strong> uses semantic text embeddings (1024-dim vectors). Results are ranked by cosine similarity to your query embedding. No keyword matching or image analysis is used.'
+                        : '<strong>kNN Image Only mode</strong> uses visual image embeddings (1024-dim vectors). Results are ranked by visual similarity between your query and property images. No text matching is used - purely visual search.'}
+                </p>
+            </div>`;
+
+            // SEARCH MODE INDICATOR (only show for hybrid mode)
+            if (selectedStrategy === 'hybrid') {
+                const searchModeDisplay = selectedSearchMode === 'adaptive' ? 'Adaptive (Query-Type Aware)' : 'Standard (Equal Weighting)';
+                const searchModeColor = selectedSearchMode === 'adaptive' ? '#28a745' : '#6c757d';
+                const searchModeIcon = selectedSearchMode === 'adaptive' ? '🎯' : '📊';
+                const searchModeTooltip = selectedSearchMode === 'adaptive'
+                    ? 'Adaptive mode: System automatically adjusts scoring weights based on query type (visual style, features, color, etc.)'
+                    : 'Standard mode: All three strategies (BM25, text kNN, image kNN) equally weighted with k=60';
+
+                html += `<div class="score-section" style="background:${searchModeColor === '#28a745' ? '#d4edda' : '#e2e3e5'};border-left-color:${searchModeColor};border-width:4px;">
+                    <h4 style="color:${searchModeColor};font-size:16px;">${searchModeIcon} Search Mode: <strong>${searchModeDisplay}</strong></h4>
+                    <p style="color:#666;font-size:13px;margin:8px 0 0 0;line-height:1.6;">
+                        ${searchModeTooltip}
+                        ${selectedSearchMode === 'adaptive' ? '<br><strong>Result:</strong> k-values vary by query type. See details below.' : '<br><strong>Result:</strong> BM25, text kNN, and image kNN all use k=60.'}
+                    </p>
+                    <button onclick="showRawListingData()" style="margin-top:10px;padding:8px 16px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;">
+                        📄 View Raw Listing Data (JSON)
+                    </button>
+                </div>`;
+            } else {
+                html += `<button onclick="showRawListingData()" style="margin-top:10px;padding:8px 16px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;">
+                    📄 View Raw Listing Data (JSON)
+                </button>`;
+            }
+
+            // QUERY INFORMATION SECTION (only show if debug_info available)
+            if (queryInfo.original_query) {
+                html += `<div class="score-section" style="background:#fff3cd;border-left-color:#ffc107;">
+                    <h4 style="color:#856404;">🔍 Query Information</h4>
+                    <div class="score-metric">
+                        <span class="score-label">Original Query ${infoTooltip('The exact search query you entered.')}</span>
+                        <span class="score-value">"${queryInfo.original_query}"</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Query Type ${infoTooltip('Classified by the LLM: specific_feature (like "modern kitchen"), color, material, visual_style, or general. Determines which search strategies get boosted.')}</span>
+                        <span class="score-value">${queryInfo.extracted_constraints?.query_type || 'Unknown'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Must-Have Tags Extracted ${infoTooltip('Feature tags extracted from your query by the LLM. Properties are filtered to match these tags for ranking.')}</span>
+                        <span class="score-value">${queryInfo.must_tags?.length > 0 ? queryInfo.must_tags.join(', ') : 'None'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Architecture Style ${infoTooltip('Detected architectural style filter (modern, colonial, craftsman, etc.) applied as a hard filter.')}</span>
+                        <span class="score-value">${queryInfo.architecture_style || 'None'}</span>
+                    </div>
+                    ${queryInfo.hard_filters && Object.keys(queryInfo.hard_filters).length > 0 ? `
+                    <div class="score-metric">
+                        <span class="score-label">Filters Applied</span>
+                        <span class="score-value">${JSON.stringify(queryInfo.hard_filters)}</span>
+                    </div>` : ''}
+                    <p style="color:#666;font-size:12px;margin-top:10px;line-height:1.5;">
+                        <strong>What this means:</strong> The system analyzed your natural language query and extracted structured filters,
+                        required tags, and determined the query type to apply adaptive scoring weights.
+                    </p>
+                </div>`;
+            }
+
+            // PROPERTY TEXT CONTENT SECTION (NEW)
+            html += `<div class="score-section" style="background:#f0f8ff;border-left-color:#4a90e2;">
+                <h4 style="color:#4a90e2;">📄 Property Text Content</h4>
+                <p style="color:#666;font-size:12px;margin:8px 0 10px 0;">
+                    This shows what text is actually being searched by BM25 and embedded for kNN text search.
+                </p>
+
+                <div style="margin-bottom:15px;">
+                    <strong style="color:#333;">Original Description ${infoTooltip('The property description from Zillow. This is searched with highest weight (3.0) in BM25.')}</strong>
+                    <div style="background:#fff;border:1px solid #ddd;padding:10px;border-radius:4px;margin-top:5px;max-height:150px;overflow-y:auto;">
+                        ${currentProperty.description || '<em style="color:#999;">No description available</em>'}
+                    </div>
+                </div>
+
+                ${currentProperty.visual_features_text ? `
+                <div style="margin-bottom:15px;">
+                    <strong style="color:#333;">Visual Features Text ${infoTooltip('AI-generated description from analyzing all property images. Includes architecture style, colors, materials, and features detected by Claude Haiku Vision. Searched with weight 2.5 in BM25 and included in text embeddings for semantic search.')}</strong>
+                    <div style="background:#fff3cd;border:1px solid #ffc107;padding:10px;border-radius:4px;margin-top:5px;max-height:150px;overflow-y:auto;">
+                        ${currentProperty.visual_features_text}
+                    </div>
+                    <p style="color:#856404;font-size:11px;margin:5px 0 0 0;">
+                        ✨ This visual content enhances both keyword matching (BM25) and semantic search (kNN text)
+                    </p>
+                </div>
+                ` : `
+                <div style="background:#f8d7da;border:1px solid #f5c6cb;padding:10px;border-radius:4px;">
+                    <strong style="color:#721c24;">⚠️ Visual Features Text Missing</strong>
+                    <p style="color:#721c24;font-size:12px;margin:5px 0 0 0;">
+                        This property hasn't been re-indexed with visual feature extraction yet.
+                    </p>
+                </div>
+                `}
+
+                <div style="background:#e7f3ff;border:1px solid #b3d9ff;padding:10px;border-radius:4px;margin-top:10px;">
+                    <strong style="color:#004085;">How Text Matching Works:</strong>
+                    <ul style="margin:8px 0 0 0;padding-left:20px;color:#004085;font-size:12px;line-height:1.6;">
+                        <li><strong>BM25:</strong> Searches both description (3.0x) and visual_features_text (2.5x) for keywords</li>
+                        <li><strong>kNN Text:</strong> Embeds <em>description + visual_features_text</em> into 1024-dim vector for semantic similarity</li>
+                        <li><strong>Result:</strong> Queries match on visual features even if not in original description!</li>
+                    </ul>
+                </div>
+            </div>`;
+
+            // QUERY TYPE EXPLANATION HEADER
+            const queryType = debug_info.query?.extracted_constraints?.query_type || 'general';
+            const kValues = details.query_context?.k_values || {bm25: 60, knn_text: 60, knn_image: 60};
+
+            // Determine which strategies contributed
+            const bm25Active = details.bm25?.rank !== null && details.bm25?.rank !== undefined;
+            const knnTextActive = details.knn_text?.rank !== null && details.knn_text?.rank !== undefined;
+            const knnImageActive = details.knn_image?.rank !== null && details.knn_image?.rank !== undefined;
+
+            // Generate query-type-specific explanation based on search mode
+            let queryExplanation = '';
+            let strategyHighlight = '';
+
+            if (selectedSearchMode === 'standard') {
+                // STANDARD MODE: Equal weighting explanation
+                queryExplanation = 'In <strong>Standard mode</strong>, all three search strategies are weighted equally (k=60 for each). Every property is scored using BM25 keyword matching, text embedding similarity, and image embedding similarity with the same importance.';
+                const contributors = [
+                    bm25Active ? 'BM25' : null,
+                    knnTextActive ? 'text kNN' : null,
+                    knnImageActive ? 'image kNN' : null
+                ].filter(Boolean);
+                if (contributors.length > 0) {
+                    strategyHighlight = '✓ This property matched via: <strong>' + contributors.join(' + ') + '</strong>';
+                } else {
+                    strategyHighlight = '⚠️ This property did not appear in the top results for any strategy';
+                }
+            } else {
+                // ADAPTIVE MODE: Query-type-specific explanation
+                if (queryType === 'visual_style') {
+                    queryExplanation = 'Your query is about <strong>visual style</strong> (modern, contemporary, traditional, etc.). In Adaptive mode, the system prioritizes <strong>image kNN search</strong> (k=' + kValues.knn_image + ') because visual appearance is more important than keywords for style queries.';
+                    strategyHighlight = knnImageActive ? '🎨 <strong>Image kNN</strong> found the best matches (visual similarity)' : '⚠️ This property did not appear in image kNN top results';
+                } else if (queryType === 'color' || queryType === 'material') {
+                    queryExplanation = 'Your query focuses on <strong>' + queryType + '</strong> (white cabinets, granite counters, etc.). In Adaptive mode, the system boosts <strong>BM25 keyword search</strong> (k=' + kValues.bm25 + ') because ' + queryType + ' terms are explicit and text-matchable.';
+                    strategyHighlight = bm25Active ? '📝 <strong>BM25</strong> found the best matches (keyword matching)' : '⚠️ This property did not appear in BM25 top results';
+                } else if (queryType === 'specific_feature') {
+                    queryExplanation = 'Your query requests a <strong>specific feature</strong> (pool, garage, fireplace, etc.). In Adaptive mode, all three strategies work together with emphasis on <strong>BM25</strong> (k=' + kValues.bm25 + ') and <strong>text kNN</strong> (k=' + kValues.knn_text + ').';
+                    const contributors = [
+                        bm25Active ? 'BM25' : null,
+                        knnTextActive ? 'text kNN' : null,
+                        knnImageActive ? 'image kNN' : null
+                    ].filter(Boolean);
+                    strategyHighlight = contributors.length > 0 ? '✓ Matched via: <strong>' + contributors.join(' + ') + '</strong>' : '⚠️ This property did not appear in top results for any strategy';
+                } else {
+                    queryExplanation = 'Your query is a <strong>general search</strong>. In Adaptive mode, all three strategies are balanced (k=' + kValues.bm25 + ',' + kValues.knn_text + ',' + kValues.knn_image + ') to find the best overall matches.';
+                    const contributors = [
+                        bm25Active ? 'BM25' : null,
+                        knnTextActive ? 'text kNN' : null,
+                        knnImageActive ? 'image kNN' : null
+                    ].filter(Boolean);
+                    strategyHighlight = contributors.length > 0 ? '✓ Matched via: <strong>' + contributors.join(' + ') + '</strong>' : '⚠️ This property did not appear in top results for any strategy';
+                }
+            }
+
+            // Strategy-specific explanation section
+            let strategyExplanationHTML = '';
+            if (selectedStrategy === 'hybrid') {
+                strategyExplanationHTML = `<div class="score-section" style="background:#e8f4f8;border-left-color:#0066cc;border-width:3px;">
+                    <h4 style="color:#0066cc;font-size:18px;">🧠 Why You're Seeing These Results</h4>
+                    <div style="background:#fff;padding:15px;border-radius:6px;margin:10px 0;">
+                        <p style="color:#333;line-height:1.7;margin:0 0 12px 0;font-size:14px;">
+                            ${queryExplanation}
+                        </p>
+                        <div style="background:#f0f8ff;padding:10px;border-left:3px solid #0066cc;margin:10px 0;">
+                            <strong style="color:#0066cc;">For this property:</strong>
+                            <p style="margin:5px 0 0 0;color:#333;">${strategyHighlight}</p>
+                        </div>
+                    </div>
+
+                    <h5 style="color:#0066cc;margin:15px 0 10px 0;">📚 How Multi-Strategy Search Works</h5>
+                    <p style="color:#555;line-height:1.6;margin:10px 0;font-size:13px;">
+                        Every search runs <strong>three independent strategies</strong> in parallel:
+                    </p>
+                    <ul style="color:#555;line-height:1.7;margin:10px 0;padding-left:25px;font-size:13px;">
+                        <li><strong>BM25 Full-Text Search</strong> - Keyword matching in descriptions and visual features (k=${kValues.bm25})</li>
+                        <li><strong>kNN Text Similarity</strong> - Semantic understanding via 1024-dim embeddings (k=${kValues.knn_text})</li>
+                        <li><strong>kNN Image Similarity</strong> - Visual matching across ${currentProperty.image_vectors_count || '~20'} property images (k=${kValues.knn_image})</li>
+                    </ul>
+                    <p style="color:#555;line-height:1.6;margin:10px 0;font-size:13px;">
+                        Results are combined using <strong>Reciprocal Rank Fusion (RRF)</strong>: <code>Score = Σ[1/(k + rank)]</code>.
+                        ${selectedSearchMode === 'adaptive'
+                            ? 'Lower k-values = higher weight for that strategy. The adaptive k-values above show which strategies are prioritized for your query type.'
+                            : 'In Standard mode, all strategies use k=60 (equal weighting), so every strategy contributes proportionally based on rank only.'}
+                    </p>
+                    <div style="background:#fff3cd;padding:12px;border-radius:6px;margin-top:15px;">
+                        <strong style="color:#856404;">💡 Why "Not found in top results" is normal:</strong>
+                        <p style="color:#856404;font-size:12px;margin:5px 0 0 0;line-height:1.6;">
+                            ${selectedSearchMode === 'adaptive'
+                                ? 'Not every property matches all three strategies! A visual style query might only use image kNN. A keyword query might only use BM25. That\'s intentional - each strategy specializes in different query types. The system automatically emphasizes the most relevant strategies for your specific search.'
+                                : 'Even in Standard mode with equal weighting, not every property appears in all three strategy results. Each strategy (BM25, text kNN, image kNN) searches independently and returns its own top results. A property only contributes to the final RRF score if it appears in at least one strategy\'s top results. Properties can still rank well overall even if they only match via one or two strategies.'}
+                        </p>
+                    </div>
+                </div>`;
+            } else if (selectedStrategy === 'bm25') {
+                strategyExplanationHTML = `<div class="score-section" style="background:#d4edda;border-left-color:#28a745;border-width:3px;">
+                    <h4 style="color:#28a745;font-size:18px;">📝 BM25 Keyword Search Results</h4>
+                    <p style="color:#333;line-height:1.7;margin:10px 0;font-size:14px;">
+                        You're viewing results from <strong>BM25 keyword matching only</strong>. Properties are ranked based on how well they match your query terms in their text fields (description, visual features, tags, address).
+                    </p>
+                    <div style="background:#fff;padding:15px;border-radius:6px;margin:10px 0;">
+                        <strong style="color:#28a745;">How BM25 Works:</strong>
+                        <ul style="margin:8px 0 0 0;padding-left:20px;line-height:1.8;">
+                            <li><strong>Term Frequency:</strong> Properties mentioning your query words more frequently rank higher</li>
+                            <li><strong>Field Boosting:</strong> Matches in description (3.0x) weighted higher than address (0.5x)</li>
+                            <li><strong>Document Length:</strong> Shorter documents with keyword matches rank higher (less dilution)</li>
+                            <li><strong>Tag Matching:</strong> Exact matches in feature_tags and image_tags get additional boost</li>
+                        </ul>
+                    </div>
+                    <div style="background:#fff3cd;padding:12px;border-radius:6px;">
+                        <strong style="color:#856404;">⚠️ Limitations of BM25 Only:</strong>
+                        <p style="color:#856404;font-size:13px;margin:5px 0 0 0;line-height:1.6;">
+                            BM25 only finds exact keyword matches. It won't find synonyms (e.g., "cozy" won't match "comfortable") or visual similarity (e.g., modern architecture not described as "modern"). Use Hybrid mode for best results.
+                        </p>
+                    </div>
+                </div>`;
+            } else if (selectedStrategy === 'knn_text') {
+                strategyExplanationHTML = `<div class="score-section" style="background:#cfe2ff;border-left-color:#007bff;border-width:3px;">
+                    <h4 style="color:#007bff;font-size:18px;">🧠 kNN Text Semantic Search Results</h4>
+                    <p style="color:#333;line-height:1.7;margin:10px 0;font-size:14px;">
+                        You're viewing results from <strong>kNN text semantic search only</strong>. Properties are ranked based on how semantically similar their text embeddings are to your query embedding.
+                    </p>
+                    <div style="background:#fff;padding:15px;border-radius:6px;margin:10px 0;">
+                        <strong style="color:#007bff;">How kNN Text Works:</strong>
+                        <ul style="margin:8px 0 0 0;padding-left:20px;line-height:1.8;">
+                            <li><strong>Embedding:</strong> Your query is converted to a 1024-dimensional vector using Amazon Titan</li>
+                            <li><strong>Property Vectors:</strong> Each property's description + visual_features_text is embedded similarly</li>
+                            <li><strong>Similarity:</strong> Cosine similarity measures how close vectors are in 1024-dim space</li>
+                            <li><strong>Semantic Understanding:</strong> Captures meaning, not just exact keywords (e.g., "cozy" ≈ "comfortable")</li>
+                        </ul>
+                    </div>
+                    <div style="background:#fff3cd;padding:12px;border-radius:6px;">
+                        <strong style="color:#856404;">⚠️ Limitations of kNN Text Only:</strong>
+                        <p style="color:#856404;font-size:13px;margin:5px 0 0 0;line-height:1.6;">
+                            Text embeddings capture semantic meaning but may miss exact keyword requirements or visual features not described in text. Use Hybrid mode for comprehensive matching.
+                        </p>
+                    </div>
+                </div>`;
+            } else if (selectedStrategy === 'knn_image') {
+                strategyExplanationHTML = `<div class="score-section" style="background:#f8d7da;border-left-color:#dc3545;border-width:3px;">
+                    <h4 style="color:#dc3545;font-size:18px;">🖼️ kNN Image Visual Search Results</h4>
+                    <p style="color:#333;line-height:1.7;margin:10px 0;font-size:14px;">
+                        You're viewing results from <strong>kNN image visual search only</strong>. Properties are ranked based on how visually similar their images are to your query concept.
+                    </p>
+                    <div style="background:#fff;padding:15px;border-radius:6px;margin:10px 0;">
+                        <strong style="color:#dc3545;">How kNN Image Works:</strong>
+                        <ul style="margin:8px 0 0 0;padding-left:20px;line-height:1.8;">
+                            <li><strong>Query Embedding:</strong> Your text query is converted to a 1024-dimensional image concept vector</li>
+                            <li><strong>Image Vectors:</strong> Each property image (${currentProperty.image_vectors_count || '~20'} per property) is embedded separately</li>
+                            <li><strong>Multi-Vector Search:</strong> ALL images searched independently, best match determines property score</li>
+                            <li><strong>Pure Visual:</strong> Matches architectural style, colors, materials visible in images - no text required</li>
+                        </ul>
+                    </div>
+                    <div style="background:#fff3cd;padding:12px;border-radius:6px;">
+                        <strong style="color:#856404;">⚠️ Limitations of kNN Image Only:</strong>
+                        <p style="color:#856404;font-size:13px;margin:5px 0 0 0;line-height:1.6;">
+                            Image embeddings capture visual appearance but can't find specific features not visible in photos (e.g., "granite countertops" if kitchen not photographed). Use Hybrid mode to combine visual + text signals.
+                        </p>
+                    </div>
+                </div>`;
+            }
+            html += strategyExplanationHTML;
+
+            // Overall Score Section (strategy-aware)
+            const scoreDescription = selectedStrategy === 'hybrid'
+                ? 'This is the final score after combining all search strategies (RRF) and applying tag boost multiplier. Higher scores rank first.'
+                : selectedStrategy === 'bm25'
+                ? 'This is the BM25 relevance score from OpenSearch, optionally multiplied by tag boost. Higher scores indicate better keyword match.'
+                : selectedStrategy === 'knn_text'
+                ? 'This is the cosine similarity score between your query and this property\'s text embedding, optionally multiplied by tag boost. Higher scores indicate better semantic similarity.'
+                : 'This is the best image match score from visual similarity search, optionally multiplied by tag boost. Higher scores indicate better visual match.';
+
+            const scoreCalc = selectedStrategy === 'hybrid'
+                ? `Final Score = RRF Total Score × Tag Boost Factor<br>${currentProperty.boosted && details.tag_boosting ? `= ${details.tag_boosting.score_before_boost.toFixed(6)} × ${details.tag_boosting.boost_factor} = ${currentProperty.score.toFixed(6)}` : `= ${currentProperty.score.toFixed(6)} (no boost applied)`}`
+                : selectedStrategy === 'bm25'
+                ? `Final Score = BM25 Score ${currentProperty.boosted && details.tag_boosting ? `× Tag Boost Factor<br>= ${details.tag_boosting.score_before_boost.toFixed(6)} × ${details.tag_boosting.boost_factor} = ${currentProperty.score.toFixed(6)}` : `<br>= ${currentProperty.score.toFixed(6)} (no boost applied)`}`
+                : `Final Score = OpenSearch kNN Score ${currentProperty.boosted && details.tag_boosting ? `× Tag Boost Factor<br>= ${details.tag_boosting.score_before_boost.toFixed(6)} × ${details.tag_boosting.boost_factor} = ${currentProperty.score.toFixed(6)}` : `<br>= ${currentProperty.score.toFixed(6)} (no boost applied)`}`;
+
+            html += `<div class="score-section">
+                <h4>🎯 Final Score</h4>
+                <div class="score-metric">
+                    <span class="score-label">Final Ranking Score ${infoTooltip(scoreDescription)}</span>
+                    <span class="score-value highlight" style="font-size:28px;">${formatNormalizedScore(currentProperty.score)}/100</span>
+                </div>
+                <p style="color:#999;font-size:11px;margin-top:5px;">
+                    Raw technical score: ${currentProperty.score.toFixed(6)}
+                </p>
+                ${currentProperty.boosted ? '<div class="score-metric"><span class="score-label">Tag Boost Applied ' + infoTooltip('Properties matching more required tags get multiplicative boosts: 100%=2.0x, 75%=1.5x, 50%=1.25x') + '</span><span class="score-value success">✓ Yes</span></div>' : ''}
+                <p style="color:#666;font-size:13px;margin-top:10px;line-height:1.5;">
+                    <strong>How it's calculated:</strong> ${scoreCalc}
+                </p>
+            </div>`;
+
+            // Strategy Details Section (adapt based on selected strategy)
+            if (selectedStrategy === 'hybrid' && (details.bm25 || details.knn_text || details.knn_image)) {
+                html += `<div class="score-section">
+                    <h4>🔀 Reciprocal Rank Fusion (RRF) Breakdown</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        RRF combines rankings from multiple search strategies. For each strategy, if the property appears at rank R,
+                        it contributes <code>1/(k+R)</code> to the total score. Lower k-values give higher weight to that strategy.
+                        The three contributions are summed to get the RRF total.
+                    </p>
+                    <div class="score-metric">
+                        <span class="score-label">Total RRF Score ${infoTooltip('Sum of contributions from all 3 search strategies. This is the score before tag boosting is applied.')}</span>
+                        <span class="score-value highlight" style="font-size:20px;">${details.rrf_total.toFixed(6)}</span>
+                    </div>
+                    <p style="color:#666;font-size:12px;margin-top:5px;">
+                        = ${details.bm25?.rrf_contribution?.toFixed(6) || '0'} (BM25) +
+                        ${details.knn_text?.rrf_contribution?.toFixed(6) || '0'} (kNN text) +
+                        ${details.knn_image?.rrf_contribution?.toFixed(6) || '0'} (kNN image)
+                    </p>`;
+
+                // BM25 Full-Text Search (show in hybrid mode)
+                if (details.bm25 && selectedStrategy === 'hybrid') {
+                    const bm25 = details.bm25;
+                    html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #28a745;border-radius:4px;">
+                        <strong style="color:#28a745;font-size:16px;">📝 BM25 Full-Text Search</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
+                            BM25 searches text fields using keyword matching with field-specific boosting:<br>
+                            • <strong>description</strong> (weight: 3.0) - Original Zillow listing text<br>
+                            • <strong>visual_features_text</strong> (weight: 2.5) - AI-generated from image analysis (NEW!)<br>
+                            • <strong>address, city, state</strong> (weights: 0.5-0.2) - Location fields<br>
+                            Plus: Exact matches on feature_tags and image_tags get additional boost.
+                        </p>
+                        <div class="score-metric">
+                            <span class="score-label">Rank in BM25 Results ${infoTooltip('Position of this property in the BM25-only search results (1=best match). Properties not found didn\'t match the text query well enough.')}</span>
+                            <span class="score-value ${bm25.rank ? 'success' : 'danger'}">${bm25.rank ? '#' + bm25.rank : 'Not found in top results'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Original BM25 Score ${infoTooltip('Raw relevance score from BM25 algorithm measuring term frequency and document length normalization. Higher = better text match.')}</span>
+                            <span class="score-value">${bm25.original_score ? bm25.original_score.toFixed(6) : 'N/A'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF k-value ${infoTooltip('Tuning parameter for this strategy. Lower k = higher weight. Default is 60 (balanced). Adaptive scoring adjusts this based on query type.')}</span>
+                            <span class="score-value">${bm25.k}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF Contribution ${infoTooltip('How much BM25 contributes to final RRF score. Calculated as 1/(k+rank). This gets added to contributions from other strategies.')}</span>
+                            <span class="score-value" style="font-weight:bold;">${bm25.rrf_contribution.toFixed(6)}</span>
+                        </div>
+                        <p style="color:#666;font-size:12px;margin-top:8px;">
+                            <strong>Calculation:</strong> 1 ÷ (${bm25.k} + ${bm25.rank || 0}) = ${bm25.rrf_contribution.toFixed(6)}
+                        </p>
+                        ${debug_info.bm25 && debug_info.bm25.query ? `
+                        <details style="margin-top:10px;">
+                            <summary style="cursor:pointer;color:#28a745;font-weight:600;">View OpenSearch Query</summary>
+                            <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(debug_info.bm25.query, null, 2)}</pre>
+                        </details>
+                        ` : ''}
+                    </div>`;
+                }
+
+                // kNN Text Search (show in hybrid mode)
+                if (details.knn_text && selectedStrategy === 'hybrid') {
+                    const knn_text = details.knn_text;
+                    html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #007bff;border-radius:4px;">
+                        <strong style="color:#007bff;font-size:16px;">🧠 kNN Text Similarity Search</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
+                            kNN text search converts the query into a 1024-dimensional vector and finds properties
+                            with similar text embeddings using cosine similarity. This captures semantic meaning beyond exact keywords.<br>
+                            <strong>Property vectors embed:</strong> description + visual_features_text (NEW! - includes image analysis)<br>
+                        </p>
+                        <div class="score-metric">
+                            <span class="score-label">Query Vector ${infoTooltip('Your query converted into a 1024-dimensional vector using Amazon Titan text embedding model. This captures semantic meaning.')}</span>
+                            <span class="score-value">1024-dimensional embedding from: "${actualQuery}"</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Property Vector ${infoTooltip('Each property\'s vector embeds both the original description AND visual features detected in images (architecture, colors, materials). This allows semantic matching on visual characteristics!')}</span>
+                            <span class="score-value">1024-dim from: description + visual_features_text</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Rank in kNN Text Results ${infoTooltip('Position of this property when ranked by text embedding similarity (1=most semantically similar). Uses vector distance to find meaning, not just keywords.')}</span>
+                            <span class="score-value ${knn_text.rank ? 'success' : 'danger'}">${knn_text.rank ? '#' + knn_text.rank : 'Not found in top results'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Cosine Similarity Score ${infoTooltip('Similarity between query vector and property description vector (0-1 scale). Higher = more semantically similar. Measured using cosine distance in 1536-dimensional space.')}</span>
+                            <span class="score-value">${knn_text.original_score ? knn_text.original_score.toFixed(6) : 'N/A'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF k-value ${infoTooltip('Tuning parameter for this strategy. Lower k = higher weight. Default is 60 (balanced). Material/color queries reduce this to boost semantic understanding.')}</span>
+                            <span class="score-value">${knn_text.k}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF Contribution ${infoTooltip('How much semantic text similarity contributes to final RRF score. Calculated as 1/(k+rank). Added to BM25 and image contributions.')}</span>
+                            <span class="score-value" style="font-weight:bold;">${knn_text.rrf_contribution.toFixed(6)}</span>
+                        </div>
+                        <p style="color:#666;font-size:12px;margin-top:8px;">
+                            <strong>Calculation:</strong> 1 ÷ (${knn_text.k} + ${knn_text.rank || 0}) = ${knn_text.rrf_contribution.toFixed(6)}
+                        </p>
+                        ${debug_info.knn_text && debug_info.knn_text.query ? `
+                        <details style="margin-top:10px;">
+                            <summary style="cursor:pointer;color:#007bff;font-weight:600;">View OpenSearch Query</summary>
+                            <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(debug_info.knn_text.query, null, 2)}</pre>
+                        </details>
+                        ` : ''}
+                    </div>`;
+                }
+
+                // kNN Image Search (show in hybrid mode)
+                if (details.knn_image && selectedStrategy === 'hybrid') {
+                    const knn_image = details.knn_image;
+                    // Try both locations: query_context (in details for regular API) and knn_image (in debug_info for detailed scoring API)
+                    const adaptive_k = (details.query_context && details.query_context.adaptive_k) ||
+                                      (debug_info.knn_image && debug_info.knn_image.adaptive_k) || null;
+                    const is_multi_vector_mode = (details.query_context && details.query_context.is_multi_vector) ||
+                                                (debug_info.knn_image && debug_info.knn_image.is_multi_vector) || false;
+                    html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #dc3545;border-radius:4px;">
+                        <strong style="color:#dc3545;font-size:16px;">🖼️ kNN Image Similarity Search ${details.image_vectors_count ? '(' + details.image_vectors_count + ' images)' : ''}</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
+                            kNN image search compares the query vector against ALL ${details.image_vectors_count || 'property'} image vectors independently.
+                            ${adaptive_k ? `<strong>Adaptive Top-K Scoring:</strong> The sum of the top <strong>${adaptive_k}</strong> image scores determines the overall similarity (rewards properties matching multiple features).` : `The <strong>highest-scoring image</strong> determines the overall image similarity score (score_mode: "max").`}
+                        </p>
+                        <div class="score-metric">
+                            <span class="score-label">Query Vector ${infoTooltip('Your query converted into a 1536-dimensional image embedding using Amazon Titan multimodal model. Captures visual concepts from text.')}</span>
+                            <span class="score-value">1536-dimensional embedding from: "${actualQuery}"</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Search Mode ${infoTooltip('Multi-vector: Each image is embedded separately and searched independently. Adaptive top-k aggregation sums the best K image scores. Legacy: All images averaged into one vector.')}</span>
+                            <span class="score-value">${is_multi_vector_mode ? (adaptive_k && adaptive_k > 1 ? `Multi-vector (adaptive top-${adaptive_k} sum)` : 'Multi-vector (nested, score_mode: sum)') : 'Single averaged vector (legacy)'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">Rank in kNN Image Results ${infoTooltip('Position of this property when ranked by best image match (1=most visually similar). Each property\'s best-matching image determines its rank.')}</span>
+                            <span class="score-value ${knn_image.rank ? 'success' : 'danger'}">${knn_image.rank ? '#' + knn_image.rank : 'Not found in top results'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">${adaptive_k && adaptive_k > 1 ? `Top-${adaptive_k} Image Score Sum` : 'Best Image Match Score'} ${infoTooltip(adaptive_k && adaptive_k > 1 ? `Sum of top ${adaptive_k} image scores. Adaptive K adjusts based on query features: 1 feature → k=1, 2 features → k=2, 3+ features → k=3. This rewards properties with multiple matching images.` : 'Highest similarity score among all this property\'s images. Score_mode: max takes the single best match. See Individual Image Scores below for breakdown.')}</span>
+                            <span class="score-value">${knn_image.original_score ? knn_image.original_score.toFixed(6) : 'N/A'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF k-value ${infoTooltip('Tuning parameter for image strategy. Lower k = higher weight. Default is 60. Visual_style queries reduce this to boost image matching.')}</span>
+                            <span class="score-value">${knn_image.k}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">RRF Contribution ${infoTooltip('How much visual similarity contributes to final RRF score. Calculated as 1/(k+rank). Added to BM25 and text contributions.')}</span>
+                            <span class="score-value" style="font-weight:bold;">${knn_image.rrf_contribution.toFixed(6)}</span>
+                        </div>
+                        <p style="color:#666;font-size:12px;margin-top:8px;">
+                            <strong>Calculation:</strong> 1 ÷ (${knn_image.k} + ${knn_image.rank || 0}) = ${knn_image.rrf_contribution.toFixed(6)}
+                        </p>
+                        ${debug_info.knn_image && debug_info.knn_image.query ? `
+                        <details style="margin-top:10px;">
+                            <summary style="cursor:pointer;color:#dc3545;font-weight:600;">View OpenSearch Query</summary>
+                            <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(debug_info.knn_image.query, null, 2)}</pre>
+                        </details>
+                        ` : ''}
+                    </div>`;
+                }
+
+                html += `</div>`;
+            }
+
+            // Single-strategy detail sections
+            if (selectedStrategy === 'bm25' && details.bm25) {
+                const bm25 = details.bm25;
+                const hitsCount = debug_info.bm25 ? (debug_info.bm25.hits_count || 'unknown') : 'unknown';
+                html += `<div class="score-section">
+                    <h4 style="color:#28a745;">📝 BM25 Search Details</h4>
+                    <p style="color:#666;font-size:13px;margin:8px 0 15px 0;line-height:1.5;">
+                        Showing details for BM25 keyword matching. This search returned <strong>${hitsCount} total results</strong>.
+                    </p>
+                    <div class="score-metric">
+                        <span class="score-label">Rank in BM25 Results ${infoTooltip('Position of this property in BM25 search results (1=best keyword match).')}</span>
+                        <span class="score-value ${bm25.rank ? 'success' : 'danger'}">${bm25.rank ? '#' + bm25.rank : 'Not found in top results'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">BM25 Relevance Score ${infoTooltip('Raw BM25 score from OpenSearch measuring keyword match quality.')}</span>
+                        <span class="score-value">${bm25.original_score ? bm25.original_score.toFixed(6) : 'N/A'}</span>
+                    </div>
+                    ${debug_info.bm25 && debug_info.bm25.query ? `
+                    <details style="margin-top:15px;">
+                        <summary style="cursor:pointer;color:#28a745;font-weight:600;">View OpenSearch Query</summary>
+                        <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(debug_info.bm25.query, null, 2)}</pre>
+                    </details>
+                    ` : ''}
+                </div>`;
+            }
+
+            if (selectedStrategy === 'knn_text' && details.knn_text && debug_info.knn_text) {
+                const knn_text = details.knn_text;
+                html += `<div class="score-section">
+                    <h4 style="color:#007bff;">🧠 kNN Text Search Details</h4>
+                    <p style="color:#666;font-size:13px;margin:8px 0 15px 0;line-height:1.5;">
+                    </p>
+                    <div class="score-metric">
+                        <span class="score-label">Rank in kNN Text Results ${infoTooltip('Position of this property in text embedding similarity rankings (1=most semantically similar).')}</span>
+                        <span class="score-value ${knn_text.rank ? 'success' : 'danger'}">${knn_text.rank ? '#' + knn_text.rank : 'Not found in top results'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Cosine Similarity Score ${infoTooltip('Similarity score between query embedding and property text embedding (0-1 scale).')}</span>
+                        <span class="score-value">${knn_text.original_score ? knn_text.original_score.toFixed(6) : 'N/A'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Query Vector ${infoTooltip('Your query converted to 1024-dimensional vector via Amazon Titan.')}</span>
+                        <span class="score-value">1024-dim embedding from: "${actualQuery}"</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Property Vector ${infoTooltip('Property text (description + visual_features_text) embedded to 1024 dimensions.')}</span>
+                        <span class="score-value">1024-dim from: description + visual_features_text</span>
+                    </div>
+                    ${debug_info.knn_text && debug_info.knn_text.query ? `
+                    <details style="margin-top:15px;">
+                        <summary style="cursor:pointer;color:#007bff;font-weight:600;">View OpenSearch Query</summary>
+                        <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(debug_info.knn_text.query, null, 2)}</pre>
+                    </details>
+                    ` : ''}
+                </div>`;
+            }
+
+            if (selectedStrategy === 'knn_image' && details.knn_image) {
+                const knn_image = details.knn_image;
+                // Try both locations: query_context (in details for regular API) and knn_image (in debug_info for detailed scoring API)
+                const adaptive_k = (details.query_context && details.query_context.adaptive_k) ||
+                                  (debug_info.knn_image && debug_info.knn_image.adaptive_k) || null;
+                const is_multi_vector_mode = (details.query_context && details.query_context.is_multi_vector) ||
+                                            (debug_info.knn_image && debug_info.knn_image.is_multi_vector) || false;
+                html += `<div class="score-section">
+                    <h4 style="color:#dc3545;">🖼️ kNN Image Search Details</h4>
+                    <p style="color:#666;font-size:13px;margin:8px 0 15px 0;line-height:1.5;">
+                        Property has <strong>${details.image_vectors_count || '~20'} images</strong> embedded separately.
+                        ${adaptive_k ? `<strong>Adaptive Top-K Scoring:</strong> Sum of top <strong>${adaptive_k}</strong> images used (k adapts to query features).` : ''}
+                    </p>
+                    <div class="score-metric">
+                        <span class="score-label">Rank in kNN Image Results ${infoTooltip('Position of this property in image similarity rankings (1=most visually similar).')}</span>
+                        <span class="score-value ${knn_image.rank ? 'success' : 'danger'}">${knn_image.rank ? '#' + knn_image.rank : 'Not found in top results'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">${adaptive_k && adaptive_k > 1 ? `Top-${adaptive_k} Image Score Sum` : 'Best Image Match Score'} ${infoTooltip(adaptive_k && adaptive_k > 1 ? `Sum of top ${adaptive_k} image scores. Adaptive K based on query features: 1 feature → k=1, 2 features → k=2, 3+ features → k=3.` : 'Highest similarity score among all property images.')}</span>
+                        <span class="score-value">${knn_image.original_score ? knn_image.original_score.toFixed(6) : 'N/A'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Search Mode ${infoTooltip('Multi-vector: Each image searched independently. Adaptive top-k aggregation sums best K scores.')}</span>
+                        <span class="score-value">${is_multi_vector_mode ? (adaptive_k && adaptive_k > 1 ? `Multi-vector (adaptive top-${adaptive_k} sum)` : 'Multi-vector (score_mode: sum)') : 'Single averaged vector'}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Query Vector ${infoTooltip('Your query converted to 1024-dimensional image concept vector.')}</span>
+                        <span class="score-value">1024-dim embedding from: "${actualQuery}"</span>
+                    </div>
+                    ${debug_info.knn_image && debug_info.knn_image.query ? `
+                    <details style="margin-top:15px;">
+                        <summary style="cursor:pointer;color:#dc3545;font-weight:600;">View OpenSearch Query</summary>
+                        <pre style="background:#2d2d2d;color:#f8f8f2;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;margin-top:8px;">${JSON.stringify(debug_info.knn_image.query, null, 2)}</pre>
+                    </details>
+                    ` : ''}
+                </div>`;
+            }
+
+            // Individual Image Scores Section
+            if (details.individual_image_scores && details.individual_image_scores.length > 0) {
+                // Try both locations: query_context (in details for regular API) and knn_image (in debug_info for detailed scoring API)
+                const adaptive_k = (details.query_context && details.query_context.adaptive_k) ||
+                                  (debug_info.knn_image && debug_info.knn_image.adaptive_k) || null;
+                const sortedScores = [...details.individual_image_scores].sort((a, b) => b.score - a.score);
+                const topKSum = adaptive_k && adaptive_k > 1 ? sortedScores.slice(0, adaptive_k).reduce((sum, img) => sum + img.score, 0) : null;
+                html += `<div class="score-section">
+                    <h4>🎨 Individual Image Vector Scores</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        Each image has its own embedding vector (1024 dimensions). The table below shows how well each image matched your query.
+                        ${adaptive_k && adaptive_k > 1 ?
+                            `<strong>Adaptive K=${adaptive_k}:</strong> The <strong style="color:#dc3545;">sum of the top ${adaptive_k} scores (${topKSum.toFixed(6)})</strong> is used as the image similarity score above. This rewards properties with multiple matching images.` :
+                            `The <strong style="color:#dc3545;">highest score (${Math.max(...details.individual_image_scores.map(i => i.score)).toFixed(6)})</strong> is used as the "Best Image Match Score" in the kNN Image search above.`
+                        }
+                    </p>
+                    <div style="max-height:400px;overflow-y:auto;border:1px solid #dee2e6;border-radius:6px;">
+                        <table style="width:100%;border-collapse:collapse;">
+                            <thead style="background:#343a40;color:white;position:sticky;top:0;">
+                                <tr>
+                                    <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Rank</th>
+                                    <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Image #</th>
+                                    <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Score</th>
+                                    <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Preview</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+
+                details.individual_image_scores.forEach((img, idx) => {
+                    const isTop = idx === 0;
+                    const rowStyle = isTop ? 'background:#fff3cd;font-weight:bold;' : '';
+                    html += `<tr style="${rowStyle}border-bottom:1px solid #dee2e6;">
+                        <td style="padding:10px;">${isTop ? '🥇 ' : ''}#${idx + 1}</td>
+                        <td style="padding:10px;">Image ${img.index !== undefined ? img.index : 'N/A'}</td>
+                        <td style="padding:10px;font-family:monospace;">${img.score.toFixed(6)}</td>
+                        <td style="padding:10px;">${img.url ? '<img src="' + img.url + '" style="width:80px;height:60px;object-fit:cover;border-radius:4px;" />' : 'No preview'}</td>
+                    </tr>`;
+                });
+
+                html += `</tbody>
+                        </table>
+                    </div>
+                    <p style="color:#666;font-size:12px;margin-top:10px;line-height:1.5;">
+                        <strong>Why different scores?</strong> Each image captures different aspects of the property.
+                        For a query like "modern kitchen," images showing the kitchen will score higher than exterior shots.
+                        The multi-vector approach ensures that properties with at least one highly relevant image rank well.
+                    </p>
+                </div>`;
+            }
+
+            // Tag Boosting Section
+            if (details.tag_boosting) {
+                const tb = details.tag_boosting;
+                html += `<div class="score-section">
+                    <h4>🏷️ Tag Matching & Boosting</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        After RRF fusion, we apply a multiplicative boost based on exact tag matches.
+                        Properties matching more required tags get stronger boosts: 100% match = 2.0x, 75% = 1.5x, 50% = 1.25x.
+                    </p>
+                    <div class="score-metric">
+                        <span class="score-label">Match Ratio ${infoTooltip('Percentage of required tags that this property has. Calculated as (matched tags / required tags). Higher ratio = stronger boost.')}</span>
+                        <span class="score-value ${tb.match_ratio >= 1.0 ? 'success' : tb.match_ratio >= 0.5 ? 'warning' : 'danger'}">${(tb.match_ratio * 100).toFixed(0)}% (${tb.matched_tags.length}/${tb.required_tags.length})</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Boost Factor ${infoTooltip('Multiplicative boost applied to RRF score. 100% match=2.0x, 75-99%=1.5x, 50-74%=1.25x, <50%=1.0x (no boost). Rewards exact tag matches.')}</span>
+                        <span class="score-value ${tb.boost_factor > 1 ? 'success' : ''}" style="font-size:18px;">${tb.boost_factor}x</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">RRF Score (before boost) ${infoTooltip('The combined RRF score from all search strategies before tag boost is applied. This is the sum of BM25, kNN text, and kNN image contributions.')}</span>
+                        <span class="score-value">${tb.score_before_boost.toFixed(6)}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Final Score (after boost) ${infoTooltip('The final ranking score after multiplying RRF score by boost factor. This is the score that determines search result order.')}</span>
+                        <span class="score-value highlight">${tb.score_after_boost.toFixed(6)}</span>
+                    </div>
+                    <p style="color:#666;font-size:12px;margin-top:8px;">
+                        <strong>Calculation:</strong> ${tb.score_before_boost.toFixed(6)} × ${tb.boost_factor} = ${tb.score_after_boost.toFixed(6)}
+                    </p>`;
+
+                // Show matched vs required tags
+                if (tb.required_tags && tb.required_tags.length > 0) {
+                    html += `<div style="margin-top:15px;">
+                        <strong style="color:#2a2a2a;">Required Tags Analysis:</strong>
+                        <div class="tag-list" style="margin-top:10px;">`;
+                    tb.required_tags.forEach(tag => {
+                        const matched = tb.matched_tags.includes(tag);
+                        html += `<span class="score-tag ${matched ? 'matched' : 'missing'}">${matched ? '✓' : '✗'} ${tag}</span>`;
+                    });
+                    html += `</div></div>`;
+                }
+
+                html += `</div>`;
+            }
+
+            // Query Context Section
+            if (details.query_context) {
+                const qc = details.query_context;
+                html += `<div class="score-section">
+                    <h4>🔍 Query Analysis & Adaptive Weighting</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        The system analyzes your query to determine the best search strategy.
+                        For example, color queries boost BM25 (tags) and de-boost images (embeddings don't distinguish colors well).
+                        Lower k-values = higher weight for that strategy.
+                    </p>
+                    <div class="score-metric">
+                        <span class="score-label">Query Type Detected</span>
+                        <span class="score-value">${qc.query_type}</span>
+                    </div>
+                    <div class="score-metric">
+                        <span class="score-label">Adaptive Scoring</span>
+                        <span class="score-value ${qc.adaptive_scoring_applied ? 'success' : ''}">${qc.adaptive_scoring_applied ? '✓ Applied' : '✗ Not Applied (balanced weights)'}</span>
+                    </div>`;
+
+                if (qc.k_values) {
+                    html += `<div style="margin-top:15px;padding:15px;background:#f8f9fa;border-radius:6px;">
+                        <strong style="color:#2a2a2a;">RRF k-values Used:</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;">Lower k = higher influence. Default is 60 (balanced).</p>
+                        <div class="score-metric">
+                            <span class="score-label">BM25 (full-text keyword matching)</span>
+                            <span class="score-value ${qc.k_values.bm25 < 60 ? 'success' : qc.k_values.bm25 > 60 ? 'danger' : ''}">${qc.k_values.bm25} ${qc.k_values.bm25 < 60 ? '(boosted)' : qc.k_values.bm25 > 60 ? '(reduced)' : '(balanced)'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">kNN Text (semantic similarity)</span>
+                            <span class="score-value ${qc.k_values.knn_text < 60 ? 'success' : qc.k_values.knn_text > 60 ? 'danger' : ''}">${qc.k_values.knn_text} ${qc.k_values.knn_text < 60 ? '(boosted)' : qc.k_values.knn_text > 60 ? '(reduced)' : '(balanced)'}</span>
+                        </div>
+                        <div class="score-metric">
+                            <span class="score-label">kNN Image (visual similarity)</span>
+                            <span class="score-value ${qc.k_values.knn_image < 60 ? 'success' : qc.k_values.knn_image > 60 ? 'danger' : ''}">${qc.k_values.knn_image} ${qc.k_values.knn_image < 60 ? '(boosted)' : qc.k_values.knn_image > 60 ? '(reduced)' : '(balanced)'}</span>
+                        </div>
+                    </div>`;
+                }
+
+                html += `</div>`;
+            }
+
+            content.innerHTML = html;
+
+            } catch (error) {
+                console.error('Error loading score breakdown:', error);
+                content.innerHTML = `<div class="no-results">
+                    <h3>Error Loading Score Breakdown</h3>
+                    <p>${error.message}</p>
+                    <p style="font-size:12px;color:#666;">Check the console for more details.</p>
+                </div>`;
+            }
+        }
+
+        function closeScoreModal() {
+            document.getElementById('scoreModal').style.display = 'none';
+        }
+
+        function showRawListingData() {
+            // Create modal if it doesn't exist
+            let rawDataModal = document.getElementById('rawDataModal');
+            if (!rawDataModal) {
+                rawDataModal = document.createElement('div');
+                rawDataModal.id = 'rawDataModal';
+                rawDataModal.className = 'modal';
+                rawDataModal.style.display = 'none';
+                rawDataModal.innerHTML = `
+                    <div class="modal-content" style="max-width:900px;height:90vh;display:flex;flex-direction:column;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:20px;border-bottom:1px solid #dee2e6;">
+                            <h3 style="margin:0;color:#333;">📄 Raw Listing Data (JSON)</h3>
+                            <span class="close" onclick="closeRawDataModal()" style="font-size:28px;font-weight:bold;color:#aaa;cursor:pointer;">&times;</span>
+                        </div>
+                        <div style="flex:1;overflow:auto;padding:20px;">
+                            <div style="margin-bottom:15px;">
+                                <button onclick="copyRawData()" style="padding:8px 16px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:10px;">
+                                    📋 Copy to Clipboard
+                                </button>
+                                <button onclick="downloadRawData()" style="padding:8px 16px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
+                                    💾 Download as JSON
+                                </button>
+                            </div>
+                            <pre id="rawDataContent" style="background:#2d2d2d;color:#f8f8f2;padding:20px;border-radius:6px;overflow:auto;font-size:12px;line-height:1.5;font-family:Consolas,Monaco,monospace;margin:0;"></pre>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(rawDataModal);
+            }
+
+            // Populate with current property data (complete debug data)
+            const rawDataContent = document.getElementById('rawDataContent');
+            const completeData = {
+                property: currentProperty,
+                zpid: currentProperty.zpid,
+                score: currentProperty.score,
+                address: currentProperty.address,
+                city: currentProperty.city,
+                state: currentProperty.state,
+                price: currentProperty.price,
+                beds: currentProperty.beds,
+                baths: currentProperty.baths,
+                description: currentProperty.description,
+                visual_features_text: currentProperty.visual_features_text,
+                feature_tags: currentProperty.feature_tags,
+                image_tags: currentProperty.image_tags,
+                architecture_style: currentProperty.architecture_style,
+                image_vectors_count: currentProperty.image_vectors_count,
+                images: currentProperty.images,
+                _scoring_details: currentProperty._scoring_details,
+                _all_fields: currentProperty  // Include everything
+            };
+
+            rawDataContent.textContent = JSON.stringify(completeData, null, 2);
+            rawDataModal.style.display = 'block';
+        }
+
+        function closeRawDataModal() {
+            document.getElementById('rawDataModal').style.display = 'none';
+        }
+
+        function copyRawData() {
+            const content = document.getElementById('rawDataContent').textContent;
+            navigator.clipboard.writeText(content).then(() => {
+                alert('✓ Raw data copied to clipboard!');
+            }).catch(err => {
+                alert('Error copying to clipboard: ' + err);
+            });
+        }
+
+        function downloadRawData() {
+            const content = document.getElementById('rawDataContent').textContent;
+            const blob = new Blob([content], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `listing_${currentProperty.zpid}_raw_data.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Close score modal on escape or outside click
+        window.addEventListener('click', function(e) {
+            const scoreModal = document.getElementById('scoreModal');
+            if (e.target === scoreModal) {
+                closeScoreModal();
+            }
+            const rawDataModal = document.getElementById('rawDataModal');
+            if (rawDataModal && e.target === rawDataModal) {
+                closeRawDataModal();
+            }
+        });
+
+    </script>
+</body>
+</html>

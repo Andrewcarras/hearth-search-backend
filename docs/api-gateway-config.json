@@ -1,0 +1,30 @@
+{
+  "api_id": "mwf1h5nbxe",
+  "api_endpoint": "https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com",
+  "stage": "prod",
+  "region": "us-east-1",
+  "routes": [
+    {
+      "path": "/search",
+      "method": "POST",
+      "lambda": "hearth-search",
+      "lambda_arn": "arn:aws:lambda:us-east-1:692859949078:function:hearth-search",
+      "integration_id": "xgvu8du",
+      "route_id": "u4on5gm"
+    },
+    {
+      "path": "/upload",
+      "method": "POST",
+      "lambda": "hearth-upload-listings",
+      "lambda_arn": "arn:aws:lambda:us-east-1:692859949078:function:hearth-upload-listings",
+      "integration_id": "j3qaqa6",
+      "route_id": "n8eql3n"
+    }
+  ],
+  "cors": {
+    "allow_origins": ["*"],
+    "allow_methods": ["GET", "POST", "OPTIONS"],
+    "allow_headers": ["*"]
+  },
+  "created": "2025-10-08T16:49:56+00:00"
+}

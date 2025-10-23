@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Public Testing Analytics - Hearth</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Open Sans', sans-serif;
+            background: #f7f8fa;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { font-size: 2em; margin-bottom: 8px; }
+        .header p { font-size: 1em; opacity: 0.95; }
+
+        .refresh-info {
+            font-size: 0.9em;
+            opacity: 0.9;
+            text-align: right;
+        }
+
+        .refresh-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #4CAF50;
+            border-radius: 50%;
+            margin-right: 5px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .nav-menu {
+            background: white;
+            border-radius: 8px;
+            padding: 12px 20px;
+            margin: 15px auto 0;
+            max-width: 1400px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-menu a {
+            text-decoration: none;
+            color: #667eea;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background 0.3s;
+            font-size: 14px;
+        }
+
+        .nav-menu a:hover {
+            background: #f0f0f0;
+        }
+
+        .nav-menu a.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #999;
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+
+        .chart-card h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        .table-card {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+            overflow-x: auto;
+        }
+
+        .table-card h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .export-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .export-btn:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: #f7f8fa;
+            font-weight: 600;
+            color: #555;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            font-size: 14px;
+            color: #333;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .badge-error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .badge-warning {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+
+        .badge-info {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+
+        .feedback-text {
+            max-width: 400px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .feedback-categories {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .category-tag {
+            background: #f0f0f0;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .tabs {
+                overflow-x: auto;
+            }
+            .tab {
+                white-space: nowrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div>
+                <h1>Public Testing Analytics</h1>
+                <p>Real-time feedback and usage metrics from production users</p>
+            </div>
+            <div class="refresh-info">
+                <div><span class="refresh-indicator"></span>Auto-refresh: 10s</div>
+                <div id="lastUpdate" style="font-size: 0.85em; margin-top: 5px;">Loading...</div>
+            </div>
+        </div>
+        <div class="nav-menu">
+            <a href="search.html">Main Search</a>
+            <a href="test_bm25.html">BM25 Test</a>
+            <a href="test_knn_text.html">kNN Text Test</a>
+            <a href="test_knn_image.html">kNN Image Test</a>
+            <a href="admin.html">Admin Lookup</a>
+            <a href="crud.html">CRUD Manager</a>
+            <a href="analytics.html">Analytics</a>
+            <a href="public_analytics.html" class="active">Public Testing</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('overview')">Overview</button>
+            <button class="tab" onclick="switchTab('search-quality')">Search Quality</button>
+            <button class="tab" onclick="switchTab('feedback')">Feedback</button>
+            <button class="tab" onclick="switchTab('user-journey')">User Journey</button>
+            <button class="tab" onclick="switchTab('properties')">Properties</button>
+            <button class="tab" onclick="switchTab('issues')">Issues</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Searches</h3>
+                    <div class="stat-value" id="totalSearches">0</div>
+                    <div class="stat-label">All time</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Active Sessions</h3>
+                    <div class="stat-value" id="activeSessions">0</div>
+                    <div class="stat-label">Last 30 minutes</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Feedback</h3>
+                    <div class="stat-value" id="totalFeedback">0</div>
+                    <div class="stat-label">Thumbs up + down</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Bug Reports</h3>
+                    <div class="stat-value" id="totalIssues">0</div>
+                    <div class="stat-label">User-reported issues</div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h2>Searches Over Time (Last 24 Hours)</h2>
+                <div class="chart-container">
+                    <canvas id="searchesChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h2>Feedback Distribution</h2>
+                <div class="chart-container">
+                    <canvas id="feedbackChart"></canvas>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <h2>Recent Activity</h2>
+                <table id="recentActivityTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Type</th>
+                            <th>Query/Description</th>
+                            <th>Device</th>
+                            <th>Session</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Search Quality Tab -->
+        <div id="search-quality" class="tab-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Avg Results</h3>
+                    <div class="stat-value" id="avgResults">0</div>
+                    <div class="stat-label">Per search</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Zero Results</h3>
+                    <div class="stat-value" id="zeroResults">0</div>
+                    <div class="stat-label">Searches with no results</div>
+                </div>
+                <div class="stat-card">
+                    <h3>LLM Success Rate</h3>
+                    <div class="stat-value" id="llmSuccessRate">0%</div>
+                    <div class="stat-label">Multi-query parsing</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Avg Execution</h3>
+                    <div class="stat-value" id="avgExecution">0ms</div>
+                    <div class="stat-label">Backend time</div>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <h2>
+                    <span>Top Queries</span>
+                    <button class="export-btn" onclick="exportSearches()">Export CSV</button>
+                </h2>
+                <table id="topQueriesTable">
+                    <thead>
+                        <tr>
+                            <th>Query</th>
+                            <th>Count</th>
+                            <th>Avg Results</th>
+                            <th>LLM Success</th>
+                            <th>Avg Time (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="table-card">
+                <h2>Recent Searches</h2>
+                <table id="recentSearchesTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Query</th>
+                            <th>Results</th>
+                            <th>Strategy</th>
+                            <th>Device</th>
+                            <th>Execution</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Feedback Tab -->
+        <div id="feedback" class="tab-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Thumbs Up</h3>
+                    <div class="stat-value" id="thumbsUpCount">0</div>
+                    <div class="stat-label" id="thumbsUpPercent">0%</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Thumbs Down</h3>
+                    <div class="stat-value" id="thumbsDownCount">0</div>
+                    <div class="stat-label" id="thumbsDownPercent">0%</div>
+                </div>
+                <div class="stat-card">
+                    <h3>With Comments</h3>
+                    <div class="stat-value" id="feedbackWithText">0</div>
+                    <div class="stat-label">Detailed feedback</div>
+                </div>
+                <div class="stat-card">
+                    <h3>With Categories</h3>
+                    <div class="stat-value" id="feedbackWithCategories">0</div>
+                    <div class="stat-label">Issue types selected</div>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <h2>
+                    <span>All Feedback</span>
+                    <button class="export-btn" onclick="exportFeedback()">Export CSV</button>
+                </h2>
+                <table id="feedbackTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Rating</th>
+                            <th>Property (ZPID)</th>
+                            <th>Query</th>
+                            <th>Categories</th>
+                            <th>Comments</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- User Journey Tab -->
+        <div id="user-journey" class="tab-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Sessions</h3>
+                    <div class="stat-value" id="totalSessions">0</div>
+                    <div class="stat-label">Unique visitors</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Avg Session Duration</h3>
+                    <div class="stat-value" id="avgSessionDuration">0m</div>
+                    <div class="stat-label">Time on site</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Avg Searches/Session</h3>
+                    <div class="stat-value" id="avgSearchesPerSession">0</div>
+                    <div class="stat-label">Query refinements</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Conversion Rate</h3>
+                    <div class="stat-value" id="conversionRate">0%</div>
+                    <div class="stat-label">Sessions with feedback</div>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <h2>Active Sessions</h2>
+                <table id="sessionsTable">
+                    <thead>
+                        <tr>
+                            <th>Session ID</th>
+                            <th>Start Time</th>
+                            <th>Duration</th>
+                            <th>Searches</th>
+                            <th>Feedback Given</th>
+                            <th>Device</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Properties Tab -->
+        <div id="properties" class="tab-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Properties Viewed</h3>
+                    <div class="stat-value" id="propertiesViewed">0</div>
+                    <div class="stat-label">Unique ZPIDs</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Properties with Feedback</h3>
+                    <div class="stat-value" id="propertiesWithFeedback">0</div>
+                    <div class="stat-label">Rated properties</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Highest Rated</h3>
+                    <div class="stat-value" id="highestRated">-</div>
+                    <div class="stat-label">Best ZPID</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Most Viewed</h3>
+                    <div class="stat-value" id="mostViewed">-</div>
+                    <div class="stat-label">Popular ZPID</div>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <h2>Property Performance</h2>
+                <table id="propertiesTable">
+                    <thead>
+                        <tr>
+                            <th>ZPID</th>
+                            <th>Appearances</th>
+                            <th>Thumbs Up</th>
+                            <th>Thumbs Down</th>
+                            <th>Net Score</th>
+                            <th>Common Issues</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Issues Tab -->
+        <div id="issues" class="tab-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Issues</h3>
+                    <div class="stat-value" id="issuesTotal">0</div>
+                    <div class="stat-label">Bug reports</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Search Errors</h3>
+                    <div class="stat-value" id="issuesSearchError">0</div>
+                    <div class="stat-label">Search not working</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Wrong Results</h3>
+                    <div class="stat-value" id="issuesWrongResults">0</div>
+                    <div class="stat-label">Quality issues</div>
+                </div>
+                <div class="stat-card">
+                    <h3>UI Bugs</h3>
+                    <div class="stat-value" id="issuesUIBug">0</div>
+                    <div class="stat-label">Display issues</div>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <h2>
+                    <span>Bug Reports</span>
+                    <button class="export-btn" onclick="exportIssues()">Export CSV</button>
+                </h2>
+                <table id="issuesTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Last Query</th>
+                            <th>Device</th>
+                            <th>Errors</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ANALYTICS_ENDPOINT = 'https://f2o144zh31.execute-api.us-east-1.amazonaws.com/production';
+        const REFRESH_INTERVAL = 10000; // 10 seconds
+        let charts = {};
+        let refreshTimer = null;
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+        }
+
+        // Initialize
+        async function init() {
+            await loadAllData();
+            startAutoRefresh();
+        }
+
+        function startAutoRefresh() {
+            refreshTimer = setInterval(async () => {
+                await loadAllData();
+                updateLastRefreshTime();
+            }, REFRESH_INTERVAL);
+        }
+
+        function updateLastRefreshTime() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent =
+                `Last update: ${now.toLocaleTimeString()}`;
+        }
+
+        async function loadAllData() {
+            try {
+                await Promise.all([
+                    loadOverview(),
+                    loadSearchQuality(),
+                    loadFeedback(),
+                    loadUserJourney(),
+                    loadProperties(),
+                    loadIssues()
+                ]);
+                updateLastRefreshTime();
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        // Load Overview data
+        async function loadOverview() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/overview`);
+            const data = await response.json();
+
+            document.getElementById('totalSearches').textContent = data.total_searches || 0;
+            document.getElementById('activeSessions').textContent = data.active_sessions || 0;
+            document.getElementById('totalFeedback').textContent = data.total_feedback || 0;
+            document.getElementById('totalIssues').textContent = data.total_issues || 0;
+
+            // Load charts
+            await loadSearchesChart();
+            await loadFeedbackChart();
+            await loadRecentActivity();
+        }
+
+        async function loadSearchesChart() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/searches-over-time`);
+            const data = await response.json();
+
+            if (charts.searchesChart) {
+                charts.searchesChart.destroy();
+            }
+
+            const ctx = document.getElementById('searchesChart').getContext('2d');
+            charts.searchesChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [{
+                        label: 'Searches',
+                        data: data.values || [],
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        async function loadFeedbackChart() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/feedback-summary`);
+            const data = await response.json();
+
+            if (charts.feedbackChart) {
+                charts.feedbackChart.destroy();
+            }
+
+            const ctx = document.getElementById('feedbackChart').getContext('2d');
+            charts.feedbackChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Thumbs Up', 'Thumbs Down'],
+                    datasets: [{
+                        data: [data.thumbs_up || 0, data.thumbs_down || 0],
+                        backgroundColor: ['#4CAF50', '#f44336']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        async function loadRecentActivity() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/recent-activity`);
+            const data = await response.json();
+
+            const tbody = document.querySelector('#recentActivityTable tbody');
+            tbody.innerHTML = '';
+
+            if (!data.activities || data.activities.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">No recent activity</td></tr>';
+                return;
+            }
+
+            data.activities.forEach(activity => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${formatTime(activity.timestamp)}</td>
+                    <td><span class="badge badge-info">${activity.type}</span></td>
+                    <td>${escapeHtml(activity.description)}</td>
+                    <td>${activity.device_type || 'unknown'}</td>
+                    <td style="font-family: monospace; font-size: 12px;">${activity.session_id?.substring(0, 8)}...</td>
+                `;
+            });
+        }
+
+        // Load Search Quality data
+        async function loadSearchQuality() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/search-quality`);
+            const data = await response.json();
+
+            document.getElementById('avgResults').textContent = data.avg_results?.toFixed(1) || 0;
+            document.getElementById('zeroResults').textContent = data.zero_results || 0;
+            document.getElementById('llmSuccessRate').textContent = `${data.llm_success_rate || 0}%`;
+            document.getElementById('avgExecution').textContent = `${data.avg_execution_time || 0}ms`;
+
+            // Load tables
+            await loadTopQueries();
+            await loadRecentSearches();
+        }
+
+        async function loadTopQueries() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/top-queries`);
+            const data = await response.json();
+
+            const tbody = document.querySelector('#topQueriesTable tbody');
+            tbody.innerHTML = '';
+
+            if (!data.queries || data.queries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">No queries yet</td></tr>';
+                return;
+            }
+
+            data.queries.forEach(query => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${escapeHtml(query.search_query)}</td>
+                    <td>${query.count}</td>
+                    <td>${query.avg_results?.toFixed(1) || 0}</td>
+                    <td>${query.llm_success_rate}%</td>
+                    <td>${query.avg_time_ms || 0}</td>
+                `;
+            });
+        }
+
+        async function loadRecentSearches() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/recent-searches`);
+            const data = await response.json();
+
+            const tbody = document.querySelector('#recentSearchesTable tbody');
+            tbody.innerHTML = '';
+
+            if (!data.searches || data.searches.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No searches yet</td></tr>';
+                return;
+            }
+
+            data.searches.forEach(search => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${formatTime(search.timestamp)}</td>
+                    <td>${escapeHtml(search.search_query)}</td>
+                    <td>${search.total_results || 0}</td>
+                    <td>${search.search_strategy || 'unknown'}</td>
+                    <td>${search.device_type || 'unknown'}</td>
+                    <td>${search.execution_time_ms || 0}ms</td>
+                `;
+            });
+        }
+
+        // Load Feedback data
+        async function loadFeedback() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/feedback-details`);
+            const data = await response.json();
+
+            document.getElementById('thumbsUpCount').textContent = data.thumbs_up || 0;
+            document.getElementById('thumbsUpPercent').textContent = `${data.thumbs_up_percent || 0}%`;
+            document.getElementById('thumbsDownCount').textContent = data.thumbs_down || 0;
+            document.getElementById('thumbsDownPercent').textContent = `${data.thumbs_down_percent || 0}%`;
+            document.getElementById('feedbackWithText').textContent = data.with_text || 0;
+            document.getElementById('feedbackWithCategories').textContent = data.with_categories || 0;
+
+            // Load feedback table
+            await loadFeedbackTable();
+        }
+
+        async function loadFeedbackTable() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/all-feedback`);
+            const data = await response.json();
+
+            const tbody = document.querySelector('#feedbackTable tbody');
+            tbody.innerHTML = '';
+
+            if (!data.feedback || data.feedback.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No feedback yet</td></tr>';
+                return;
+            }
+
+            data.feedback.forEach(fb => {
+                const row = tbody.insertRow();
+                const rating = fb.rating === 'up' ? '👍' : '👎';
+                const categories = fb.categories ?
+                    `<div class="feedback-categories">${fb.categories.map(c => `<span class="category-tag">${c}</span>`).join('')}</div>` :
+                    '-';
+
+                row.innerHTML = `
+                    <td>${formatTime(fb.timestamp)}</td>
+                    <td style="font-size: 20px;">${rating}</td>
+                    <td style="font-family: monospace;">${fb.zpid}</td>
+                    <td>${escapeHtml(fb.search_query)}</td>
+                    <td>${categories}</td>
+                    <td><div class="feedback-text" title="${escapeHtml(fb.feedback_text || '')}">${escapeHtml(fb.feedback_text || '-')}</div></td>
+                `;
+            });
+        }
+
+        // Load User Journey data
+        async function loadUserJourney() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/user-journey`);
+            const data = await response.json();
+
+            document.getElementById('totalSessions').textContent = data.total_sessions || 0;
+            document.getElementById('avgSessionDuration').textContent = `${data.avg_duration_minutes || 0}m`;
+            document.getElementById('avgSearchesPerSession').textContent = data.avg_searches_per_session?.toFixed(1) || 0;
+            document.getElementById('conversionRate').textContent = `${data.conversion_rate || 0}%`;
+
+            // Load sessions table
+            await loadSessionsTable();
+        }
+
+        async function loadSessionsTable() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/sessions`);
+            const data = await response.json();
+
+            const tbody = document.querySelector('#sessionsTable tbody');
+            tbody.innerHTML = '';
+
+            if (!data.sessions || data.sessions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No sessions yet</td></tr>';
+                return;
+            }
+
+            data.sessions.forEach(session => {
+                const row = tbody.insertRow();
+                const duration = session.duration_minutes || 0;
+                row.innerHTML = `
+                    <td style="font-family: monospace; font-size: 12px;">${session.session_id?.substring(0, 12)}...</td>
+                    <td>${formatTime(session.session_start)}</td>
+                    <td>${duration}m</td>
+                    <td>${session.search_count || 0}</td>
+                    <td>${session.feedback_count || 0}</td>
+                    <td>${session.device_type || 'unknown'}</td>
+                `;
+            });
+        }
+
+        // Load Properties data
+        async function loadProperties() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/properties`);
+            const data = await response.json();
+
+            document.getElementById('propertiesViewed').textContent = data.unique_properties || 0;
+            document.getElementById('propertiesWithFeedback').textContent = data.properties_with_feedback || 0;
+            document.getElementById('highestRated').textContent = data.highest_rated_zpid || '-';
+            document.getElementById('mostViewed').textContent = data.most_viewed_zpid || '-';
+
+            // Load properties table
+            await loadPropertiesTable();
+        }
+
+        async function loadPropertiesTable() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/property-performance`);
+            const data = await response.json();
+
+            const tbody = document.querySelector('#propertiesTable tbody');
+            tbody.innerHTML = '';
+
+            if (!data.properties || data.properties.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No property data yet</td></tr>';
+                return;
+            }
+
+            data.properties.forEach(prop => {
+                const row = tbody.insertRow();
+                const netScore = (prop.thumbs_up || 0) - (prop.thumbs_down || 0);
+                const issues = prop.common_issues ? prop.common_issues.join(', ') : '-';
+
+                row.innerHTML = `
+                    <td style="font-family: monospace;">${prop.zpid}</td>
+                    <td>${prop.appearances || 0}</td>
+                    <td style="color: #4CAF50;">${prop.thumbs_up || 0}</td>
+                    <td style="color: #f44336;">${prop.thumbs_down || 0}</td>
+                    <td style="font-weight: bold; color: ${netScore >= 0 ? '#4CAF50' : '#f44336'};">${netScore > 0 ? '+' : ''}${netScore}</td>
+                    <td>${issues}</td>
+                `;
+            });
+        }
+
+        // Load Issues data
+        async function loadIssues() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/issues-summary`);
+            const data = await response.json();
+
+            document.getElementById('issuesTotal').textContent = data.total || 0;
+            document.getElementById('issuesSearchError').textContent = data.search_error || 0;
+            document.getElementById('issuesWrongResults').textContent = data.wrong_results || 0;
+            document.getElementById('issuesUIBug').textContent = data.ui_bug || 0;
+
+            // Load issues table
+            await loadIssuesTable();
+        }
+
+        async function loadIssuesTable() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/all-issues`);
+            const data = await response.json();
+
+            const tbody = document.querySelector('#issuesTable tbody');
+            tbody.innerHTML = '';
+
+            if (!data.issues || data.issues.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No issues reported yet</td></tr>';
+                return;
+            }
+
+            data.issues.forEach(issue => {
+                const row = tbody.insertRow();
+                const errorCount = issue.console_errors?.length || 0;
+
+                row.innerHTML = `
+                    <td>${formatTime(issue.timestamp)}</td>
+                    <td><span class="badge badge-error">${issue.issue_type}</span></td>
+                    <td>${escapeHtml(issue.description)}</td>
+                    <td>${escapeHtml(issue.last_search_query || '-')}</td>
+                    <td>${issue.device_type || 'unknown'}</td>
+                    <td>${errorCount > 0 ? `<span class="badge badge-warning">${errorCount}</span>` : '-'}</td>
+                `;
+            });
+        }
+
+        // Export functions
+        async function exportSearches() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/export-searches`);
+            const csv = await response.text();
+            downloadCSV(csv, 'searches.csv');
+        }
+
+        async function exportFeedback() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/export-feedback`);
+            const csv = await response.text();
+            downloadCSV(csv, 'feedback.csv');
+        }
+
+        async function exportIssues() {
+            const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/export-issues`);
+            const csv = await response.text();
+            downloadCSV(csv, 'issues.csv');
+        }
+
+        function downloadCSV(csv, filename) {
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Utility functions
+        function formatTime(timestamp) {
+            if (!timestamp) return '-';
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize on load
+        window.addEventListener('load', init);
+
+        // Cleanup on unload
+        window.addEventListener('beforeunload', () => {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+            }
+        });
+    </script>
+</body>
+</html>

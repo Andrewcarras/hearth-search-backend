@@ -1,0 +1,112 @@
+🏛️  Quick Architectural Style Classification Test
+
+Fetching 10 cached images from DynamoDB...
+✓ Found 10 images
+
+
+======================================================================
+TEST 1/10
+======================================================================
+Image: https://photos.zillowstatic.com/fp/09af0951089569ae75c5e7c814afff6e-cc_ft_1536.j...
+  Raw response: This image does not depict the exterior of a house, but rather the interior of a bedroom. The architectural style of the room cannot be determined from this image alone. The image shows a cozy and wel
+  ⚠️  Non-JSON response, skipping
+
+======================================================================
+TEST 2/10
+======================================================================
+Image: https://photos.zillowstatic.com/fp/15726531cbacd514bee51375e94de50e-cc_ft_1536.j...
+  Raw response: The image does not show the exterior of a house, but rather the interior of a kitchen and dining area. Based on the modern appliances, cabinetry, and overall clean, minimalist design, the architectura
+  ⚠️  Non-JSON response, skipping
+
+======================================================================
+TEST 3/10
+======================================================================
+Image: https://photos.zillowstatic.com/fp/a5dc29ac90f3a448d303b3cd2147651d-cc_ft_1536.j...
+  Raw response: {
+  "style": "ranch",
+  "confidence": 0.9,
+  "reasoning": "The house in the image has the characteristic features of a ranch-style home, including a single-story layout, low-pitched roof, and wide, ho
+
+🏛️  RESULT:
+  Style: ranch
+  Confidence: 0.90
+  Reasoning: The house in the image has the characteristic features of a ranch-style home, including a single-story layout, low-pitched roof, and wide, horizontal profile that blends with the surrounding landscape. The overall design and architectural elements are consistent with the ranch style.
+
+======================================================================
+TEST 4/10
+======================================================================
+Image: https://photos.zillowstatic.com/fp/1b7875f2d0e3df19d9764dd2f715eeae-cc_ft_1536.j...
+  Raw response: {
+  "style": "craftsman",
+  "confidence": 0.9,
+  "reasoning": "The house in the image exhibits several key features of the Craftsman architectural style, including the prominent brick exterior, low-pi
+
+🏛️  RESULT:
+  Style: craftsman
+  Confidence: 0.90
+  Reasoning: The house in the image exhibits several key features of the Craftsman architectural style, including the prominent brick exterior, low-pitched roof, wide overhanging eaves, and the arched entryway. The landscaping with the lush garden and well-manicured lawn also contribute to the Craftsman aesthetic.
+
+======================================================================
+TEST 5/10
+======================================================================
+Image: https://photos.zillowstatic.com/fp/0a9ea274f1c749b451303c70fc8c4088-cc_ft_1536.j...
+  Raw response: The image does not show the exterior of a house, but rather the interior of a room, specifically a closet or storage area. There are no architectural features visible that would allow me to identify t
+  ⚠️  Non-JSON response, skipping
+
+======================================================================
+TEST 6/10
+======================================================================
+Image: https://photos.zillowstatic.com/fp/70e0fc00396235596b8f5739c202167d-cc_ft_1536.j...
+  Raw response: The architectural style of this house interior appears to be modern. The key features that suggest this are:
+
+JSON:
+{
+  "style": "modern",
+  "confidence": 0.85,
+  "reasoning": "The clean lines, minima
+  ⚠️  Non-JSON response, skipping
+
+======================================================================
+TEST 7/10
+======================================================================
+Image: https://photos.zillowstatic.com/fp/139124cea9ccf1b9955fdec0de433cbc-cc_ft_1536.j...
+  Raw response: The image does not show the exterior of a house, but rather the interior of a kitchen and dining area. Based on the design elements visible, such as the wooden cabinets, tile flooring, and modern ligh
+  ⚠️  Non-JSON response, skipping
+
+======================================================================
+TEST 8/10
+======================================================================
+Image: https://photos.zillowstatic.com/fp/35277e78118b84e4284aac05081e34c9-cc_ft_1536.j...
+  Raw response: The image does not show the exterior of a house, but rather the interior of a room. The room appears to have a minimalist, modern design aesthetic with clean lines, white walls, and built-in shelving 
+  ⚠️  Non-JSON response, skipping
+
+======================================================================
+TEST 9/10
+======================================================================
+Image: https://photos.zillowstatic.com/fp/345f60a3d7531e7eb1d5b97c51d3a27b-cc_ft_1536.j...
+  Raw response: The architectural style of this bathroom interior appears to be modern. The clean, minimalist design with the white subway tile walls, black fixtures, and built-in storage cabinet are characteristic o
+  ⚠️  Non-JSON response, skipping
+
+======================================================================
+TEST 10/10
+======================================================================
+Image: https://photos.zillowstatic.com/fp/4bb0bdc0f31f27e5ffad02a37374623c-cc_ft_1536.j...
+  Raw response: This image does not show the exterior of a house, but rather the interior of a bedroom or living space. The room appears to have a modern or contemporary design aesthetic, with a large flat-screen TV,
+  ⚠️  Non-JSON response, skipping
+
+
+======================================================================
+📊 SUMMARY
+======================================================================
+
+✅ Successful: 2/2
+
+Styles detected:
+  ranch: 1
+  craftsman: 1
+
+Average confidence: 0.90
+
+✓ Test complete!
+Cost: ~$0.0022
+

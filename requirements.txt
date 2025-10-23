@@ -1,0 +1,6 @@
+boto3==1.34.133
+opensearch-py==2.6.0
+requests==2.32.3
+requests-aws4auth==1.2.3
+anthropic==0.34.0
+flask==3.0.0

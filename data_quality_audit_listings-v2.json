@@ -1,0 +1,171 @@
+{
+  "index": "listings-v2",
+  "audit_date": "2025-10-17",
+  "index_stats": {
+    "total_documents": 3902,
+    "index_size_bytes": 848344599,
+    "index_size_mb": 809.04
+  },
+  "embedding_stats": {
+    "total_sampled": 50,
+    "has_text_vector": 50,
+    "has_image_vectors": 32,
+    "has_valid_embeddings_flag": 50,
+    "text_vector_dim": 1024,
+    "image_vector_dim": 1024,
+    "zero_text_vectors": [],
+    "zero_image_vectors": [],
+    "missing_embeddings": [],
+    "pct_has_text_vector": 100.0,
+    "pct_has_image_vectors": 64.0,
+    "pct_has_valid_embeddings": 100.0,
+    "avg_image_vectors_per_doc": 38.5,
+    "min_image_vectors": 6,
+    "max_image_vectors": 92
+  },
+  "text_stats": {
+    "total_sampled": 50,
+    "has_description": 50,
+    "has_visual_features": 35,
+    "has_llm_profile": 0,
+    "short_descriptions": [
+      {
+        "zpid": "456027144",
+        "length": 45,
+        "text": "Property at 310 E 500 S in Salt Lake City, UT"
+      }
+    ],
+    "missing_description": [],
+    "examples": [
+      {
+        "zpid": "448383785",
+        "description": "This Mobile Home is located in the All-Seasons 55+ Community!!  This home has 2 bedrooms, 1 full bathroom. Plenty of parking with a double carport and",
+        "visual_features": "Exterior: ranch style beige exterior with vinyl siding, metal siding. Interior features: wood cabinets, tile floors, stainless steel appliances, kitch",
+        "has_description_flag": true
+      },
+      {
+        "zpid": "12770115",
+        "description": "1150 East - \"The Art House\"  A rare World War Iera home blending historic character with modern comfort. Recent, tasteful renovations have refreshed e",
+        "visual_features": "Exterior: craftsman style red exterior with wood siding, brick, wood. Interior features: hardwood floors, large windows, gray walls, stainless steel a",
+        "has_description_flag": true
+      },
+      {
+        "zpid": "12659389",
+        "description": "Tucked into a quiet cul-de-sac just minutes from Salt Lake City, this fully finished split-entry home offers comfort and convenience. Enjoy a spacious",
+        "visual_features": "Exterior: modern style gray exterior with wood siding, brick, stone. Interior features: gray walls, granite countertops, white cabinets, stainless ste",
+        "has_description_flag": true
+      },
+      {
+        "zpid": "12738520",
+        "description": "Welcome to this stunning fully renovated bungalow in the heart of Salt Lake City, Utah! This charming home boasts a modern open floor plan, enhanced w",
+        "visual_features": "Exterior: modern style white exterior with wood siding, vinyl siding. Interior features: white walls, recessed lighting, gray carpet flooring, stainle",
+        "has_description_flag": true
+      },
+      {
+        "zpid": "12659449",
+        "description": "Welcome home to this beautiful remodel in North Salt Lake. 4 bedrooms, 3 bathrooms a gym and attached garage. Vaulted ceilings and an open layout to t",
+        "visual_features": "Exterior: modern style white exterior with wood siding, vinyl siding, metal roofing. Interior features: stainless steel appliances, white cabinets, ha",
+        "has_description_flag": true
+      }
+    ],
+    "pct_has_description": 100.0,
+    "pct_has_visual_features": 70.0,
+    "pct_has_llm_profile": 0.0,
+    "avg_description_length": 1049.3,
+    "min_description_length": 45,
+    "max_description_length": 2521,
+    "avg_visual_features_length": 471.4
+  },
+  "tag_stats": {
+    "total_sampled": 100,
+    "pct_has_image_tags": 70.0,
+    "pct_has_architecture_style": 69.0,
+    "avg_image_tags": 196.6,
+    "top_image_tags": {
+      "stainless steel appliances": 69,
+      "tile": 69,
+      "wood": 69,
+      "landscaped yard": 68,
+      "mature trees": 68,
+      "bright and airy": 68,
+      "hardwood floors": 68,
+      "recessed lighting": 68,
+      "large windows": 67,
+      "covered porch": 66,
+      "granite countertops": 66,
+      "lots of natural light": 66,
+      "open floor plan": 66,
+      "white exterior": 65,
+      "white_exterior": 65,
+      "white walls": 65,
+      "gabled roof": 64,
+      "kitchen island": 64,
+      "tile floors": 64,
+      "breakfast bar": 63
+    },
+    "top_architecture_styles": {
+      "modern": 22,
+      "craftsman": 18,
+      "ranch": 13,
+      "traditional": 7,
+      "contemporary": 5,
+      "mediterranean": 1,
+      "cottage": 1,
+      "farmhouse": 1,
+      "rustic": 1
+    }
+  },
+  "metadata_stats": {
+    "total_sampled": 100,
+    "has_price": 70,
+    "has_bedrooms": 69,
+    "has_bathrooms": 70,
+    "has_living_area": 62,
+    "has_address": 100,
+    "has_city": 100,
+    "has_state": 100,
+    "has_zip": 100,
+    "has_geo": 100,
+    "has_images": 70,
+    "status_distribution": {
+      "active": 100
+    },
+    "price_ranges": {
+      "< $200k": 10,
+      "$600k-$1M": 18,
+      "$400k-$600k": 12,
+      "$200k-$400k": 12,
+      "> $1M": 18
+    },
+    "bedroom_counts": {
+      "2": 15,
+      "4": 26,
+      "3": 8,
+      "5": 13,
+      "6": 3,
+      "1": 4
+    },
+    "pct_has_price": 70.0,
+    "pct_has_bedrooms": 69.0,
+    "pct_has_bathrooms": 70.0,
+    "pct_has_living_area": 62.0,
+    "pct_has_address": 100.0,
+    "pct_has_city": 100.0,
+    "pct_has_state": 100.0,
+    "pct_has_zip": 100.0,
+    "pct_has_geo": 100.0,
+    "pct_has_images": 70.0,
+    "avg_images_per_listing": 36.8,
+    "min_images": 6,
+    "max_images": 105
+  },
+  "quality_scores": {
+    "embedding_quality": 250.0,
+    "text_quality": 82.0,
+    "tag_quality": 69.7,
+    "metadata_quality": 80.3,
+    "overall_quality": 138.0,
+    "searchable_pct": 100.0,
+    "quality_grade": "A"
+  }
+}

@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Query Search Comparison - Hearth Search</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Open Sans', sans-serif;
+            background: #f7f8fa;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #006aff 0%, #0056cc 100%);
+            color: white;
+            padding: 25px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header-content {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .header h1 { font-size: 2em; margin-bottom: 8px; }
+        .header p { font-size: 1em; opacity: 0.95; }
+
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+
+        .search-card {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+
+        .search-box input[type="text"] {
+            width: 100%;
+            padding: 14px 18px;
+            font-size: 15px;
+            border: 2px solid #d8d8d8;
+            border-radius: 6px;
+            transition: border-color 0.2s;
+        }
+
+        .search-box input[type="text"]:focus {
+            outline: none;
+            border-color: #006aff;
+        }
+
+        .search-button {
+            width: 100%;
+            background: linear-gradient(135deg, #006aff 0%, #0056cc 100%);
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: transform 0.2s;
+        }
+
+        .search-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,106,255,0.3);
+        }
+
+        .search-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .results-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            min-width: 0; /* Prevent grid blowout */
+        }
+
+        .results-section h2 {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .mode-standard h2 { color: #006aff; }
+        .mode-multiquery h2 { color: #00a86b; }
+
+        .results-stats {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .stat-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .stat-value {
+            color: #333;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+
+        .property-card {
+            background: white;
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            overflow: hidden;
+            transition: box-shadow 0.2s;
+            cursor: pointer;
+            max-width: 100%;
+        }
+
+        .property-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .property-image {
+            width: 100%;
+            height: 280px;
+            object-fit: cover;
+            object-position: center;
+            background: #f0f0f0;
+            display: block;
+        }
+
+        .property-info {
+            padding: 15px;
+        }
+
+        .property-rank {
+            display: inline-block;
+            background: #006aff;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .mode-multiquery .property-rank {
+            background: #00a86b;
+        }
+
+        .property-address {
+            font-size: 15px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 6px;
+        }
+
+        .property-price {
+            font-size: 18px;
+            font-weight: 700;
+            color: #006aff;
+            margin-bottom: 8px;
+        }
+
+        .property-details {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .property-score {
+            font-size: 13px;
+            color: #333;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-weight: 600;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background: rgba(0,0,0,0.7);
+        }
+        .modal-content {
+            background: white;
+            margin: 30px auto;
+            padding: 0;
+            max-width: 900px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            padding: 25px;
+            border-bottom: 1px solid #e8e8e8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 {
+            font-size: 1.5em;
+            color: #2a2a2a;
+        }
+        .close {
+            font-size: 32px;
+            font-weight: 300;
+            color: #999;
+            cursor: pointer;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+        .close:hover {
+            color: #333;
+        }
+        .modal-body {
+            padding: 25px;
+        }
+        .image-gallery {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .gallery-main {
+            width: 100%;
+            height: 400px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        .gallery-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.9);
+            border: none;
+            font-size: 32px;
+            padding: 12px 18px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .gallery-nav:hover {
+            background: white;
+        }
+        .gallery-prev { left: 10px; }
+        .gallery-next { right: 10px; }
+        .gallery-counter {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 14px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .gallery-thumbnails {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 10px 0;
+        }
+        .gallery-thumbnail {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .gallery-thumbnail.active {
+            border-color: #006aff;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .detail-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+        }
+        .detail-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .detail-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2a2a2a;
+        }
+        .score-breakdown-btn {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 12px 24px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .score-breakdown-btn:hover {
+            background: #218838;
+        }
+        .back-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: background 0.2s;
+            margin-right: 10px;
+        }
+        .back-button:hover {
+            background: #5a6268;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .feature-tag {
+            background: #e3f2ff;
+            color: #006aff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .zillow-btn {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 12px 24px;
+            background: #006aff;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .zillow-btn:hover {
+            background: #0056cc;
+        }
+
+        .sub-queries-info {
+            background: #e8f4fd;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+
+        .sub-query-item {
+            margin: 6px 0;
+            padding: 6px;
+            background: white;
+            border-radius: 4px;
+        }
+
+        .sub-query-text {
+            font-weight: 600;
+            color: #00a86b;
+        }
+
+        .sub-query-meta {
+            color: #666;
+            font-size: 12px;
+            margin-top: 3px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .example-queries {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .example-queries h3 {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        .example-query {
+            display: inline-block;
+            background: white;
+            border: 1px solid #ddd;
+            padding: 6px 12px;
+            border-radius: 4px;
+            margin: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .example-query:hover {
+            background: #006aff;
+            color: white;
+            border-color: #006aff;
+        }
+
+        @media (max-width: 1200px) {
+            .comparison-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .property-image {
+                height: 240px;
+            }
+
+            .property-card {
+                margin-bottom: 12px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .property-image {
+                height: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>🔀 Multi-Query Search Comparison</h1>
+            <p>Compare standard single-embedding search vs LLM-based multi-query splitting for multi-feature queries</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="search-card">
+            <a href="search.html" class="back-button">← Back to Main Search</a>
+            <div class="search-box" style="margin-top: 15px;">
+                <input
+                    type="text"
+                    id="searchQuery"
+                    placeholder="Try: 'White houses with granite countertops and wood floors'"
+                    value="White houses with granite countertops and wood floors"
+                />
+            </div>
+            <button class="search-button" id="searchBtn">🔍 Compare Search Methods</button>
+
+            <div class="example-queries">
+                <h3>Try these multi-feature queries:</h3>
+                <span class="example-query" onclick="setQuery('White houses with granite countertops and wood floors')">White houses with granite + wood floors</span>
+                <span class="example-query" onclick="setQuery('Blue house with hardwood floors')">Blue house + hardwood</span>
+                <span class="example-query" onclick="setQuery('Modern home with pool and chef kitchen')">Modern + pool + chef kitchen</span>
+                <span class="example-query" onclick="setQuery('Gray exterior with marble countertops')">Gray exterior + marble</span>
+            </div>
+        </div>
+
+        <div class="comparison-grid">
+            <!-- Standard Search Results -->
+            <div class="results-section mode-standard">
+                <h2>📊 Standard Search (Current System)</h2>
+                <div id="standardResults">
+                    <p style="color: #888; text-align: center; padding: 40px;">
+                        Enter a query and click search to compare results
+                    </p>
+                </div>
+            </div>
+
+            <!-- Multi-Query Search Results -->
+            <div class="results-section mode-multiquery">
+                <h2>🔀 Multi-Query Search (LLM Split)</h2>
+                <div id="multiQueryResults">
+                    <p style="color: #888; text-align: center; padding: 40px;">
+                        Enter a query and click search to compare results
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const LAMBDA_URL = 'https://f2o144zh31.execute-api.us-east-1.amazonaws.com/search';
+        const LAMBDA_DETAILED_URL = 'https://qz7qstyzzqracgry5iq6ehiy540reeqx.lambda-url.us-east-1.on.aws/';
+
+        function setQuery(query) {
+            document.getElementById('searchQuery').value = query;
+        }
+
+        /**
+         * Normalize RRF scores to 0-100 scale for UI display
+         * Based on typical max RRF score of ~0.07
+         */
+        function normalizeScore(rawScore) {
+            const MAX_RRF_SCORE = 0.07;
+            const normalized = (rawScore / MAX_RRF_SCORE) * 100;
+            return Math.min(100, Math.max(0, normalized));
+        }
+
+        function formatNormalizedScore(rawScore) {
+            const normalized = normalizeScore(rawScore);
+            return Math.round(normalized);
+        }
+
+        async function runSearch() {
+            const query = document.getElementById('searchQuery').value.trim();
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            // Store query globally for score breakdown
+            window.currentQuery = query;
+
+            const searchBtn = document.getElementById('searchBtn');
+            searchBtn.disabled = true;
+            searchBtn.textContent = '⏳ Searching...';
+
+            document.getElementById('standardResults').innerHTML = '<div class="loading">Searching...</div>';
+            document.getElementById('multiQueryResults').innerHTML = '<div class="loading">Searching...</div>';
+
+            try {
+                // Run both searches in parallel
+                const [standardResult, multiQueryResult] = await Promise.all([
+                    searchWithMode(query, false),
+                    searchWithMode(query, true)
+                ]);
+
+                displayResults('standardResults', standardResult, false);
+                displayResults('multiQueryResults', multiQueryResult, true);
+
+            } catch (error) {
+                console.error('Search error:', error);
+                document.getElementById('standardResults').innerHTML =
+                    `<div class="error">Error: ${error.message}</div>`;
+                document.getElementById('multiQueryResults').innerHTML =
+                    `<div class="error">Error: ${error.message}</div>`;
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = '🔍 Compare Search Methods';
+            }
+        }
+
+        async function searchWithMode(query, useMultiQuery) {
+            const startTime = performance.now();
+
+            const response = await fetch(LAMBDA_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    q: query,
+                    size: 10,
+                    index: 'listings-v2',
+                    use_multi_query: useMultiQuery,
+                    strategy: 'hybrid'
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            const endTime = performance.now();
+            const latency = Math.round(endTime - startTime);
+
+            return {
+                data: data,
+                latency: latency,
+                useMultiQuery: useMultiQuery
+            };
+        }
+
+        // Global storage for results
+        window.standardResults = [];
+        window.multiQueryResults = [];
+        window.currentQuery = '';
+
+        function displayResults(containerId, result, isMultiQuery) {
+            const container = document.getElementById(containerId);
+            const data = result.data;
+            const results = data.results || [];
+
+            // Store results globally for modal access
+            if (isMultiQuery) {
+                window.multiQueryResults = results;
+            } else {
+                window.standardResults = results;
+            }
+
+            let html = '';
+
+            // Stats section
+            html += '<div class="results-stats">';
+            html += `<div class="stat-row"><span class="stat-label">Latency:</span><span class="stat-value">${result.latency}ms</span></div>`;
+            html += `<div class="stat-row"><span class="stat-label">Results:</span><span class="stat-value">${results.length} properties</span></div>`;
+            if (data.debug_info) {
+                html += `<div class="stat-row"><span class="stat-label">Mode:</span><span class="stat-value">${isMultiQuery ? 'Multi-Query' : 'Standard'}</span></div>`;
+            }
+            html += '</div>';
+
+            // Sub-queries info (multi-query only)
+            if (isMultiQuery && data.debug_info && data.debug_info.sub_queries) {
+                html += '<div class="sub-queries-info">';
+                html += '<strong>Sub-Queries Generated:</strong>';
+                data.debug_info.sub_queries.forEach(sq => {
+                    html += `<div class="sub-query-item">`;
+                    html += `<div class="sub-query-text">"${sq.query}"</div>`;
+                    html += `<div class="sub-query-meta">Feature: ${sq.feature} | Weight: ${sq.weight}x | Strategy: ${sq.search_strategy}</div>`;
+                    html += `</div>`;
+                });
+                html += '</div>';
+            }
+
+            // Property results
+            if (results.length === 0) {
+                html += '<p style="color: #888; text-align: center; padding: 20px;">No results found</p>';
+            } else {
+                results.forEach((property, index) => {
+                    const rank = index + 1;
+                    const address = property.address?.streetAddress || 'Address not available';
+                    const city = property.address?.city || '';
+                    const state = property.address?.state || '';
+                    const price = property.price ? `$${property.price.toLocaleString()}` : 'Price not available';
+                    const beds = property.bedrooms || '?';
+                    const baths = property.bathrooms || '?';
+                    const sqft = property.livingArea || '?';
+                    const score = property.score || 0;
+                    const scoreDisplay = formatNormalizedScore(score);
+                    // Get thumbnail image from multiple possible sources
+                    let imageUrl = '';
+                    if (property.responsivePhotos && property.responsivePhotos.length > 0) {
+                        // Try to get the first image from responsivePhotos
+                        const firstPhoto = property.responsivePhotos[0];
+                        imageUrl = firstPhoto.mixedSources?.jpeg?.[0]?.url || '';
+                    }
+                    if (!imageUrl && property.images && property.images.length > 0) {
+                        imageUrl = property.images[0];
+                    }
+                    if (!imageUrl && property.imgSrc) {
+                        imageUrl = property.imgSrc;
+                    }
+                    const zpid = property.zpid || index;
+
+                    html += `<div class="property-card" onclick='showPropertyDetails(${index}, "${isMultiQuery ? 'multi' : 'standard'}")'>`;
+                    // Always show an image - either actual photo or placeholder
+                    const placeholderSVG = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22%3E%3Crect fill=%22%23f0f0f0%22 width=%22800%22 height=%22600%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2224%22 font-family=%22Arial%22%3ENo Image Available%3C/text%3E%3C/svg%3E';
+                    const displayImage = imageUrl || placeholderSVG;
+                    html += `<img src="${displayImage}" alt="${address}" class="property-image" onerror="this.src='${placeholderSVG}'">`;
+
+                    html += `<div class="property-info">`;
+                    html += `<span class="property-rank">#${rank}</span>`;
+                    html += `<div class="property-address">${address}</div>`;
+                    html += `<div style="font-size: 14px; color: #666; margin-bottom: 8px;">${city}, ${state}</div>`;
+                    html += `<div class="property-price">${price}</div>`;
+                    html += `<div class="property-details">${beds} beds • ${baths} baths • ${sqft} sqft</div>`;
+                    html += `<div class="property-score">Score: ${scoreDisplay}/100${property.boosted ? ' ⭐' : ''}</div>`;
+                    html += `</div>`;
+                    html += `</div>`;
+                });
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Load query from URL parameter if present
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const queryParam = urlParams.get('q');
+            if (queryParam) {
+                document.getElementById('searchQuery').value = queryParam;
+                // Auto-run search if query was provided
+                runSearch();
+            }
+        });
+
+        // Property modal handling
+        let currentProperty = null;
+        let currentImageIndex = 0;
+        let currentMode = 'standard';
+
+        function showPropertyDetails(index, mode) {
+            currentMode = mode;
+            const results = mode === 'multi' ? window.multiQueryResults : window.standardResults;
+            currentProperty = results[index];
+            currentImageIndex = 0;
+
+            const modal = document.getElementById('propertyModal');
+
+            // Set address with ZPID
+            const address = currentProperty.address?.streetAddress || currentProperty.address || 'Property Details';
+            const zpid = currentProperty.zpid || currentProperty.id || 'Unknown';
+            document.getElementById('modalAddress').innerHTML = `${address} <small style="color: #888;">(ZPID: ${zpid})</small>`;
+
+            // Build images array
+            let images = [];
+            if (currentProperty.responsivePhotos && currentProperty.responsivePhotos.length > 0) {
+                images = currentProperty.responsivePhotos.map(photo =>
+                    photo.mixedSources?.jpeg?.[0]?.url || ''
+                ).filter(url => url);
+            } else if (currentProperty.images && currentProperty.images.length > 0) {
+                images = currentProperty.images;
+            }
+
+            if (images.length === 0) {
+                images = ['data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22%3E%3Crect fill=%22%23f0f0f0%22 width=%22800%22 height=%22600%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2224%22%3ENo Images Available%3C/text%3E%3C/svg%3E'];
+            }
+
+            window.currentImages = images;
+            updateModalImage();
+
+            // Build thumbnails
+            const thumbsHtml = images.map((img, i) =>
+                `<img src="${img}" class="gallery-thumbnail ${i === 0 ? 'active' : ''}" onclick="setImageIndex(${i})" alt="Thumbnail ${i+1}">`
+            ).join('');
+            document.getElementById('thumbnails').innerHTML = thumbsHtml;
+
+            // Stats
+            const bedrooms = currentProperty.bedrooms || currentProperty.beds || 'N/A';
+            const bathrooms = currentProperty.bathrooms || currentProperty.baths || 'N/A';
+            const price = currentProperty.price || 'N/A';
+            const acreage = currentProperty.livingArea || currentProperty.acreage || 'N/A';
+            const yearBuilt = currentProperty.yearBuilt || 'N/A';
+
+            document.getElementById('modalStats').innerHTML = `
+                <div class="detail-item">
+                    <div class="detail-label">Price</div>
+                    <div class="detail-value">$${price.toLocaleString ? price.toLocaleString() : price}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Bedrooms</div>
+                    <div class="detail-value">${bedrooms}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Bathrooms</div>
+                    <div class="detail-value">${bathrooms}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Square Feet</div>
+                    <div class="detail-value">${acreage.toLocaleString ? acreage.toLocaleString() : acreage}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Year Built</div>
+                    <div class="detail-value">${yearBuilt}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Match Score</div>
+                    <div class="detail-value">${formatNormalizedScore(currentProperty.score)}/100${currentProperty.boosted ? ' ⭐' : ''}</div>
+                </div>
+            `;
+
+            // Description
+            const description = currentProperty.description || 'No description available.';
+            document.getElementById('modalDescription').textContent = description;
+
+            // Features
+            let featuresHtml = '';
+            if (currentProperty.feature_tags && currentProperty.feature_tags.length > 0) {
+                featuresHtml = '<h3>Features</h3><div class="features-grid">';
+                currentProperty.feature_tags.forEach(tag => {
+                    featuresHtml += '<div class="feature-tag">' + tag.replace(/_/g, ' ') + '</div>';
+                });
+                featuresHtml += '</div>';
+            }
+            if (currentProperty.architecture_style) {
+                if (!featuresHtml) featuresHtml = '<h3>Additional Info</h3>';
+                featuresHtml += '<p style="margin-top:15px;"><strong>Architecture Style:</strong> ' +
+                    currentProperty.architecture_style.replace(/_/g, ' ') + '</p>';
+            }
+            document.getElementById('modalFeatures').innerHTML = featuresHtml;
+
+            // Zillow link and action buttons
+            const zillowUrl = currentProperty.hdpUrl ?
+                'https://www.zillow.com' + currentProperty.hdpUrl :
+                'https://www.zillow.com/homedetails/' + currentProperty.zpid + '_zipid/';
+            let actionsHTML = `<div style="display:flex;gap:10px;margin-bottom:20px;">
+                <button onclick="deleteListing('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#dc3545;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">🗑️ Delete Listing</button>
+                <button onclick="editListing('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#ffc107;color:#000;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✏️ Edit Listing</button>
+                <button onclick="markAsSold('${currentProperty.zpid}')" style="flex:1;padding:12px;background:#28a745;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">✓ Mark as Sold</button>
+            </div>`;
+
+            // Always show score breakdown button (fetches data on demand from debug endpoint)
+            actionsHTML += `<button onclick="showScoreBreakdown()" class="score-breakdown-btn">📊 View Detailed Score Breakdown</button><br>`;
+
+            actionsHTML += `<a href="${zillowUrl}" target="_blank" class="zillow-btn">View Full Details on Zillow →</a>`;
+
+            document.getElementById('modalActions').innerHTML = actionsHTML;
+
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function updateModalImage() {
+            const img = document.getElementById('modalMainImage');
+            img.src = window.currentImages[currentImageIndex];
+            document.getElementById('imageCounter').textContent =
+                `${currentImageIndex + 1} / ${window.currentImages.length}`;
+
+            // Update thumbnail active state
+            document.querySelectorAll('.gallery-thumbnail').forEach((thumb, i) => {
+                thumb.classList.toggle('active', i === currentImageIndex);
+            });
+        }
+
+        function previousImage() {
+            currentImageIndex = (currentImageIndex - 1 + window.currentImages.length) % window.currentImages.length;
+            updateModalImage();
+        }
+
+        function nextImage() {
+            currentImageIndex = (currentImageIndex + 1) % window.currentImages.length;
+            updateModalImage();
+        }
+
+        function setImageIndex(index) {
+            currentImageIndex = index;
+            updateModalImage();
+        }
+
+        function closeModal() {
+            document.getElementById('propertyModal').style.display = 'none';
+            document.getElementById('scoreModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // Listing management functions (placeholders - would need backend implementation)
+        function deleteListing(zpid) {
+            if (confirm(`Are you sure you want to delete listing ${zpid}?`)) {
+                alert('Delete functionality would go here');
+            }
+        }
+
+        function editListing(zpid) {
+            alert(`Edit functionality for ${zpid} would go here`);
+        }
+
+        function markAsSold(zpid) {
+            if (confirm(`Mark listing ${zpid} as sold?`)) {
+                alert('Mark as sold functionality would go here');
+            }
+        }
+
+        // Score breakdown - fetch detailed scoring from search endpoint
+        async function showScoreBreakdown() {
+            if (!currentProperty) return;
+
+            const scoreModal = document.getElementById('scoreModal');
+            const scoreContent = document.getElementById('scoreBreakdownContent');
+
+            scoreContent.innerHTML = '<div style="text-align:center;padding:40px;">Loading detailed score breakdown...</div>';
+            scoreModal.style.display = 'block';
+
+            try {
+                console.log('Fetching score breakdown for:', currentProperty.zpid);
+                console.log('Query:', window.currentQuery);
+                console.log('Mode:', currentMode);
+
+                // Call the search endpoint with include_scoring_details flag
+                const response = await fetch(LAMBDA_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        q: window.currentQuery,
+                        size: 10,
+                        index: 'listings-v2',
+                        use_multi_query: currentMode === 'multi',
+                        include_scoring_details: true,
+                        strategy: 'hybrid'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('Score breakdown data:', data);
+                console.log('Has debug_info:', !!data.debug_info);
+                console.log('Sub-queries:', data.debug_info?.sub_queries);
+                console.log('Current mode:', currentMode);
+
+                // Find the current property in the results
+                const propertyResult = data.results?.find(r => r.zpid === currentProperty.zpid);
+
+                if (!propertyResult) {
+                    scoreContent.innerHTML = '<div style="padding:20px;color:#999;">Property not found in top results. Score details only available for top 10 results.</div>';
+                    return;
+                }
+
+                // Display the scoring details
+                displayScoreBreakdown(propertyResult, data);
+
+            } catch (error) {
+                console.error('Score breakdown error:', error);
+                scoreContent.innerHTML = `<div style="padding:20px;color:#c33;background:#fee;border-radius:6px;">
+                    <strong>Error loading score breakdown:</strong><br>
+                    ${error.message}<br><br>
+                    <small>Check browser console for details</small>
+                </div>`;
+            }
+        }
+
+        // Helper function to create info tooltip
+        function infoTooltip(text) {
+            return `<span class="info-icon">ⓘ<span class="info-tooltip">${text}</span></span>`;
+        }
+
+        function displayScoreBreakdown(property, searchData) {
+            const content = document.getElementById('scoreBreakdownContent');
+
+            const details = property._scoring_details || property.scoring_details || {};
+            const debug_info = searchData.debug_info || {};
+            const queryInfo = debug_info.query || details.query_context || {};
+
+            console.log('displayScoreBreakdown called');
+            console.log('searchData:', searchData);
+            console.log('debug_info:', debug_info);
+            console.log('Has sub_queries:', !!debug_info.sub_queries);
+            console.log('currentMode:', currentMode);
+            console.log('Condition check:', currentMode === 'multi', debug_info.sub_queries);
+
+            // Get the actual query text for display
+            const actualQuery = queryInfo.original || queryInfo.original_query || window.currentQuery || '';
+
+            // Default strategy values (comparison page always uses hybrid)
+            const selectedStrategy = 'hybrid';
+            const selectedSearchMode = 'adaptive';
+            const selectedBoostMode = false;
+
+            let html = '';
+
+            // STRATEGY SELECTOR INDICATOR AT TOP
+            const strategyNames = {
+                'hybrid': 'Hybrid (All 3 Strategies)',
+                'bm25': 'BM25 Only (Keyword Search)',
+                'knn_text': 'kNN Text Only (Semantic Text)',
+                'knn_image': 'kNN Image Only (Visual Search)'
+            };
+            const strategyDisplay = strategyNames[selectedStrategy] || selectedStrategy;
+            const strategyColor = selectedStrategy === 'hybrid' ? '#6f42c1' : selectedStrategy === 'bm25' ? '#28a745' : selectedStrategy === 'knn_text' ? '#007bff' : '#dc3545';
+            const strategyIcon = selectedStrategy === 'hybrid' ? '🔀' : selectedStrategy === 'bm25' ? '📝' : selectedStrategy === 'knn_text' ? '🧠' : '🖼️';
+
+            html += `<div class="score-section" style="background:${strategyColor === '#6f42c1' ? '#e7d9f7' : strategyColor === '#28a745' ? '#d4edda' : strategyColor === '#007bff' ? '#cfe2ff' : '#f8d7da'};border-left:5px solid ${strategyColor};padding:15px;margin-bottom:15px;border-radius:6px;">
+                <h4 style="color:${strategyColor};font-size:18px;margin:0 0 10px 0;">${strategyIcon} Search Strategy: <strong>${strategyDisplay}</strong></h4>
+                <p style="color:#333;font-size:14px;margin:8px 0 0 0;line-height:1.7;">
+                    ${selectedStrategy === 'hybrid'
+                        ? '<strong>Hybrid mode</strong> combines all three search strategies (BM25, kNN text, kNN image) using Reciprocal Rank Fusion. This provides the best overall results by leveraging keyword matching, semantic understanding, and visual similarity together.'
+                        : selectedStrategy === 'bm25'
+                        ? '<strong>BM25 Only mode</strong> uses traditional keyword matching on text fields. Results are ranked purely by term frequency and document relevance. No semantic embeddings or image analysis is used.'
+                        : selectedStrategy === 'knn_text'
+                        ? '<strong>kNN Text Only mode</strong> uses semantic text embeddings (1024-dim vectors). Results are ranked by cosine similarity to your query embedding. No keyword matching or image analysis is used.'
+                        : '<strong>kNN Image Only mode</strong> uses visual image embeddings (1024-dim vectors). Results are ranked by visual similarity between your query and property images. No text matching is used - purely visual search.'}
+                </p>
+            </div>`;
+
+            // SEARCH MODE INDICATOR (show for hybrid mode)
+            if (selectedStrategy === 'hybrid') {
+                const searchModeDisplay = currentMode === 'multi' ? 'Multi-Query Splitting Mode' : 'Standard Adaptive Mode';
+                const searchModeColor = currentMode === 'multi' ? '#ff6b35' : '#28a745';
+                const searchModeIcon = currentMode === 'multi' ? '🔀' : '🎯';
+                const searchModeTooltip = currentMode === 'multi'
+                    ? 'Multi-Query mode: System uses LLM to split query into context-specific sub-queries with weighted scoring'
+                    : 'Adaptive mode: System automatically adjusts scoring weights based on query type (visual style, features, color, etc.)';
+
+                html += `<div class="score-section" style="background:${searchModeColor === '#ff6b35' ? '#ffe8e0' : '#d4edda'};border-left:4px solid ${searchModeColor};padding:15px;margin-bottom:15px;border-radius:6px;">
+                    <h4 style="color:${searchModeColor};font-size:16px;margin:0 0 10px 0;">${searchModeIcon} Search Mode: <strong>${searchModeDisplay}</strong></h4>
+                    <p style="color:#666;font-size:13px;margin:8px 0 0 0;line-height:1.6;">
+                        ${searchModeTooltip}
+                    </p>
+                </div>`;
+            }
+
+            // MULTI-QUERY SPECIFIC INFO (show first if multi-query mode)
+            if (currentMode === 'multi' && searchData.debug_info?.sub_queries) {
+                html += `<div class="score-section" style="background:#fffacd;border-left:4px solid #ff6b35;padding:15px;margin-bottom:15px;border-radius:6px;">
+                    <h4 style="color:#ff6b35;font-size:16px;margin:0 0 15px 0;">🔀 Multi-Query Splitting Results</h4>
+
+                    <div style="margin-bottom:20px;padding:12px;background:#fff;border-radius:6px;border:2px solid #ff6b35;">
+                        <div style="color:#666;font-weight:600;font-size:13px;margin-bottom:8px;">Original Query:</div>
+                        <div style="color:#333;font-size:16px;font-weight:600;font-family:monospace;background:#f8f9fa;padding:10px;border-radius:4px;">
+                            "${actualQuery}"
+                        </div>
+                    </div>
+
+                    <div style="color:#666;font-weight:600;font-size:13px;margin-bottom:10px;">
+                        ⬇️ Split into ${searchData.debug_info.sub_queries.length} context-specific sub-queries:
+                    </div>`;
+                searchData.debug_info.sub_queries.forEach((sq, idx) => {
+                    const contextLabel = sq.context === 'exterior_primary' ? '🏠 Exterior (Primary)' :
+                                       sq.context === 'interior_room' ? '🏠 Interior Room' :
+                                       sq.context === 'material_finish' ? '🔨 Material/Finish' : '❓ Other';
+                    html += `<div style="margin:10px 0;padding:12px;background:#fff;border-radius:4px;border-left:3px solid ${sq.weight >= 2.0 ? '#dc3545' : '#007bff'};">
+                        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:5px;">
+                            <strong style="color:#333;font-size:14px;">Sub-query ${idx + 1}:</strong>
+                            <span style="background:${sq.weight >= 2.0 ? '#dc3545' : '#007bff'};color:white;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">${sq.weight}x weight</span>
+                        </div>
+                        <div style="color:#555;font-size:13px;margin:8px 0;font-family:monospace;background:#f8f9fa;padding:8px;border-radius:4px;">"${sq.query}"</div>
+                        <div style="font-size:12px;color:#666;margin-top:8px;">
+                            <strong>Context:</strong> ${contextLabel} |
+                            <strong>Feature:</strong> ${sq.feature} |
+                            <strong>Strategy:</strong> ${sq.search_strategy}
+                        </div>
+                    </div>`;
+                });
+                html += `<div style="margin-top:15px;padding:10px;background:#fff3cd;border-radius:4px;border-left:3px solid #ffc107;">
+                    <strong style="color:#856404;">💡 How Weighting Works:</strong>
+                    <p style="color:#856404;font-size:12px;margin:5px 0 0 0;line-height:1.6;">
+                        Exterior features get <strong>2.0x weight</strong> because they're primary (the main photo must match).
+                        Interior features get <strong>1.0x weight</strong> (can appear in any photo).
+                        Each sub-query finds its best matching images independently, then scores are weighted and summed.
+                    </p>
+                </div>`;
+                html += `</div>`;
+            }
+
+            // QUERY INFORMATION SECTION
+            if (queryInfo.original_query) {
+                html += `<div class="score-section" style="background:#fff3cd;border-left:4px solid #ffc107;padding:15px;margin-bottom:15px;border-radius:6px;">
+                    <h4 style="color:#856404;margin:0 0 15px 0;">🔍 Query Information</h4>
+                    <div style="margin:10px 0;">
+                        <span style="color:#666;font-weight:600;font-size:13px;">Original Query ${infoTooltip('The exact search query you entered.')}</span>
+                        <div style="color:#333;font-size:14px;margin-top:5px;">"${queryInfo.original_query}"</div>
+                    </div>
+                    <div style="margin:10px 0;">
+                        <span style="color:#666;font-weight:600;font-size:13px;">Query Type ${infoTooltip('Classified by the LLM: specific_feature (like "modern kitchen"), color, material, visual_style, or general. Determines which search strategies get boosted.')}</span>
+                        <div style="color:#333;font-size:14px;margin-top:5px;">${queryInfo.extracted_constraints?.query_type || 'Unknown'}</div>
+                    </div>
+                    <div style="margin:10px 0;">
+                        <span style="color:#666;font-weight:600;font-size:13px;">Must-Have Tags Extracted ${infoTooltip('Feature tags extracted from your query by the LLM. Properties are filtered to match these tags for ranking.')}</span>
+                        <div style="color:#333;font-size:14px;margin-top:5px;">${queryInfo.must_tags?.length > 0 ? queryInfo.must_tags.join(', ') : 'None'}</div>
+                    </div>
+                    ${queryInfo.architecture_style ? `<div style="margin:10px 0;">
+                        <span style="color:#666;font-weight:600;font-size:13px;">Architecture Style ${infoTooltip('Detected architectural style filter (modern, colonial, craftsman, etc.) applied as a hard filter.')}</span>
+                        <div style="color:#333;font-size:14px;margin-top:5px;">${queryInfo.architecture_style}</div>
+                    </div>` : ''}
+                </div>`;
+            }
+
+            // PROPERTY TEXT CONTENT SECTION
+            html += `<div class="score-section" style="background:#f0f8ff;border-left:4px solid #4a90e2;padding:15px;margin-bottom:15px;border-radius:6px;">
+                <h4 style="color:#4a90e2;margin:0 0 10px 0;">📄 Property Text Content</h4>
+                <p style="color:#666;font-size:12px;margin:8px 0 10px 0;">
+                    This shows what text is actually being searched by BM25 and embedded for kNN text search.
+                </p>
+
+                <div style="margin-bottom:15px;">
+                    <strong style="color:#333;">Original Description ${infoTooltip('The property description from Zillow. This is searched with highest weight (3.0) in BM25.')}</strong>
+                    <div style="background:#fff;border:1px solid #ddd;padding:10px;border-radius:4px;margin-top:5px;max-height:150px;overflow-y:auto;">
+                        ${property.description || '<em style="color:#999;">No description available</em>'}
+                    </div>
+                </div>
+
+                ${property.visual_features_text ? `
+                <div style="margin-bottom:15px;">
+                    <strong style="color:#333;">Visual Features Text ${infoTooltip('AI-generated description from analyzing all property images. Includes architecture style, colors, materials, and features detected by Claude Haiku Vision. Searched with weight 2.5-5.0x in BM25 for keyword matching.')}</strong>
+                    <div style="background:#fff3cd;border:1px solid #ffc107;padding:10px;border-radius:4px;margin-top:5px;max-height:150px;overflow-y:auto;">
+                        ${property.visual_features_text}
+                    </div>
+                    <p style="color:#856404;font-size:11px;margin:5px 0 0 0;">
+                        ✨ This visual content enhances keyword matching (BM25) - visual similarity is captured by image embeddings
+                    </p>
+                </div>
+                ` : `
+                <div style="background:#f8d7da;border:1px solid #f5c6cb;padding:10px;border-radius:4px;">
+                    <strong style="color:#721c24;">⚠️ Visual Features Text Missing</strong>
+                    <p style="color:#721c24;font-size:12px;margin:5px 0 0 0;">
+                        This property hasn't been re-indexed with visual feature extraction yet.
+                    </p>
+                </div>
+                `}
+
+                <div style="background:#e7f3ff;border:1px solid #b3d9ff;padding:10px;border-radius:4px;margin-top:10px;">
+                    <strong style="color:#004085;">How Text Matching Works:</strong>
+                    <ul style="margin:8px 0 0 0;padding-left:20px;color:#004085;font-size:12px;line-height:1.6;">
+                        <li><strong>BM25:</strong> Searches both description (3.0x) and visual_features_text (2.5x) for keywords</li>
+                        <li><strong>kNN Text:</strong> Embeds <em>description + visual_features_text</em> into 1024-dim vector for semantic similarity</li>
+                        <li><strong>Result:</strong> Queries match on visual features even if not in original description!</li>
+                    </ul>
+                </div>
+            </div>`;
+
+            // Overall Score Section
+            const scoreDescription = 'This is the final score after combining all search strategies (RRF) and applying tag boost multiplier. Higher scores rank first.';
+            const scoreCalc = currentMode === 'multi'
+                ? `Final Score = Multi-Query Image Score + BM25 + kNN Text (combined via RRF)${property.boosted && details.tag_boosting ? ` × Tag Boost Factor<br>= ${details.tag_boosting.score_before_boost?.toFixed(6)} × ${details.tag_boosting.boost_factor} = ${property.score.toFixed(6)}` : `<br>= ${property.score.toFixed(6)} (no boost applied)`}`
+                : `Final Score = RRF Total Score × Tag Boost Factor<br>${property.boosted && details.tag_boosting ? `= ${details.tag_boosting.score_before_boost?.toFixed(6)} × ${details.tag_boosting.boost_factor} = ${property.score.toFixed(6)}` : `= ${property.score.toFixed(6)} (no boost applied)`}`;
+
+            html += `<div class="score-section" style="background:#fff;border:1px solid #dee2e6;padding:15px;margin-bottom:15px;border-radius:6px;">
+                <h4 style="margin:0 0 15px 0;">🎯 Final Score</h4>
+                <div style="margin:10px 0;">
+                    <span style="color:#666;font-weight:600;font-size:13px;">Final Ranking Score ${infoTooltip(scoreDescription)}</span>
+                    <div style="font-size:28px;font-weight:bold;color:#28a745;margin-top:5px;">${formatNormalizedScore(property.score)}/100</div>
+                </div>
+                <p style="color:#999;font-size:11px;margin-top:5px;">
+                    Raw technical score: ${property.score.toFixed(6)}
+                </p>
+                ${property.boosted ? '<div style="margin:10px 0;"><span style="color:#666;font-weight:600;font-size:13px;">Tag Boost Applied ' + infoTooltip('Properties matching more required tags get multiplicative boosts: 100%=2.0x, 75%=1.5x, 50%=1.25x') + '</span><div style="color:#28a745;font-weight:600;margin-top:5px;">✓ Yes</div></div>' : ''}
+                <p style="color:#666;font-size:13px;margin-top:10px;line-height:1.5;">
+                    <strong>How it's calculated:</strong> ${scoreCalc}
+                </p>
+            </div>`;
+
+            // RRF BREAKDOWN (for hybrid strategy)
+            if (details.bm25 || details.knn_text || details.knn_image) {
+                html += `<div class="score-section" style="background:#fff;border:1px solid #dee2e6;padding:15px;margin-bottom:15px;border-radius:6px;">
+                    <h4 style="margin:0 0 15px 0;">🔀 Reciprocal Rank Fusion (RRF) Breakdown</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        RRF combines rankings from multiple search strategies. For each strategy, if the property appears at rank R,
+                        it contributes <code>1/(k+R)</code> to the total score. Lower k-values give higher weight to that strategy.
+                        The three contributions are summed to get the RRF total.
+                    </p>
+                    <div style="margin:10px 0;">
+                        <span style="color:#666;font-weight:600;font-size:13px;">Total RRF Score ${infoTooltip('Sum of contributions from all 3 search strategies. This is the score before tag boosting is applied.')}</span>
+                        <div style="font-size:20px;font-weight:bold;color:#6f42c1;margin-top:5px;">${details.rrf_total?.toFixed(6) || 'N/A'}</div>
+                    </div>
+                    <p style="color:#666;font-size:12px;margin-top:5px;">
+                        = ${details.bm25?.rrf_contribution?.toFixed(6) || '0'} (BM25) +
+                        ${details.knn_text?.rrf_contribution?.toFixed(6) || '0'} (kNN text) +
+                        ${details.knn_image?.rrf_contribution?.toFixed(6) || '0'} (kNN image)
+                    </p>`;
+
+                // BM25 component
+                if (details.bm25) {
+                    const bm25 = details.bm25;
+                    html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #28a745;border-radius:4px;">
+                        <strong style="color:#28a745;font-size:16px;">📝 BM25 Full-Text Search</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
+                            BM25 searches text fields using keyword matching with field-specific boosting.
+                        </p>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">Rank in BM25 Results ${infoTooltip('Position of this property in the BM25-only search results (1=best match).')}</span>
+                            <div style="color:#333;font-weight:600;margin-top:3px;">${bm25.rank ? '#' + bm25.rank : 'Not found in top results'}</div>
+                        </div>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">Original BM25 Score ${infoTooltip('Raw relevance score from BM25 algorithm measuring term frequency and document length normalization.')}</span>
+                            <div style="color:#333;font-weight:600;margin-top:3px;">${bm25.original_score ? bm25.original_score.toFixed(6) : 'N/A'}</div>
+                        </div>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">RRF k-value ${infoTooltip('Tuning parameter for this strategy. Lower k = higher weight.')}</span>
+                            <div style="color:#333;font-weight:600;margin-top:3px;">${bm25.k}</div>
+                        </div>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">RRF Contribution ${infoTooltip('How much BM25 contributes to final RRF score. Calculated as 1/(k+rank).')}</span>
+                            <div style="color:#28a745;font-weight:bold;font-size:16px;margin-top:3px;">${bm25.rrf_contribution.toFixed(6)}</div>
+                        </div>
+                        <p style="color:#666;font-size:12px;margin-top:8px;">
+                            <strong>Calculation:</strong> 1 ÷ (${bm25.k} + ${bm25.rank || 0}) = ${bm25.rrf_contribution.toFixed(6)}
+                        </p>
+                    </div>`;
+                }
+
+                // kNN Text component
+                if (details.knn_text) {
+                    const knn_text = details.knn_text;
+                    html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #007bff;border-radius:4px;">
+                        <strong style="color:#007bff;font-size:16px;">🧠 kNN Text Similarity Search</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
+                            kNN text search converts the query into a 1024-dimensional vector and finds properties
+                            with similar text embeddings using cosine similarity.
+                        </p>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">Query Vector ${infoTooltip('Your query converted into a 1024-dimensional vector using Amazon Titan.')}</span>
+                            <div style="color:#333;font-size:12px;margin-top:3px;">1024-dimensional embedding from: "${actualQuery}"</div>
+                        </div>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">Rank in kNN Text Results ${infoTooltip('Position when ranked by text embedding similarity.')}</span>
+                            <div style="color:#333;font-weight:600;margin-top:3px;">${knn_text.rank ? '#' + knn_text.rank : 'Not found in top results'}</div>
+                        </div>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">Cosine Similarity Score ${infoTooltip('Similarity between query vector and property text vector (0-1 scale).')}</span>
+                            <div style="color:#333;font-weight:600;margin-top:3px;">${knn_text.original_score ? knn_text.original_score.toFixed(6) : 'N/A'}</div>
+                        </div>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">RRF k-value ${infoTooltip('Tuning parameter. Lower k = higher weight.')}</span>
+                            <div style="color:#333;font-weight:600;margin-top:3px;">${knn_text.k}</div>
+                        </div>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">RRF Contribution ${infoTooltip('How much semantic text similarity contributes to final RRF score.')}</span>
+                            <div style="color:#007bff;font-weight:bold;font-size:16px;margin-top:3px;">${knn_text.rrf_contribution.toFixed(6)}</div>
+                        </div>
+                        <p style="color:#666;font-size:12px;margin-top:8px;">
+                            <strong>Calculation:</strong> 1 ÷ (${knn_text.k} + ${knn_text.rank || 0}) = ${knn_text.rrf_contribution.toFixed(6)}
+                        </p>
+                    </div>`;
+                }
+
+                // kNN Image component
+                if (details.knn_image) {
+                    const knn_image = details.knn_image;
+                    const adaptive_k = (details.query_context && details.query_context.adaptive_k) ||
+                                      (debug_info.knn_image && debug_info.knn_image.adaptive_k) || null;
+                    html += `<div style="margin-top:20px;padding:15px;background:#f8f9fa;border-left:4px solid #dc3545;border-radius:4px;">
+                        <strong style="color:#dc3545;font-size:16px;">🖼️ kNN Image Similarity Search ${details.image_vectors_count ? '(' + details.image_vectors_count + ' images)' : ''}</strong>
+                        <p style="color:#666;font-size:12px;margin:8px 0;line-height:1.5;">
+                            ${currentMode === 'multi'
+                                ? 'Multi-query mode: Each sub-query searches images independently, then weighted scores are summed.'
+                                : `kNN image search compares the query vector against ALL ${details.image_vectors_count || 'property'} image vectors independently.
+                                   ${adaptive_k ? `<strong>Adaptive Top-K Scoring:</strong> The sum of the top <strong>${adaptive_k}</strong> image scores determines the overall similarity.` : 'The highest-scoring image determines the overall image similarity score.'}`
+                            }
+                        </p>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">Rank in kNN Image Results ${infoTooltip('Position when ranked by best image match.')}</span>
+                            <div style="color:#333;font-weight:600;margin-top:3px;">${knn_image.rank ? '#' + knn_image.rank : 'Not found in top results'}</div>
+                        </div>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">${adaptive_k && adaptive_k > 1 ? `Top-${adaptive_k} Image Score Sum` : 'Best Image Match Score'} ${infoTooltip(adaptive_k && adaptive_k > 1 ? `Sum of top ${adaptive_k} image scores.` : 'Highest similarity score among all property images.')}</span>
+                            <div style="color:#333;font-weight:600;margin-top:3px;">${knn_image.original_score ? knn_image.original_score.toFixed(6) : 'N/A'}</div>
+                        </div>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">RRF k-value ${infoTooltip('Tuning parameter. Lower k = higher weight.')}</span>
+                            <div style="color:#333;font-weight:600;margin-top:3px;">${knn_image.k}</div>
+                        </div>
+                        <div style="margin:10px 0;">
+                            <span style="color:#666;font-size:13px;">RRF Contribution ${infoTooltip('How much visual similarity contributes to final RRF score.')}</span>
+                            <div style="color:#dc3545;font-weight:bold;font-size:16px;margin-top:3px;">${knn_image.rrf_contribution.toFixed(6)}</div>
+                        </div>
+                        <p style="color:#666;font-size:12px;margin-top:8px;">
+                            <strong>Calculation:</strong> 1 ÷ (${knn_image.k} + ${knn_image.rank || 0}) = ${knn_image.rrf_contribution.toFixed(6)}
+                        </p>
+                    </div>`;
+                }
+
+                html += `</div>`;
+            }
+
+            // Tag Boosting Section
+            if (details.tag_boosting) {
+                const tb = details.tag_boosting;
+                html += `<div class="score-section" style="background:#fff;border:1px solid #dee2e6;padding:15px;margin-bottom:15px;border-radius:6px;">
+                    <h4 style="margin:0 0 15px 0;">🏷️ Tag Matching & Boosting</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        After RRF fusion, we apply a multiplicative boost based on exact tag matches.
+                        Properties matching more required tags get stronger boosts: 100% match = 2.0x, 75% = 1.5x, 50% = 1.25x.
+                    </p>
+                    <div style="margin:10px 0;">
+                        <span style="color:#666;font-weight:600;font-size:13px;">Match Ratio ${infoTooltip('Percentage of required tags that this property has.')}</span>
+                        <div style="font-size:18px;font-weight:bold;color:${tb.match_ratio >= 1.0 ? '#28a745' : tb.match_ratio >= 0.5 ? '#ffc107' : '#dc3545'};margin-top:5px;">${(tb.match_ratio * 100).toFixed(0)}% (${tb.matched_tags.length}/${tb.required_tags.length})</div>
+                    </div>
+                    <div style="margin:10px 0;">
+                        <span style="color:#666;font-weight:600;font-size:13px;">Boost Factor ${infoTooltip('Multiplicative boost applied to RRF score.')}</span>
+                        <div style="font-size:18px;font-weight:bold;color:#28a745;margin-top:5px;">${tb.boost_factor}x</div>
+                    </div>
+                    <div style="margin:10px 0;">
+                        <span style="color:#666;font-size:13px;">RRF Score (before boost)</span>
+                        <div style="color:#333;margin-top:3px;">${tb.score_before_boost.toFixed(6)}</div>
+                    </div>
+                    <div style="margin:10px 0;">
+                        <span style="color:#666;font-size:13px;">Final Score (after boost)</span>
+                        <div style="color:#333;font-weight:600;margin-top:3px;">${tb.score_after_boost.toFixed(6)}</div>
+                    </div>
+                    <p style="color:#666;font-size:12px;margin-top:8px;">
+                        <strong>Calculation:</strong> ${tb.score_before_boost.toFixed(6)} × ${tb.boost_factor} = ${tb.score_after_boost.toFixed(6)}
+                    </p>`;
+
+                // Show matched vs required tags
+                if (tb.required_tags && tb.required_tags.length > 0) {
+                    html += `<div style="margin-top:15px;">
+                        <strong style="color:#2a2a2a;">Required Tags Analysis:</strong>
+                        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">`;
+                    tb.required_tags.forEach(tag => {
+                        const matched = tb.matched_tags.includes(tag);
+                        html += `<span style="display:inline-block;padding:5px 10px;border-radius:15px;font-size:12px;background:${matched ? '#d4edda' : '#f8d7da'};color:${matched ? '#155724' : '#721c24'};">${matched ? '✓' : '✗'} ${tag}</span>`;
+                    });
+                    html += `</div></div>`;
+                }
+
+                html += `</div>`;
+            }
+
+            // Individual Image Scores Section
+            if (details.individual_image_scores && details.individual_image_scores.length > 0) {
+                const adaptive_k = (details.query_context && details.query_context.adaptive_k) ||
+                                  (debug_info.knn_image && debug_info.knn_image.adaptive_k) || null;
+
+                // In multi-query mode, group by sub-query; otherwise sort by score
+                const isMultiQueryMode = currentMode === 'multi' && searchData.debug_info?.sub_queries;
+                const sortedScores = isMultiQueryMode
+                    ? details.individual_image_scores  // Keep original order (already ordered by selection)
+                    : [...details.individual_image_scores].sort((a, b) => b.score - a.score);
+
+                const topKSum = adaptive_k && adaptive_k > 1 ? sortedScores.slice(0, adaptive_k).reduce((sum, img) => sum + img.score, 0) : null;
+
+                html += `<div class="score-section" style="background:#fff;border:1px solid #dee2e6;padding:15px;margin-bottom:15px;border-radius:6px;">
+                    <h4 style="margin:0 0 15px 0;">🎨 Individual Image Vector Scores</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:15px;line-height:1.5;">
+                        Each image has its own embedding vector (1024 dimensions). The table below shows how well each image matched your query.
+                        ${isMultiQueryMode
+                            ? `<br><strong>Multi-Query Mode:</strong> Images are <strong>grouped by sub-query</strong> to show which images matched each feature. The top image for each sub-query (marked with ⭐) contributes to the final RRF score.`
+                            : adaptive_k && adaptive_k > 1
+                            ? `<strong>Adaptive K=${adaptive_k}:</strong> The <strong style="color:#dc3545;">sum of the top ${adaptive_k} scores (${topKSum.toFixed(6)})</strong> is used as the image similarity score above. This rewards properties with multiple matching images.`
+                            : `The <strong style="color:#dc3545;">highest score (${Math.max(...details.individual_image_scores.map(i => i.score)).toFixed(6)})</strong> is used as the "Best Image Match Score" in the kNN Image search above.`
+                        }
+                    </p>
+                    <div style="max-height:600px;overflow-y:auto;border:1px solid #dee2e6;border-radius:6px;">`;
+
+                if (isMultiQueryMode) {
+                    // Group images by sub-query
+                    const imagesBySubQuery = {};
+                    sortedScores.forEach(img => {
+                        const sqIdx = img.sub_query_index !== undefined ? img.sub_query_index : -1;
+                        if (!imagesBySubQuery[sqIdx]) {
+                            imagesBySubQuery[sqIdx] = [];
+                        }
+                        imagesBySubQuery[sqIdx].push(img);
+                    });
+
+                    // Display each sub-query group
+                    const subQueries = searchData.debug_info.sub_queries || [];
+                    subQueries.forEach((subQuery, sqIdx) => {
+                        const images = imagesBySubQuery[sqIdx] || [];
+                        if (images.length === 0) return;
+
+                        // Sort images within this sub-query by score
+                        images.sort((a, b) => b.score - a.score);
+
+                        const queryText = subQuery.query || '';
+                        const feature = subQuery.feature || '';
+
+                        html += `
+                            <div style="margin-bottom:20px;">
+                                <div style="background:#00a86b;color:white;padding:10px;font-weight:bold;position:sticky;top:0;z-index:10;">
+                                    📌 Sub-query #${sqIdx + 1}: "${queryText}"
+                                    <div style="font-size:11px;font-weight:normal;margin-top:3px;">Feature: ${feature} | ${images.length} image${images.length !== 1 ? 's' : ''} matched</div>
+                                </div>
+                                <table style="width:100%;border-collapse:collapse;">
+                                    <thead style="background:#f8f9fa;">
+                                        <tr>
+                                            <th style="padding:8px;text-align:left;border-bottom:1px solid #dee2e6;width:60px;">Rank</th>
+                                            <th style="padding:8px;text-align:left;border-bottom:1px solid #dee2e6;width:80px;">Image #</th>
+                                            <th style="padding:8px;text-align:left;border-bottom:1px solid #dee2e6;width:100px;">Score</th>
+                                            <th style="padding:8px;text-align:left;border-bottom:1px solid #dee2e6;">Preview</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>`;
+
+                        images.forEach((img, idx) => {
+                            const isSelected = img.selected_for_scoring === true || idx === 0;  // Top image in each group is selected for RRF
+                            const rowStyle = isSelected ? 'background:#fff3cd;' : '';
+                            const rankIcon = idx === 0 ? '⭐' : '';
+
+                            html += `<tr style="${rowStyle}border-bottom:1px solid #eee;">
+                                <td style="padding:8px;${isSelected ? 'font-weight:bold;' : ''}">${rankIcon} #${idx + 1}</td>
+                                <td style="padding:8px;">Image ${img.index !== undefined ? img.index : 'N/A'}</td>
+                                <td style="padding:8px;font-family:monospace;${isSelected ? 'font-weight:bold;color:#dc3545;' : ''}">${img.score.toFixed(6)}</td>
+                                <td style="padding:8px;">${img.url ? '<img src="' + img.url + '" style="width:80px;height:60px;object-fit:cover;border-radius:4px;" />' : 'No preview'}</td>
+                            </tr>`;
+                        });
+
+                        html += `</tbody></table></div>`;
+                    });
+
+                } else {
+                    // Standard mode: single table sorted by score
+                    html += `<table style="width:100%;border-collapse:collapse;">
+                                <thead style="background:#343a40;color:white;position:sticky;top:0;">
+                                    <tr>
+                                        <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Rank</th>
+                                        <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Image #</th>
+                                        <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Score</th>
+                                        <th style="padding:10px;text-align:left;border-bottom:2px solid #dee2e6;">Preview</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+
+                    sortedScores.forEach((img, idx) => {
+                        const isTopK = adaptive_k && adaptive_k > 1 ? idx < adaptive_k : idx === 0;
+                        const rowStyle = isTopK ? 'background:#fff3cd;' : '';
+                        const rankIcon = idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : '';
+
+                        html += `<tr style="${rowStyle}border-bottom:1px solid #dee2e6;">
+                            <td style="padding:10px;${isTopK ? 'font-weight:bold;' : ''}">${rankIcon}#${idx + 1}</td>
+                            <td style="padding:10px;">Image ${img.index !== undefined ? img.index : 'N/A'}</td>
+                            <td style="padding:10px;font-family:monospace;${isTopK ? 'font-weight:bold;color:#dc3545;' : ''}">${img.score.toFixed(6)}</td>
+                            <td style="padding:10px;">${img.url ? '<img src="' + img.url + '" style="width:80px;height:60px;object-fit:cover;border-radius:4px;" />' : 'No preview'}</td>
+                        </tr>`;
+                    });
+
+                    html += `</tbody></table>`;
+                }
+
+                html += `</div>
+                    <p style="color:#666;font-size:12px;margin-top:10px;line-height:1.5;">
+                        <strong>Why different scores?</strong> Each image captures different aspects of the property.
+                        ${currentMode === 'multi'
+                            ? 'In multi-query mode, each sub-query finds its best matching images independently. For example, "white exterior" matches the front facade, while "granite countertops" matches kitchen images.'
+                            : 'For a query like "modern kitchen," images showing the kitchen will score higher than exterior shots. The multi-vector approach ensures that properties with at least one highly relevant image rank well.'}
+                    </p>
+                    ${adaptive_k && adaptive_k > 1 ? `
+                    <div style="background:#fff3cd;padding:10px;border-radius:4px;margin-top:10px;border-left:3px solid #ffc107;">
+                        <strong style="color:#856404;">Top-${adaptive_k} Scoring:</strong>
+                        <p style="color:#856404;font-size:12px;margin:5px 0 0 0;">
+                            The highlighted rows (yellow background) are the top ${adaptive_k} images. Their scores are summed (${topKSum.toFixed(6)}) to get the final image similarity score.
+                        </p>
+                    </div>` : ''}
+                </div>`;
+            }
+
+            content.innerHTML = html;
+        }
+
+        function closeScoreModal() {
+            document.getElementById('scoreModal').style.display = 'none';
+        }
+
+        // Event listeners
+        document.getElementById('searchBtn').addEventListener('click', runSearch);
+        document.getElementById('searchQuery').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                runSearch();
+            }
+        });
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('propertyModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+    </script>
+
+    <!-- Property Detail Modal -->
+    <div id="propertyModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h2 id="modalAddress">Property Details</h2>
+                    <div id="modalPrice" style="color: #006aff; font-size: 1.3em; font-weight: 700; margin-top: 5px;"></div>
+                </div>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="image-gallery">
+                    <img id="modalMainImage" class="gallery-main" src="" alt="Property image">
+                    <button class="gallery-nav gallery-prev" onclick="previousImage()">‹</button>
+                    <button class="gallery-nav gallery-next" onclick="nextImage()">›</button>
+                    <div class="gallery-counter" id="imageCounter">1 / 1</div>
+                </div>
+                <div class="gallery-thumbnails" id="thumbnails"></div>
+                <div class="detail-grid" id="modalStats"></div>
+                <h3 style="margin-top: 20px; margin-bottom: 10px;">Description</h3>
+                <div id="modalDescription" style="line-height: 1.6; color: #555;"></div>
+                <div id="modalFeatures" style="margin-top: 20px;"></div>
+                <div id="modalActions" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Score Breakdown Modal -->
+    <div id="scoreModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 Detailed Score Breakdown</h2>
+                <span class="close" onclick="closeScoreModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="scoreBreakdownContent">
+                    <!-- Content populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BM25 Text Matching Test - Hearth Search</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .nav-menu {
+            background: white;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .nav-menu a {
+            text-decoration: none;
+            color: #667eea;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        .nav-menu a:hover {
+            background: #f0f0f0;
+        }
+
+        .nav-menu a.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .header {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .test-section {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+        }
+
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .results {
+            margin-top: 30px;
+        }
+
+        .result-card {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .result-rank {
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+
+        .result-score {
+            font-size: 20px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .result-description {
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .result-details {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .detail-value {
+            color: #333;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+        .info-box strong {
+            color: #1976d2;
+        }
+
+        .matched-terms {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .term-tag {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="nav-menu">
+            <a href="search.html">Main Search</a>
+            <a href="test_bm25.html" class="active">BM25 Test</a>
+            <a href="test_knn_text.html">kNN Text Test</a>
+            <a href="test_knn_image.html">kNN Image Test</a>
+            <a href="admin.html">Admin Lookup</a>
+            <a href="crud.html">CRUD Manager</a>
+            <a href="analytics.html">Analytics</a>
+        
+            <a href="public_analytics.html">Public Testing</a>
+        </nav>
+
+        <div class="header">
+            <h1>BM25 Text Matching Test</h1>
+            <p class="subtitle">Test BM25 (Best Matching 25) algorithm for keyword-based text matching on property descriptions</p>
+        </div>
+
+        <div class="test-section">
+            <div class="info-box">
+                <strong>About BM25:</strong> BM25 is a ranking function that scores documents based on the query terms appearing in each document. It considers term frequency, inverse document frequency, and document length normalization. Great for exact keyword matching.
+            </div>
+
+            <div class="section-title">Test Query</div>
+            <div class="input-group">
+                <label for="query">Search Query</label>
+                <input type="text" id="query" placeholder="e.g., white house with pool and hardwood floors" value="white house with pool and hardwood floors">
+            </div>
+
+            <div class="section-title">Sample Property Descriptions</div>
+            <div class="input-group">
+                <label for="description1">Property 1 Description</label>
+                <textarea id="description1" placeholder="Enter property description...">Beautiful white colonial house with stunning pool and gorgeous hardwood floors throughout. This charming home features white siding, a sparkling pool in the backyard, and refinished oak hardwood floors in all living areas.</textarea>
+            </div>
+
+            <div class="input-group">
+                <label for="description2">Property 2 Description</label>
+                <textarea id="description2" placeholder="Enter property description...">Modern gray contemporary home with heated swimming pool. Features include luxury vinyl plank flooring, gourmet kitchen, and resort-style pool with waterfall feature.</textarea>
+            </div>
+
+            <div class="input-group">
+                <label for="description3">Property 3 Description</label>
+                <textarea id="description3" placeholder="Enter property description...">Stunning Mediterranean villa with pristine white stucco exterior. Enjoy the lap pool and elegant hardwood floors in the formal living and dining rooms.</textarea>
+            </div>
+
+            <div class="input-group">
+                <label for="description4">Property 4 Description</label>
+                <textarea id="description4" placeholder="Enter property description...">Cozy brick ranch home with beautiful landscaping. Features include carpet throughout, finished basement, and attached two-car garage.</textarea>
+            </div>
+
+            <button class="button" onclick="runBM25Test()">Run BM25 Test</button>
+
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script>
+        async function runBM25Test() {
+            const query = document.getElementById('query').value.trim();
+            if (!query) {
+                alert('Please enter a query');
+                return;
+            }
+
+            const descriptions = [
+                document.getElementById('description1').value.trim(),
+                document.getElementById('description2').value.trim(),
+                document.getElementById('description3').value.trim(),
+                document.getElementById('description4').value.trim()
+            ].filter(d => d);
+
+            if (descriptions.length === 0) {
+                alert('Please enter at least one property description');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">Calculating BM25 scores...</div>';
+
+            try {
+                // Simple BM25 implementation for testing
+                const scores = descriptions.map((description, index) => {
+                    const score = calculateBM25Score(query, description, descriptions);
+                    const matchedTerms = findMatchedTerms(query, description);
+                    return {
+                        index: index + 1,
+                        description,
+                        score,
+                        matchedTerms
+                    };
+                });
+
+                // Sort by score descending
+                scores.sort((a, b) => b.score - a.score);
+
+                // Display results
+                let html = '<div class="results">';
+                html += '<h2 class="section-title">Results (Ranked by BM25 Score)</h2>';
+
+                scores.forEach((result, rank) => {
+                    html += `
+                        <div class="result-card">
+                            <div class="result-header">
+                                <div class="result-rank">Rank #${rank + 1} (Property ${result.index})</div>
+                                <div class="result-score">${result.score.toFixed(4)}</div>
+                            </div>
+                            <div class="result-description">${result.description}</div>
+                            <div class="result-details">
+                                <div class="detail-row">
+                                    <span class="detail-label">Matched Query Terms:</span>
+                                    <span class="detail-value">${result.matchedTerms.length} / ${query.split(/\s+/).length} terms</span>
+                                </div>
+                                ${result.matchedTerms.length > 0 ? `
+                                    <div class="matched-terms">
+                                        ${result.matchedTerms.map(term => `<span class="term-tag">${term}</span>`).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += '</div>';
+                resultsDiv.innerHTML = html;
+
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        function calculateBM25Score(query, document, allDocuments) {
+            // BM25 parameters
+            const k1 = 1.2;
+            const b = 0.75;
+
+            // Tokenize
+            const queryTerms = query.toLowerCase().split(/\s+/);
+            const docTerms = document.toLowerCase().split(/\s+/);
+            const docLength = docTerms.length;
+
+            // Calculate average document length
+            const avgDocLength = allDocuments.reduce((sum, doc) => sum + doc.split(/\s+/).length, 0) / allDocuments.length;
+
+            // Count term frequencies in document
+            const termFreq = {};
+            docTerms.forEach(term => {
+                termFreq[term] = (termFreq[term] || 0) + 1;
+            });
+
+            // Calculate IDF for each query term
+            const N = allDocuments.length;
+            let score = 0;
+
+            queryTerms.forEach(term => {
+                // Count documents containing this term
+                const docsWithTerm = allDocuments.filter(doc =>
+                    doc.toLowerCase().includes(term)
+                ).length;
+
+                // IDF calculation
+                const idf = Math.log((N - docsWithTerm + 0.5) / (docsWithTerm + 0.5) + 1);
+
+                // Term frequency in this document
+                const tf = termFreq[term] || 0;
+
+                // BM25 formula
+                const numerator = tf * (k1 + 1);
+                const denominator = tf + k1 * (1 - b + b * (docLength / avgDocLength));
+
+                score += idf * (numerator / denominator);
+            });
+
+            return score;
+        }
+
+        function findMatchedTerms(query, document) {
+            const queryTerms = query.toLowerCase().split(/\s+/);
+            const docLower = document.toLowerCase();
+
+            return queryTerms.filter(term => docLower.includes(term));
+        }
+    </script>
+</body>
+</html>
