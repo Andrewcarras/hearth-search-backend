@@ -1,0 +1,67 @@
+{
+  "config": {
+    "dry_run": true,
+    "limit": 10,
+    "start_from": 0,
+    "total_processed": 10
+  },
+  "summary": {
+    "error": 10
+  },
+  "costs": {
+    "bedrock": 0.0,
+    "dynamodb": 0.0
+  },
+  "results": [
+    {
+      "zpid": "448383785",
+      "status": "error",
+      "reason": "classification_failed"
+    },
+    {
+      "zpid": "12770115",
+      "status": "error",
+      "reason": "classification_failed"
+    },
+    {
+      "zpid": "12659389",
+      "status": "error",
+      "reason": "classification_failed"
+    },
+    {
+      "zpid": "12738520",
+      "status": "error",
+      "reason": "classification_failed"
+    },
+    {
+      "zpid": "12659449",
+      "status": "error",
+      "reason": "classification_failed"
+    },
+    {
+      "zpid": "452131784",
+      "status": "error",
+      "reason": "classification_failed"
+    },
+    {
+      "zpid": "12757208",
+      "status": "error",
+      "reason": "classification_failed"
+    },
+    {
+      "zpid": "12778555",
+      "status": "error",
+      "reason": "classification_failed"
+    },
+    {
+      "zpid": "12715978",
+      "status": "error",
+      "reason": "classification_failed"
+    },
+    {
+      "zpid": "12717797",
+      "status": "error",
+      "reason": "classification_failed"
+    }
+  ]
+}

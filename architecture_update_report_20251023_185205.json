@@ -1,0 +1,150 @@
+{
+  "config": {
+    "dry_run": true,
+    "limit": 20,
+    "start_from": 0,
+    "total_processed": 20
+  },
+  "summary": {
+    "unchanged": 14,
+    "updated": 5,
+    "skipped": 1
+  },
+  "costs": {
+    "bedrock": 0.021375,
+    "dynamodb": 4e-06
+  },
+  "results": [
+    {
+      "zpid": "448383785",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "12770115",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "12659389",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "12738520",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "12659449",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "452131784",
+      "status": "updated",
+      "old": {
+        "style": "modern",
+        "specific": null,
+        "conf": 0.0
+      },
+      "new": {
+        "style": "ranch",
+        "specific": null,
+        "conf": 0.0
+      }
+    },
+    {
+      "zpid": "12757208",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "12778555",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "12715978",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "12717797",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "12754888",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "457156885",
+      "status": "updated",
+      "old": {
+        "style": "traditional",
+        "specific": null,
+        "conf": 0.0
+      },
+      "new": {
+        "style": "craftsman",
+        "specific": null,
+        "conf": 0.0
+      }
+    },
+    {
+      "zpid": "453300411",
+      "status": "updated",
+      "old": {
+        "style": "modern",
+        "specific": null,
+        "conf": 0.0
+      },
+      "new": {
+        "style": null,
+        "specific": null,
+        "conf": 0.0
+      }
+    },
+    {
+      "zpid": "12765235",
+      "status": "updated",
+      "old": {
+        "style": "modern",
+        "specific": null,
+        "conf": 0.0
+      },
+      "new": {
+        "style": null,
+        "specific": null,
+        "conf": 0.0
+      }
+    },
+    {
+      "zpid": "12876975",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "12736011",
+      "status": "updated",
+      "old": {
+        "style": "craftsman",
+        "specific": null,
+        "conf": 0.0
+      },
+      "new": {
+        "style": null,
+        "specific": null,
+        "conf": 0.0
+      }
+    },
+    {
+      "zpid": "12711335",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "457158887",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "12790979",
+      "status": "unchanged"
+    },
+    {
+      "zpid": "455935885",
+      "status": "skipped",
+      "reason": "no_image"
+    }
+  ]
+}

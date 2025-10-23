@@ -64,8 +64,153 @@ os_client = OpenSearch(
 brt = boto3.client('bedrock-runtime', region_name=REGION)
 dynamodb = boto3.client('dynamodb', region_name=REGION)
 
-# Import vision analysis from common.py
-from common import analyze_property_image_from_cache
+# Vision analysis function (inlined to avoid common.py import issues)
+def analyze_property_image_from_cache(image_url):
+    """
+    Analyze property image using Claude 3 Haiku vision.
+    Uses DynamoDB cache to avoid duplicate API calls.
+    """
+    # Check cache first
+    cache_key = f"vision:{image_url}"
+    try:
+        response = dynamodb.get_item(
+            TableName='hearth-vision-cache',
+            Key={'image_url': {'S': image_url}}
+        )
+
+        if 'Item' in response:
+            # Return cached result
+            cached = response['Item']
+            return {
+                'analysis': json.loads(cached['analysis']['S']),
+                'cached': True
+            }
+    except Exception as e:
+        print(f"    Cache lookup error: {e}")
+
+    # Not in cache, call Claude vision
+    try:
+        # Fetch image
+        img_response = requests.get(image_url, timeout=10)
+        img_response.raise_for_status()
+        image_bytes = img_response.content
+
+        # Convert to base64
+        import base64
+        image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+
+        # Determine image type
+        content_type = img_response.headers.get('content-type', 'image/jpeg')
+
+        # Claude vision prompt with hierarchical architecture classification
+        prompt = """Analyze this property photo. Return STRICT JSON format:
+{
+  "image_type": "exterior" or "interior",
+  "features": ["feature1", "feature2", ...],
+  "architecture_style": "craftsman" (Tier 1 broad style, or null if interior/unknown),
+  "architecture_style_specific": "craftsman_bungalow" (Tier 2 if very confident, else null),
+  "architecture_confidence": 0.85 (numeric 0-1, only for exteriors),
+  "exterior_color": "blue" (only if exterior, else null),
+  "materials": ["brick", "stone"],
+  "visual_features": ["balcony", "porch", "deck"],
+  "confidence": "high" or "medium" or "low"
+}
+
+ARCHITECTURE STYLES (60 total):
+
+TIER 1 (Broad Categories - Use These When Unsure):
+modern, contemporary, mid_century_modern, craftsman, ranch, colonial, victorian,
+mediterranean, spanish_colonial_revival, tudor, farmhouse, cottage, bungalow,
+cape_cod, split_level, traditional, transitional, industrial, minimalist,
+prairie_style, mission_revival, pueblo_revival, log_cabin, a_frame,
+scandinavian_modern, contemporary_farmhouse, arts_and_crafts
+
+TIER 2 (Specific Sub-Styles - Only If Very Confident):
+victorian_queen_anne, victorian_italianate, victorian_gothic_revival,
+craftsman_bungalow, craftsman_foursquare, colonial_revival, colonial_saltbox,
+federal, georgian, tuscan_villa, french_provincial, french_country,
+spanish_hacienda, monterey_colonial, english_cottage, french_chateau,
+greek_revival, neoclassical, romanesque_revival, gothic_revival, beaux_arts,
+art_deco, bauhaus, international_style, postmodern, modern_farmhouse,
+rustic_modern, mid_century_ranch, mid_century_split_level
+
+IMPORTANT:
+- If interior photo: set architecture_style=null, architecture_confidence=0
+- If exterior but unsure: use Tier 1 broad category only
+- Only use Tier 2 if you're very confident (>85%)
+- Return ONLY valid JSON, no explanations"""
+
+        # Call Claude
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 1000,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": content_type,
+                                "data": image_b64
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                }
+            ]
+        }
+
+        response = brt.invoke_model(
+            modelId='anthropic.claude-3-haiku-20240307-v1:0',
+            body=json.dumps(body)
+        )
+
+        response_body = json.loads(response['body'].read())
+        text = response_body['content'][0]['text'].strip()
+
+        # Parse JSON
+        try:
+            analysis = json.loads(text)
+        except json.JSONDecodeError:
+            # Try to extract JSON from text
+            import re
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                analysis = json.loads(json_match.group(0))
+            else:
+                raise ValueError(f"Could not parse JSON from response: {text}")
+
+        # Set defaults for hierarchical fields
+        analysis.setdefault('architecture_style', None)
+        analysis.setdefault('architecture_style_specific', None)
+        analysis.setdefault('architecture_confidence', 0.0)
+
+        # Cache the result
+        try:
+            dynamodb.put_item(
+                TableName='hearth-vision-cache',
+                Item={
+                    'image_url': {'S': image_url},
+                    'analysis': {'S': json.dumps(analysis)},
+                    'timestamp': {'N': str(int(time.time()))}
+                }
+            )
+        except Exception as e:
+            print(f"    Cache write error: {e}")
+
+        return {
+            'analysis': analysis,
+            'cached': False
+        }
+
+    except Exception as e:
+        print(f"    Vision analysis error: {e}")
+        return None
 
 def get_all_property_zpids():
     """Fetch all ZPIDs from OpenSearch"""
@@ -116,26 +261,18 @@ def get_property_data(zpid):
 
 
 def get_exterior_image_url(property_data):
-    """Get first exterior image URL from property"""
-    # Try to get from vision cache first (has actual URLs)
-    zpid = property_data.get('zpid')
+    """Get first image URL from property data"""
+    # First, try to get from images array (actual URLs from Zillow)
+    images = property_data.get('images', [])
+    if images and len(images) > 0:
+        return images[0]  # Return first image URL
 
-    # Check vision cache for cached images
-    try:
-        response = dynamodb.scan(
-            TableName='hearth-vision-cache',
-            FilterExpression='contains(image_url, :zpid)',
-            ExpressionAttributeValues={':zpid': {'S': str(zpid)}},
-            Limit=1
-        )
+    # Fallback: try image_vectors
+    image_vectors = property_data.get('image_vectors', [])
+    if image_vectors and len(image_vectors) > 0:
+        return image_vectors[0].get('image_url')
 
-        if response['Items']:
-            return response['Items'][0]['image_url']['S']
-    except:
-        pass
-
-    # Fallback: construct URL (may not exist)
-    return f"https://photos.zillowstatic.com/fp/{zpid}-cc_ft_1536.jpg"
+    return None
 
 
 def classify_architecture_hierarchical(image_url):

@@ -1,6 +1,8 @@
 """
 crud_listings.py - CRUD API for property listings
 
+Main entry point: lambda_handler (routes to update/add/delete handlers)
+
 Provides Lambda handlers for manual listing management:
 
 UPDATE (PATCH /listings/{zpid}):
@@ -490,4 +492,48 @@ def delete_listing_handler(event, context):
             "statusCode": 500,
             "headers": cors_headers,
             "body": json.dumps({"error": str(e)})
+        }
+
+
+# ===============================================
+# MAIN LAMBDA HANDLER (ROUTER)
+# ===============================================
+
+def lambda_handler(event, context):
+    """
+    Main Lambda handler - routes requests to appropriate CRUD handler.
+    
+    Routes:
+    - PATCH /listings/{zpid} -> update_listing_handler
+    - POST /listings -> add_listing_handler  
+    - DELETE /listings/{zpid} -> delete_listing_handler
+    """
+    
+    # Get HTTP method and path
+    method = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method', '')
+    path = event.get('path') or event.get('rawPath', '')
+    
+    logger.info(f"CRUD Router: {method} {path}")
+    
+    # Route based on method and path
+    if method == 'PATCH' and '/listings/' in path:
+        return update_listing_handler(event, context)
+    elif method == 'POST' and path.endswith('/listings'):
+        return add_listing_handler(event, context)
+    elif method == 'DELETE' and '/listings/' in path:
+        return delete_listing_handler(event, context)
+    else:
+        return {
+            'statusCode': 404,
+            'headers': cors_headers,
+            'body': json.dumps({
+                'error': 'Not found - CRUD API',
+                'method': method,
+                'path': path,
+                'supported_routes': [
+                    'PATCH /listings/{zpid}',
+                    'POST /listings',
+                    'DELETE /listings/{zpid}'
+                ]
+            })
         }

@@ -1,0 +1,74 @@
+{
+  "config": {
+    "dry_run": true,
+    "limit": 5,
+    "clear_cache": true,
+    "total_processed": 5
+  },
+  "summary": {
+    "updated": 5
+  },
+  "cost": 0.005625,
+  "results": [
+    {
+      "zpid": "448383785",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "12770115",
+      "status": "updated",
+      "old": {
+        "style": "craftsman"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "12659389",
+      "status": "updated",
+      "old": {
+        "style": "contemporary"
+      },
+      "new": {
+        "style": "mid_century_modern",
+        "specific": "mid_century_ranch",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "12738520",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "12659449",
+      "status": "updated",
+      "old": {
+        "style": "contemporary"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.9
+      }
+    }
+  ]
+}
