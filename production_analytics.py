@@ -13,6 +13,7 @@ search_logs_table = dynamodb.Table('hearth-production-search-logs')
 feedback_table = dynamodb.Table('hearth-production-feedback')
 sessions_table = dynamodb.Table('hearth-production-sessions')
 issues_table = dynamodb.Table('hearth-production-issues')
+search_quality_table = dynamodb.Table('SearchQualityFeedback')
 
 # Constants
 SESSION_TIMEOUT_MINUTES = 30
@@ -153,6 +154,9 @@ def lambda_handler(event, context):
 
         elif path == '/production/analytics/export-issues' and method == 'GET':
             return export_issues(event, headers)
+
+        elif path == '/production/analytics/search-quality-ratings' and method == 'GET':
+            return get_search_quality_ratings(event, headers)
 
         else:
             return {
@@ -944,7 +948,7 @@ def get_searches_over_time(event, headers):
     # Group by hour
     hourly_counts = {}
     for search in searches:
-        timestamp = search.get('timestamp', 0)
+        timestamp = int(search.get('timestamp', 0))
         hour = datetime.fromtimestamp(timestamp / 1000).replace(minute=0, second=0, microsecond=0)
         hour_str = hour.strftime('%H:%M')
         hourly_counts[hour_str] = hourly_counts.get(hour_str, 0) + 1
@@ -1509,3 +1513,92 @@ def export_searches(event, headers):
         },
         'body': csv_content
     }
+
+
+def get_search_quality_ratings(event, headers):
+    """Get all search quality ratings from users"""
+    try:
+        response = search_quality_table.scan()
+        ratings = response['Items']
+        
+        # Sort by timestamp descending
+        ratings.sort(key=lambda x: int(x.get('timestamp', 0)), reverse=True)
+        
+        # Calculate statistics
+        total_ratings = len(ratings)
+        if total_ratings == 0:
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'total_ratings': 0,
+                    'avg_rating': 0,
+                    'rating_distribution': {1: 0, 2: 0, 3: 0, 4: 0, 5: 0},
+                    'recent_ratings': [],
+                    'rating_breakdown': {
+                        'excellent': 0,
+                        'good': 0,
+                        'average': 0,
+                        'poor': 0,
+                        'very_poor': 0
+                    }
+                }, default=decimal_default)
+            }
+        
+        # Calculate statistics
+        total_score = sum([int(r.get('rating', 0)) for r in ratings])
+        avg_rating = round(total_score / total_ratings, 2)
+        
+        # Rating distribution
+        distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+        for rating in ratings:
+            score = int(rating.get('rating', 0))
+            if score in distribution:
+                distribution[score] += 1
+        
+        # Rating breakdown
+        breakdown = {
+            'excellent': distribution[5],
+            'good': distribution[4],
+            'average': distribution[3],
+            'poor': distribution[2],
+            'very_poor': distribution[1]
+        }
+        
+        # Format recent ratings for display
+        recent_ratings = []
+        for rating in ratings[:50]:  # Get last 50
+            recent_ratings.append({
+                'quality_id': rating.get('quality_id', ''),
+                'timestamp': int(rating.get('timestamp', 0)),
+                'session_id': rating.get('session_id', ''),
+                'query_id': rating.get('query_id', ''),
+                'search_query': rating.get('search_query', ''),
+                'rating': int(rating.get('rating', 0)),
+                'feedback_text': rating.get('feedback_text', ''),
+                'feedback_categories': rating.get('feedback_categories', []),
+                'total_results': int(rating.get('total_results', 0)),
+                'properties_viewed': int(rating.get('properties_viewed', 0)),
+                'time_on_results': int(rating.get('time_on_results', 0)),
+                'device_type': rating.get('device_type', 'unknown')
+            })
+        
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'total_ratings': total_ratings,
+                'avg_rating': avg_rating,
+                'rating_distribution': distribution,
+                'recent_ratings': recent_ratings,
+                'rating_breakdown': breakdown
+            }, default=decimal_default)
+        }
+    
+    except Exception as e:
+        print(f"Error in get_search_quality_ratings: {e}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': str(e)})
+        }

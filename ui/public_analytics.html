@@ -12,6 +12,149 @@
             background: #f7f8fa;
             min-height: 100vh;
         }
+
+        /* Password Protection Overlay */
+        #passwordOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .password-modal {
+            background: white;
+            border-radius: 20px;
+            padding: 50px 60px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 450px;
+            width: 90%;
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .password-modal h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .password-modal p {
+            color: #666;
+            font-size: 1em;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .password-input-group {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .password-modal input {
+            width: 100%;
+            padding: 18px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .password-modal input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+        .password-modal input.error {
+            border-color: #f44336;
+            animation: shake 0.5s ease;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        .password-modal button {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .password-modal button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .password-modal button:active {
+            transform: translateY(0);
+        }
+
+        .error-message {
+            color: #f44336;
+            font-size: 0.9em;
+            margin-top: 10px;
+            min-height: 20px;
+            font-weight: 500;
+        }
+
+        .lock-icon {
+            font-size: 3em;
+            margin-bottom: 20px;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        body.locked {
+            overflow: hidden;
+        }
+
+        .fade-out {
+            animation: fadeOut 0.3s ease-out forwards;
+        }
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -333,7 +476,29 @@
         }
     </style>
 </head>
-<body>
+<body class="locked">
+    <!-- Password Protection Overlay -->
+    <div id="passwordOverlay">
+        <div class="password-modal">
+            <div class="lock-icon">🔒</div>
+            <h2>Internal Dashboard</h2>
+            <p>This is a protected internal analytics dashboard.<br>Please enter the password to continue.</p>
+            <form id="passwordForm" onsubmit="return false;">
+                <div class="password-input-group">
+                    <input
+                        type="password"
+                        id="passwordInput"
+                        placeholder="Enter password"
+                        autocomplete="off"
+                        autofocus
+                    />
+                </div>
+                <button type="submit" onclick="checkPassword()">Unlock Dashboard</button>
+                <div class="error-message" id="errorMessage"></div>
+            </form>
+        </div>
+    </div>
+
     <div class="header">
         <div class="header-content">
             <div>
@@ -425,26 +590,84 @@
 
         <!-- Search Quality Tab -->
         <div id="search-quality" class="tab-content">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>Avg Results</h3>
-                    <div class="stat-value" id="avgResults">0</div>
-                    <div class="stat-label">Per search</div>
+            <div class="table-card" style="margin-bottom: 20px;">
+                <h2>👥 User Search Quality Ratings</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Ratings</h3>
+                        <div class="stat-value" id="totalUserRatings">0</div>
+                        <div class="stat-label">From "Rate This Search"</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Average Rating</h3>
+                        <div class="stat-value" id="avgUserRating">0</div>
+                        <div class="stat-label">Out of 5 stars</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);">
+                        <h3>⭐⭐⭐⭐⭐</h3>
+                        <div class="stat-value" id="rating5Count">0</div>
+                        <div class="stat-label">Excellent</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #8BC34A 0%, #7CB342 100%);">
+                        <h3>⭐⭐⭐⭐</h3>
+                        <div class="stat-value" id="rating4Count">0</div>
+                        <div class="stat-label">Good</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #FFC107 0%, #FFB300 100%);">
+                        <h3>⭐⭐⭐</h3>
+                        <div class="stat-value" id="rating3Count">0</div>
+                        <div class="stat-label">Average</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);">
+                        <h3>⭐⭐</h3>
+                        <div class="stat-value" id="rating2Count">0</div>
+                        <div class="stat-label">Poor</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);">
+                        <h3>⭐</h3>
+                        <div class="stat-value" id="rating1Count">0</div>
+                        <div class="stat-label">Very Poor</div>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <h3>Zero Results</h3>
-                    <div class="stat-value" id="zeroResults">0</div>
-                    <div class="stat-label">Searches with no results</div>
-                </div>
-                <div class="stat-card">
-                    <h3>LLM Success Rate</h3>
-                    <div class="stat-value" id="llmSuccessRate">0%</div>
-                    <div class="stat-label">Multi-query parsing</div>
-                </div>
-                <div class="stat-card">
-                    <h3>Avg Execution</h3>
-                    <div class="stat-value" id="avgExecution">0ms</div>
-                    <div class="stat-label">Backend time</div>
+                <table id="userRatingsTable" style="margin-top: 20px;">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Query</th>
+                            <th>Rating</th>
+                            <th>Feedback</th>
+                            <th>Categories</th>
+                            <th>Results</th>
+                            <th>Device</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="table-card" style="margin-bottom: 20px;">
+                <h2>⚙️ Technical Search Quality</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Avg Results</h3>
+                        <div class="stat-value" id="avgResults">0</div>
+                        <div class="stat-label">Per search</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Zero Results</h3>
+                        <div class="stat-value" id="zeroResults">0</div>
+                        <div class="stat-label">Searches with no results</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>LLM Success Rate</h3>
+                        <div class="stat-value" id="llmSuccessRate">0%</div>
+                        <div class="stat-label">Multi-query parsing</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Avg Execution</h3>
+                        <div class="stat-value" id="avgExecution">0ms</div>
+                        <div class="stat-label">Backend time</div>
+                    </div>
                 </div>
             </div>
 
@@ -667,8 +890,63 @@
     <script>
         const ANALYTICS_ENDPOINT = 'https://f2o144zh31.execute-api.us-east-1.amazonaws.com/production';
         const REFRESH_INTERVAL = 10000; // 10 seconds
+        const CORRECT_PASSWORD = 'hearth-internal-pass';
+        const PASSWORD_SESSION_KEY = 'hearth_analytics_auth';
         let charts = {};
         let refreshTimer = null;
+
+        // Password Protection
+        function checkPassword() {
+            const input = document.getElementById('passwordInput');
+            const errorMsg = document.getElementById('errorMessage');
+            const password = input.value;
+
+            if (password === CORRECT_PASSWORD) {
+                // Store auth in sessionStorage (cleared when browser closes)
+                sessionStorage.setItem(PASSWORD_SESSION_KEY, 'true');
+
+                // Unlock with smooth animation
+                const overlay = document.getElementById('passwordOverlay');
+                overlay.classList.add('fade-out');
+                document.body.classList.remove('locked');
+
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                    // Initialize dashboard after unlock
+                    init();
+                }, 300);
+            } else {
+                // Show error
+                errorMsg.textContent = 'Incorrect password. Please try again.';
+                input.classList.add('error');
+                input.value = '';
+
+                // Remove error styling after animation
+                setTimeout(() => {
+                    input.classList.remove('error');
+                }, 500);
+            }
+        }
+
+        // Check if already authenticated on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const isAuthenticated = sessionStorage.getItem(PASSWORD_SESSION_KEY) === 'true';
+
+            if (isAuthenticated) {
+                // Already authenticated, hide overlay and init
+                const overlay = document.getElementById('passwordOverlay');
+                overlay.style.display = 'none';
+                document.body.classList.remove('locked');
+                init();
+            } else {
+                // Setup enter key listener for password
+                document.getElementById('passwordInput').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        checkPassword();
+                    }
+                });
+            }
+        });
 
         // Tab switching
         function switchTab(tabName) {
@@ -818,6 +1096,10 @@
 
         // Load Search Quality data
         async function loadSearchQuality() {
+            // Load user ratings
+            await loadUserRatings();
+
+            // Load technical metrics
             const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/search-quality`);
             const data = await response.json();
 
@@ -829,6 +1111,48 @@
             // Load tables
             await loadTopQueries();
             await loadRecentSearches();
+        }
+
+        async function loadUserRatings() {
+            try {
+                const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/search-quality-ratings`);
+                const data = await response.json();
+
+                // Update stats
+                document.getElementById('totalUserRatings').textContent = data.total_ratings || 0;
+                document.getElementById('avgUserRating').textContent = data.avg_rating?.toFixed(1) || 0;
+                document.getElementById('rating5Count').textContent = data.rating_breakdown?.excellent || 0;
+                document.getElementById('rating4Count').textContent = data.rating_breakdown?.good || 0;
+                document.getElementById('rating3Count').textContent = data.rating_breakdown?.average || 0;
+                document.getElementById('rating2Count').textContent = data.rating_breakdown?.poor || 0;
+                document.getElementById('rating1Count').textContent = data.rating_breakdown?.very_poor || 0;
+
+                // Load user ratings table
+                const tbody = document.querySelector('#userRatingsTable tbody');
+                tbody.innerHTML = '';
+
+                if (!data.recent_ratings || data.recent_ratings.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">No user ratings yet</td></tr>';
+                    return;
+                }
+
+                data.recent_ratings.forEach(rating => {
+                    const row = tbody.insertRow();
+                    const stars = '⭐'.repeat(rating.rating);
+                    const categories = rating.feedback_categories?.join(', ') || '-';
+                    row.innerHTML = `
+                        <td>${formatTime(rating.timestamp)}</td>
+                        <td>${escapeHtml(rating.search_query)}</td>
+                        <td style="font-size: 1.2em;">${stars} (${rating.rating})</td>
+                        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(rating.feedback_text || '-')}</td>
+                        <td>${escapeHtml(categories)}</td>
+                        <td>${rating.total_results}</td>
+                        <td>${rating.device_type}</td>
+                    `;
+                });
+            } catch (error) {
+                console.error('Error loading user ratings:', error);
+            }
         }
 
         async function loadTopQueries() {
@@ -1094,8 +1418,8 @@
             return div.innerHTML;
         }
 
-        // Initialize on load
-        window.addEventListener('load', init);
+        // Note: init() is called after password authentication
+        // See password protection code above
 
         // Cleanup on unload
         window.addEventListener('beforeunload', () => {
