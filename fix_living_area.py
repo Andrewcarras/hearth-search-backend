@@ -12,8 +12,12 @@ import time
 import requests
 from typing import Dict, List
 
+# Unbuffer output for real-time logging
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
 # CRUD API endpoint
-CRUD_API = "https://mqgsb4xb2g.execute-api.us-east-1.amazonaws.com/prod"
+CRUD_API = "https://mwf1h5nbxe.execute-api.us-east-1.amazonaws.com/prod"
 INDEX = "listings-v2"
 
 def load_zillow_data(filepath: str) -> Dict[str, dict]:
