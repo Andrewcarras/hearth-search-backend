@@ -76,6 +76,17 @@ STYLE_SYNONYMS = {
     "craftsman style": ["craftsman"],
     "arts and crafts": ["arts_and_crafts", "craftsman"],
     "queen anne": ["victorian_queen_anne", "victorian"],
+    "second empire": ["victorian_second_empire", "victorian"],
+    "second empire style": ["victorian_second_empire", "victorian"],
+    "second empire style homes": ["victorian_second_empire", "victorian"],
+    "second empire homes": ["victorian_second_empire", "victorian"],
+    "italianate": ["victorian_italianate", "victorian"],
+    "italianate style": ["victorian_italianate", "victorian"],
+    "italianate homes": ["victorian_italianate", "victorian"],
+    "gothic revival": ["victorian_gothic_revival", "victorian"],
+    "gothic revival homes": ["victorian_gothic_revival", "victorian"],
+    "romanesque revival": ["victorian_romanesque_revival", "victorian"],
+    "shingle style": ["victorian_shingle_style", "victorian"],
 
     # Style Variants
     "cape": ["cape_cod"],
@@ -195,26 +206,181 @@ STYLE_FAMILIES = {
     ]
 }
 
-# Style similarity scores (for ranking)
-# Used when user searches for unmapped style
+# Style similarity scores (for ranking and fallback)
+# Used when user searches for specific style but no results found
+# Format: {specific_style: {fallback_style: similarity_score}}
+# Higher scores (closer to 1.0) = more similar
 STYLE_SIMILARITY = {
+    # Victorian sub-styles → Victorian family fallbacks
+    "victorian_second_empire": {
+        "victorian": 0.95,  # Parent style - very similar
+        "victorian_italianate": 0.75,  # Both have ornate details
+        "victorian_queen_anne": 0.70,  # Similar era
+        "victorian_gothic_revival": 0.65
+    },
+    "victorian_queen_anne": {
+        "victorian": 0.95,
+        "victorian_second_empire": 0.70,
+        "victorian_italianate": 0.70,
+        "victorian_gothic_revival": 0.65
+    },
+    "victorian_italianate": {
+        "victorian": 0.95,
+        "victorian_second_empire": 0.75,
+        "victorian_queen_anne": 0.70,
+        "brownstone": 0.80  # Italianate often used for brownstones
+    },
+    "victorian_gothic_revival": {
+        "victorian": 0.95,
+        "victorian_queen_anne": 0.65,
+        "gothic_revival": 0.90,
+        "victorian_romanesque_revival": 0.70
+    },
+    "victorian_romanesque_revival": {
+        "victorian": 0.95,
+        "victorian_gothic_revival": 0.70,
+        "romanesque_revival": 0.90
+    },
+    "victorian_shingle_style": {
+        "victorian": 0.95,
+        "victorian_queen_anne": 0.70,
+        "craftsman": 0.60  # Transitional style
+    },
+
+    # Craftsman family fallbacks
     "arts_and_crafts": {
         "craftsman": 0.95,
         "craftsman_bungalow": 0.90,
         "bungalow": 0.85,
         "prairie_style": 0.80
     },
+    "craftsman_bungalow": {
+        "craftsman": 0.95,
+        "arts_and_crafts": 0.90,
+        "bungalow": 0.90,
+        "craftsman_foursquare": 0.75
+    },
+    "craftsman_foursquare": {
+        "craftsman": 0.95,
+        "craftsman_bungalow": 0.75,
+        "prairie_style": 0.70
+    },
+    "prairie_style": {
+        "craftsman": 0.80,
+        "arts_and_crafts": 0.80,
+        "mid_century_modern": 0.60  # Both emphasize horizontal lines
+    },
+
+    # Mid-century family fallbacks
     "mid_century_modern": {
         "ranch": 0.75,
         "contemporary": 0.70,
-        "modern": 0.65
+        "modern": 0.65,
+        "mid_century_ranch": 0.90,
+        "mid_century_split_level": 0.85
     },
-    "victorian_queen_anne": {
-        "victorian": 0.95,
-        "victorian_italianate": 0.70,
-        "victorian_gothic_revival": 0.65
+    "mid_century_ranch": {
+        "mid_century_modern": 0.90,
+        "ranch": 0.95,
+        "contemporary": 0.65
+    },
+    "mid_century_split_level": {
+        "mid_century_modern": 0.85,
+        "split_level": 0.95,
+        "ranch": 0.70
+    },
+
+    # Colonial family fallbacks
+    "colonial_saltbox": {
+        "colonial": 0.95,
+        "colonial_revival": 0.80,
+        "cape_cod": 0.70
+    },
+    "colonial_dutch": {
+        "colonial": 0.95,
+        "colonial_revival": 0.80
+    },
+    "colonial_spanish": {
+        "colonial": 0.95,
+        "spanish_colonial_revival": 0.90,
+        "mediterranean": 0.75
+    },
+    "federal": {
+        "colonial": 0.85,
+        "colonial_revival": 0.80,
+        "georgian": 0.90
+    },
+    "georgian": {
+        "colonial": 0.85,
+        "colonial_revival": 0.80,
+        "federal": 0.90,
+        "neoclassical": 0.75
+    },
+
+    # Spanish/Mediterranean family fallbacks
+    "spanish_hacienda": {
+        "spanish_colonial_revival": 0.90,
+        "mediterranean": 0.85,
+        "mission_revival": 0.75
+    },
+    "mission_revival": {
+        "spanish_colonial_revival": 0.90,
+        "pueblo_revival": 0.75,
+        "mediterranean": 0.70
+    },
+    "pueblo_revival": {
+        "spanish_colonial_revival": 0.80,
+        "mission_revival": 0.75,
+        "mediterranean": 0.65
+    },
+    "tuscan_villa": {
+        "mediterranean": 0.95,
+        "spanish_colonial_revival": 0.70,
+        "italian_villa": 0.90
+    },
+
+    # Modern family fallbacks
+    "contemporary": {
+        "modern": 0.95,
+        "minimalist": 0.80,
+        "mid_century_modern": 0.70
+    },
+    "minimalist": {
+        "modern": 0.90,
+        "contemporary": 0.80,
+        "industrial": 0.70
+    },
+    "industrial": {
+        "modern": 0.80,
+        "contemporary": 0.75,
+        "minimalist": 0.70
+    },
+    "modern_farmhouse": {
+        "farmhouse": 0.90,
+        "contemporary_farmhouse": 0.95,
+        "contemporary": 0.70
+    },
+    "contemporary_farmhouse": {
+        "farmhouse": 0.90,
+        "modern_farmhouse": 0.95,
+        "modern": 0.70
+    },
+
+    # Other fallbacks
+    "greek_revival": {
+        "neoclassical": 0.85,
+        "colonial_revival": 0.75,
+        "colonial": 0.70
+    },
+    "tudor_revival": {
+        "tudor": 0.95,
+        "english_cottage": 0.75
+    },
+    "english_cottage": {
+        "cottage": 0.95,
+        "tudor": 0.70,
+        "tudor_revival": 0.75
     }
-    # Add more as needed
 }
 
 
@@ -241,14 +407,16 @@ def map_user_style_to_supported(user_input):
             "reasoning": f"Direct match for '{user_lower}'"
         }
 
-    # 2. Synonym lookup
+    # 2. Synonym lookup (already includes parent styles as fallbacks)
     if user_lower in STYLE_SYNONYMS:
+        mapped = STYLE_SYNONYMS[user_lower]
         return {
             "exact_match": False,
-            "styles": STYLE_SYNONYMS[user_lower],
+            "styles": mapped,
             "confidence": 0.9,
             "method": "synonym_dictionary",
-            "reasoning": f"'{user_input}' mapped to {STYLE_SYNONYMS[user_lower]}"
+            "reasoning": f"'{user_input}' mapped to {mapped}",
+            "has_fallbacks": True  # Synonyms already include fallbacks
         }
 
     # 3. Family expansion
@@ -289,6 +457,110 @@ def get_style_family(style):
         if style in members:
             return family
     return style  # Return itself if no family found
+
+
+def get_fallback_styles(primary_style, min_similarity=0.65, max_fallbacks=5):
+    """
+    Get fallback styles for a specific architectural style.
+
+    This creates a hierarchical fallback system where if no homes are found
+    for a specific style (e.g., "victorian_second_empire"), we can fall back
+    to similar styles (e.g., "victorian", "victorian_italianate").
+
+    Args:
+        primary_style: The user's requested style (e.g., "victorian_second_empire")
+        min_similarity: Minimum similarity score to include (0.0-1.0)
+        max_fallbacks: Maximum number of fallback styles to return
+
+    Returns:
+        List of tuples: [(fallback_style, similarity_score), ...]
+        Sorted by similarity score (highest first)
+
+    Example:
+        >>> get_fallback_styles("victorian_second_empire")
+        [
+            ("victorian", 0.95),
+            ("victorian_italianate", 0.75),
+            ("victorian_queen_anne", 0.70)
+        ]
+    """
+    if primary_style not in STYLE_SIMILARITY:
+        # If no explicit fallbacks defined, try to find family
+        family = get_style_family(primary_style)
+        if family != primary_style and family in STYLE_FAMILIES:
+            # Return other members of the same family with default similarity
+            family_members = [s for s in STYLE_FAMILIES[family] if s != primary_style]
+            return [(s, 0.80) for s in family_members[:max_fallbacks]]
+        return []
+
+    # Get fallbacks from STYLE_SIMILARITY dictionary
+    fallbacks = STYLE_SIMILARITY[primary_style]
+
+    # Filter by minimum similarity and sort by score (descending)
+    sorted_fallbacks = sorted(
+        [(style, score) for style, score in fallbacks.items() if score >= min_similarity],
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    return sorted_fallbacks[:max_fallbacks]
+
+
+def get_expanded_style_search(primary_styles, include_fallbacks=True, min_similarity=0.70):
+    """
+    Expand a list of primary styles to include fallbacks for better search results.
+
+    This is used when searching for architectural styles - if searching for
+    "victorian_second_empire" doesn't return many results, we also search
+    broader Victorian styles.
+
+    Args:
+        primary_styles: List of primary styles to search for
+        include_fallbacks: Whether to include fallback styles
+        min_similarity: Minimum similarity for fallbacks (0.0-1.0)
+
+    Returns:
+        dict with:
+        - primary: List of primary styles (original request)
+        - fallbacks: List of fallback styles with similarity scores
+        - all_styles: Combined list for search query
+
+    Example:
+        >>> get_expanded_style_search(["victorian_second_empire"])
+        {
+            "primary": ["victorian_second_empire"],
+            "fallbacks": [("victorian", 0.95), ("victorian_italianate", 0.75)],
+            "all_styles": ["victorian_second_empire", "victorian", "victorian_italianate"]
+        }
+    """
+    if not include_fallbacks:
+        return {
+            "primary": primary_styles,
+            "fallbacks": [],
+            "all_styles": primary_styles
+        }
+
+    all_fallbacks = []
+    seen_styles = set(primary_styles)
+
+    for style in primary_styles:
+        fallbacks = get_fallback_styles(style, min_similarity=min_similarity)
+        for fallback_style, score in fallbacks:
+            if fallback_style not in seen_styles:
+                all_fallbacks.append((fallback_style, score))
+                seen_styles.add(fallback_style)
+
+    # Sort all fallbacks by similarity score
+    all_fallbacks.sort(key=lambda x: x[1], reverse=True)
+
+    # Combine primary + fallback styles for search
+    all_styles = primary_styles + [style for style, _ in all_fallbacks]
+
+    return {
+        "primary": primary_styles,
+        "fallbacks": all_fallbacks,
+        "all_styles": all_styles
+    }
 
 
 def get_user_friendly_message(user_query, mapped_styles):
