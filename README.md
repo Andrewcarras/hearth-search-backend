@@ -6,9 +6,9 @@ Advanced multimodal AI-powered real estate search combining natural language pro
 
 ## 🚀 Quick Start
 
-**Production UI:** http://54.226.26.203/
-**Internal Demo UI:** http://54.234.198.245/
-**Internal Analytics Dashboard:** http://54.234.198.245/analytics.html (Password: `hearth-internal-pass`)
+**Production UI:** http://54.226.26.203/ (Public)
+**Internal Demo:** http://54.234.198.245/ 🔒 (Password: `hearth-internal-pass`)
+  - Includes: Main Search, BM25 Test, kNN Tests, Admin, CRUD Manager, Analytics
 
 **Search API:** `https://f2o144zh31.execute-api.us-east-1.amazonaws.com/search`
 **Analytics API:** `https://f2o144zh31.execute-api.us-east-1.amazonaws.com/production`
