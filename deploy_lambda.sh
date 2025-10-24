@@ -55,6 +55,7 @@ build_package() {
     cp common.py "$build_dir/"
     cp cache_utils.py "$build_dir/"
     cp search_logger.py "$build_dir/" 2>/dev/null || true  # Only needed for search Lambda
+    cp architecture_style_mappings.py "$build_dir/" 2>/dev/null || true  # Architecture style mappings
 
     # Clean up cache files
     find "$build_dir" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

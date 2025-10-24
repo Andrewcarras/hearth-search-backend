@@ -209,7 +209,8 @@ def _extract_core_fields(lst: Dict[str, Any]) -> Dict[str, Any]:
     # Extract property characteristics
     beds  = _num(lst.get("bedrooms") or lst.get("beds"))
     baths = _num(lst.get("bathrooms") or lst.get("baths"))
-    acreage = _num(lst.get("lotSize") or lst.get("acreage") or lst.get("lotArea"))
+    living_area = _num(lst.get("livingArea") or lst.get("livingAreaValue"))  # House square footage
+    lot_size = _num(lst.get("lotSize") or lst.get("lotAreaValue") or lst.get("acreage") or lst.get("lotArea"))
 
     # Extract geo coordinates for location-based search
     lat = lst.get("latitude") or (lst.get("latLong") or {}).get("latitude")
@@ -242,7 +243,8 @@ def _extract_core_fields(lst: Dict[str, Any]) -> Dict[str, Any]:
         "price": int(price) if price is not None else None,
         "bedrooms": float(beds) if beds is not None else None,  # Match UI field name
         "bathrooms": float(baths) if baths is not None else None,  # Match UI field name
-        "livingArea": float(acreage) if acreage is not None else None,  # For sqft display
+        "livingArea": float(living_area) if living_area is not None else None,  # House square footage
+        "lotSize": float(lot_size) if lot_size is not None else None,  # Lot size in sq ft
         "address": {  # Nested object for UI compatibility
             "streetAddress": addr,
             "city": city,

@@ -758,6 +758,205 @@
             background: #f1f8f4;
         }
 
+        /* Search Quality Feedback Button */
+        .search-feedback-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: white;
+            color: #4CAF50;
+            border: 2px solid #4CAF50;
+            border-radius: 30px;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .search-feedback-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.5);
+            background: #f1f8f4;
+        }
+
+        /* Search Quality Modal */
+        .search-quality-modal-content {
+            max-width: 480px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .search-quality-header {
+            padding: 30px 30px 20px;
+            text-align: center;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .search-quality-header h3 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .search-quality-header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .search-quality-body {
+            padding: 30px;
+        }
+
+        .star-rating {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 25px;
+        }
+
+        .star {
+            font-size: 40px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #ddd;
+        }
+
+        .star:hover,
+        .star.active {
+            color: #FFA500;
+            transform: scale(1.1);
+        }
+
+        .search-quality-details {
+            margin-top: 25px;
+            padding-top: 25px;
+            border-top: 1px solid #f0f0f0;
+            display: none;
+        }
+
+        .search-quality-details.visible {
+            display: block;
+        }
+
+        .quality-issue-categories {
+            margin-bottom: 20px;
+        }
+
+        .quality-issue-categories label {
+            font-weight: 600;
+            display: block;
+            margin-bottom: 12px;
+            color: #333;
+        }
+
+        .quality-issue-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .quality-category-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .quality-category-checkbox:hover {
+            background: #e9ecef;
+        }
+
+        .quality-category-checkbox input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .quality-feedback-text {
+            width: 100%;
+            height: 90px;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+            transition: border-color 0.2s ease;
+        }
+
+        .quality-feedback-text:focus {
+            outline: none;
+            border-color: #10b981;
+        }
+
+        .search-quality-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 25px;
+        }
+
+        .search-quality-submit {
+            flex: 1;
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .search-quality-submit:hover {
+            background: #059669;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .search-quality-skip {
+            flex: 1;
+            background: white;
+            color: #666;
+            border: 2px solid #e0e0e0;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .search-quality-skip:hover {
+            background: #f5f5f5;
+            border-color: #ccc;
+        }
+
+        .search-quality-success {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 30px;
+            color: #10b981;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .search-quality-success.visible {
+            display: flex;
+        }
+
         .bug-report-modal-content {
             max-width: 600px;
         }
@@ -876,6 +1075,9 @@
             .detail-section { padding: 20px; }
             .feedback-buttons { flex-direction: column; }
             .bug-report-button { bottom: 10px; left: 10px; font-size: 14px; padding: 10px 16px; }
+            .search-feedback-button { bottom: 10px; right: 10px; font-size: 14px; padding: 10px 16px; }
+            .search-quality-modal-content { max-width: 90vw; margin: 20px; }
+            .quality-issue-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -1081,6 +1283,88 @@
     <!-- Bug Report Button (Fixed Position) -->
     <div id="bugReportButton" class="bug-report-button" onclick="openBugReportModal()">
         <span>Report Issue</span>
+    </div>
+
+    <!-- Search Quality Feedback Button (Fixed Position) -->
+    <div id="searchFeedbackButton" class="search-feedback-button" style="visibility: hidden; opacity: 0;" onclick="openSearchQualityModal()">
+        <span>Rate this search</span>
+    </div>
+
+    <!-- Search Quality Feedback Modal -->
+    <div id="searchQualityModal" class="modal" onclick="if(event.target === this) closeSearchQualityModal()">
+        <div class="modal-content search-quality-modal-content" onclick="event.stopPropagation()">
+            <div class="search-quality-header">
+                <h3>How would you rate this search?</h3>
+                <p>Your feedback helps us improve search results</p>
+            </div>
+
+            <div class="search-quality-body">
+                <!-- Star Rating -->
+                <div class="star-rating" id="starRating">
+                    <span class="star" data-rating="1" onclick="setSearchRating(1)">★</span>
+                    <span class="star" data-rating="2" onclick="setSearchRating(2)">★</span>
+                    <span class="star" data-rating="3" onclick="setSearchRating(3)">★</span>
+                    <span class="star" data-rating="4" onclick="setSearchRating(4)">★</span>
+                    <span class="star" data-rating="5" onclick="setSearchRating(5)">★</span>
+                </div>
+
+                <!-- Issue Categories (shows for low ratings only) -->
+                <div id="searchQualityIssues" class="search-quality-details">
+                    <div class="quality-issue-categories">
+                        <label>What could be improved? (optional)</label>
+                        <div class="quality-issue-grid">
+                            <label class="quality-category-checkbox">
+                                <input type="checkbox" name="qualityCategory" value="not_relevant">
+                                <span>Results not relevant</span>
+                            </label>
+                            <label class="quality-category-checkbox">
+                                <input type="checkbox" name="qualityCategory" value="missing_properties">
+                                <span>Missing key properties</span>
+                            </label>
+                            <label class="quality-category-checkbox">
+                                <input type="checkbox" name="qualityCategory" value="poor_quality">
+                                <span>Poor quality matches</span>
+                            </label>
+                            <label class="quality-category-checkbox">
+                                <input type="checkbox" name="qualityCategory" value="wrong_price_location">
+                                <span>Wrong price/location</span>
+                            </label>
+                            <label class="quality-category-checkbox">
+                                <input type="checkbox" name="qualityCategory" value="too_few_results">
+                                <span>Too few results</span>
+                            </label>
+                            <label class="quality-category-checkbox">
+                                <input type="checkbox" name="qualityCategory" value="other">
+                                <span>Other</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Comments Section (always visible after rating) -->
+                <div id="searchQualityComments" style="display: none; margin-top: 25px; padding-top: 25px; border-top: 1px solid #f0f0f0;">
+                    <div>
+                        <label style="font-weight: 600; display: block; margin-bottom: 8px;">Additional comments (optional)</label>
+                        <textarea id="searchQualityText" class="quality-feedback-text" placeholder="Tell us more about your experience with this search..." maxlength="1000"></textarea>
+                        <div style="text-align: right; font-size: 0.85em; color: #999; margin-top: 5px;">
+                            <span id="searchQualityCharCount">0</span> / 1000
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Buttons -->
+                <div class="search-quality-buttons">
+                    <button class="search-quality-submit" onclick="submitSearchQuality()">Submit</button>
+                    <button class="search-quality-skip" onclick="closeSearchQualityModal()">Skip</button>
+                </div>
+
+                <!-- Success Message -->
+                <div id="searchQualitySuccess" class="search-quality-success">
+                    <span style="font-size: 28px;">✓</span>
+                    <span>Thank you for your feedback!</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Bug Report Modal -->
@@ -1532,6 +1816,50 @@
             hasFeedbackBeenSubmitted(zpid) {
                 const submitted = JSON.parse(localStorage.getItem('feedback_submitted') || '[]');
                 return submitted.includes(zpid);
+            },
+
+            async submitSearchQuality(rating, feedbackText, categories, propertiesViewed, timeOnResults) {
+                this.updateActivity();
+
+                const searchQuality = {
+                    session_id: this.sessionId,
+                    session_start: this.sessionStart,
+                    query_id: this.currentQueryId,
+                    search_query: document.getElementById('searchQuery').value,
+
+                    // Rating and feedback
+                    rating: rating,  // 1-5 stars
+                    feedback_text: feedbackText,
+                    feedback_categories: categories,
+
+                    // Search context
+                    total_results: window.currentResults ? window.currentResults.length : 0,
+                    properties_viewed: propertiesViewed,
+                    time_on_results: timeOnResults,
+                    filters_active: this.getCurrentFilters(),
+
+                    // Device
+                    ...this.getDeviceInfo()
+                };
+
+                try {
+                    const response = await fetch(`${ANALYTICS_ENDPOINT}/log-search-quality`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(searchQuality)
+                    });
+
+                    if (response.ok) {
+                        console.log('Search quality feedback submitted successfully');
+                        return true;
+                    } else {
+                        console.error('Failed to submit search quality:', await response.text());
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('Error submitting search quality:', error);
+                    return false;
+                }
             }
         };
 
@@ -1591,6 +1919,10 @@
             const query = document.getElementById('searchQuery').value.trim();
             if (!query) return;
 
+            // Reset search quality feedback for new search
+            searchQualitySubmitted = false;
+            hideSearchFeedbackButton();
+
             // Show loading
             document.getElementById('loadingIndicator').style.display = 'block';
             document.getElementById('resultsContainer').style.display = 'none';
@@ -1633,6 +1965,7 @@
         }
 
         function displayResults(results, query) {
+            console.log('displayResults called with', results.length, 'results');
             const grid = document.getElementById('propertiesGrid');
             const resultsCount = document.getElementById('resultsCount');
 
@@ -1665,6 +1998,11 @@
 
             document.getElementById('resultsContainer').style.display = 'block';
             document.getElementById('resultsContainer').scrollIntoView({ behavior: 'smooth' });
+
+            // Show search quality feedback button and track search start time
+            window.searchStartTime = Date.now();
+            window.currentResults = filtered;
+            showSearchFeedbackButton();
         }
 
         function createPropertyCard(property) {
@@ -1934,7 +2272,141 @@
                     document.getElementById('bugCharCount').textContent = bugDescription.value.length;
                 });
             }
+
+            const searchQualityText = document.getElementById('searchQualityText');
+            if (searchQualityText) {
+                searchQualityText.addEventListener('input', () => {
+                    document.getElementById('searchQualityCharCount').textContent = searchQualityText.value.length;
+                });
+            }
         });
+
+        // ===== SEARCH QUALITY FEEDBACK HANDLERS =====
+        let currentSearchRating = null;
+        let searchQualitySubmitted = false;
+
+        function showSearchFeedbackButton() {
+            const button = document.getElementById('searchFeedbackButton');
+            console.log('showSearchFeedbackButton called:', {
+                buttonFound: !!button,
+                searchQualitySubmitted: searchQualitySubmitted,
+                buttonElement: button,
+                willShow: !!(button && !searchQualitySubmitted)
+            });
+            if (button && !searchQualitySubmitted) {
+                // Immediately show, no timeout
+                button.style.visibility = 'visible';
+                button.style.opacity = '1';
+                console.log('Search feedback button visibility set to visible, opacity to 1');
+            }
+        }
+
+        function hideSearchFeedbackButton() {
+            const button = document.getElementById('searchFeedbackButton');
+            if (button) {
+                button.style.visibility = 'hidden';
+                button.style.opacity = '0';
+            }
+        }
+
+        function openSearchQualityModal() {
+            // Reset form
+            currentSearchRating = null;
+            document.querySelectorAll('.star').forEach(star => star.classList.remove('active'));
+            document.getElementById('searchQualityIssues').classList.remove('visible');
+            document.getElementById('searchQualityComments').style.display = 'none';
+            document.getElementById('searchQualityText').value = '';
+            document.getElementById('searchQualityCharCount').textContent = '0';
+            document.querySelectorAll('input[name="qualityCategory"]').forEach(cb => cb.checked = false);
+            document.getElementById('searchQualitySuccess').classList.remove('visible');
+            document.querySelector('.search-quality-buttons').style.display = 'flex';
+            document.querySelector('.star-rating').style.display = 'flex';
+
+            // Show modal
+            document.getElementById('searchQualityModal').style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeSearchQualityModal() {
+            document.getElementById('searchQualityModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        function setSearchRating(rating) {
+            currentSearchRating = rating;
+
+            // Update star display
+            const stars = document.querySelectorAll('.star');
+            stars.forEach((star, index) => {
+                if (index < rating) {
+                    star.classList.add('active');
+                } else {
+                    star.classList.remove('active');
+                }
+            });
+
+            // Always show comments section
+            document.getElementById('searchQualityComments').style.display = 'block';
+
+            // Show issue categories only for ratings 1-3 (low ratings)
+            const issuesSection = document.getElementById('searchQualityIssues');
+            if (rating <= 3) {
+                issuesSection.classList.add('visible');
+            } else {
+                issuesSection.classList.remove('visible');
+            }
+        }
+
+        async function submitSearchQuality() {
+            if (!currentSearchRating) {
+                alert('Please select a rating before submitting');
+                return;
+            }
+
+            // Get selected categories
+            const categories = Array.from(document.querySelectorAll('input[name="qualityCategory"]:checked'))
+                .map(cb => cb.value);
+
+            // Get feedback text
+            const feedbackText = document.getElementById('searchQualityText').value.trim();
+
+            // Count properties viewed in this search
+            const propertiesViewed = window.currentResults ?
+                window.currentResults.filter(r => r.clickTime).length : 0;
+
+            // Calculate time on results page
+            const timeOnResults = window.searchStartTime ?
+                Math.floor((Date.now() - window.searchStartTime) / 1000) : 0;
+
+            // Submit to analytics
+            const success = await Analytics.submitSearchQuality(
+                currentSearchRating,
+                feedbackText,
+                categories,
+                propertiesViewed,
+                timeOnResults
+            );
+
+            if (success) {
+                // Hide form, show success
+                document.querySelector('.star-rating').style.display = 'none';
+                document.getElementById('searchQualityIssues').classList.remove('visible');
+                document.getElementById('searchQualityComments').style.display = 'none';
+                document.querySelector('.search-quality-buttons').style.display = 'none';
+                document.getElementById('searchQualitySuccess').classList.add('visible');
+
+                // Mark as submitted
+                searchQualitySubmitted = true;
+                hideSearchFeedbackButton();
+
+                // Close modal after delay
+                setTimeout(() => {
+                    closeSearchQualityModal();
+                }, 2000);
+            } else {
+                alert('Failed to submit feedback. Please try again.');
+            }
+        }
 
         // ===== BUG REPORT HANDLERS =====
         function openBugReportModal() {

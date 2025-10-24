@@ -8,7 +8,7 @@ Provides:
 4. Intelligent fallback strategies
 """
 
-# Complete list of supported styles (60 total)
+# Complete list of supported styles (60+ total)
 ALL_SUPPORTED_STYLES = {
     # Tier 1: Broad categories (30 styles)
     "modern", "contemporary", "mid_century_modern", "craftsman", "ranch",
@@ -17,9 +17,9 @@ ALL_SUPPORTED_STYLES = {
     "traditional", "transitional", "industrial", "minimalist", "prairie_style",
     "mission_revival", "pueblo_revival", "log_cabin", "a_frame",
     "scandinavian_modern", "contemporary_farmhouse", "arts_and_crafts",
-    "tudor_revival", "colonial_revival", "greek_revival",
+    "tudor_revival", "colonial_revival", "greek_revival", "mountain_modern",
 
-    # Tier 2: Specific sub-styles (30 styles)
+    # Tier 2: Specific sub-styles (30+ styles)
     "victorian_queen_anne", "victorian_italianate", "victorian_gothic_revival",
     "victorian_second_empire", "victorian_romanesque_revival",
     "victorian_shingle_style", "craftsman_bungalow", "craftsman_foursquare",
@@ -28,7 +28,10 @@ ALL_SUPPORTED_STYLES = {
     "spanish_hacienda", "monterey_colonial", "english_cottage", "french_chateau",
     "neoclassical", "romanesque_revival", "gothic_revival", "beaux_arts",
     "art_deco", "bauhaus", "international_style", "postmodern",
-    "modern_farmhouse", "rustic_modern"
+    "modern_farmhouse", "rustic_modern",
+
+    # Additional Tier 2 styles being used in updates
+    "mid_century_ranch", "mid_century_split_level"
 }
 
 # Synonym dictionary: colloquial name → our supported style(s)
@@ -59,7 +62,16 @@ STYLE_SYNONYMS = {
 
     # Abbreviated/Casual Names
     "mid century": ["mid_century_modern"],
+    "mid century modern": ["mid_century_modern"],
+    "mid century modern homes": ["mid_century_modern"],
+    "mid century modern home": ["mid_century_modern"],
+    "mid-century": ["mid_century_modern"],
+    "mid-century modern": ["mid_century_modern"],
+    "mid-century modern homes": ["mid_century_modern"],
+    "mid century ranch": ["mid_century_ranch", "ranch"],
+    "mid century ranch homes": ["mid_century_ranch", "ranch"],
     "mcm": ["mid_century_modern"],
+    "mcm homes": ["mid_century_modern"],
     "mid mod": ["mid_century_modern"],
     "craftsman style": ["craftsman"],
     "arts and crafts": ["arts_and_crafts", "craftsman"],

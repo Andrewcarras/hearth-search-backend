@@ -65,6 +65,9 @@ def lambda_handler(event, context):
         elif path == '/production/log-feedback' and method == 'POST':
             return log_feedback(event, headers)
 
+        elif path == '/production/log-search-quality' and method == 'POST':
+            return log_search_quality(event, headers)
+
         elif path == '/production/report-issue' and method == 'POST':
             return report_issue(event, headers)
 
@@ -325,6 +328,76 @@ def log_feedback(event, headers):
         'headers': headers,
         'body': json.dumps({
             'feedback_id': feedback_id,
+            'success': True
+        })
+    }
+
+
+def log_search_quality(event, headers):
+    """Log search quality feedback"""
+    body = json.loads(event.get('body', '{}'))
+
+    # Generate ID
+    quality_id = str(uuid.uuid4())
+    timestamp = int(time.time() * 1000)
+    ttl = int((datetime.now() + timedelta(days=90)).timestamp())
+
+    # IP address
+    ip_address = event.get('headers', {}).get('X-Forwarded-For', '').split(',')[0].strip()
+    if not ip_address:
+        ip_address = event.get('requestContext', {}).get('identity', {}).get('sourceIp', 'unknown')
+
+    # Build item
+    item = {
+        'quality_id': quality_id,
+        'timestamp': timestamp,
+        'session_id': body.get('session_id'),
+        'query_id': body.get('query_id'),
+        'search_query': body.get('search_query', ''),
+
+        # Rating and feedback
+        'rating': body.get('rating', 0),  # 1-5 stars
+        'feedback_text': body.get('feedback_text', ''),
+        'feedback_categories': body.get('feedback_categories', []),
+
+        # Search context
+        'total_results': body.get('total_results', 0),
+        'properties_viewed': body.get('properties_viewed', 0),
+        'time_on_results': body.get('time_on_results', 0),
+        'filters_active': body.get('filters_active', {}),
+
+        # User info
+        'user_agent': event.get('headers', {}).get('User-Agent', ''),
+        'device_type': body.get('device_type', 'unknown'),
+        'screen_resolution': body.get('screen_resolution', ''),
+        'viewport_size': body.get('viewport_size', ''),
+        'ip_address': ip_address,
+
+        'ttl': ttl
+    }
+
+    # Convert floats to Decimal for DynamoDB
+    item = convert_floats_to_decimal(item)
+
+    # Store in DynamoDB - SearchQualityFeedback table
+    search_quality_table = dynamodb.Table('SearchQualityFeedback')
+    search_quality_table.put_item(Item=item)
+
+    # Update session search quality count
+    try:
+        sessions_table.update_item(
+            Key={'session_id': body.get('session_id'), 'session_start': body.get('session_start', timestamp)},
+            UpdateExpression='SET total_search_quality_submitted = if_not_exists(total_search_quality_submitted, :zero) + :inc, last_activity = :now',
+            ExpressionAttributeValues={':inc': 1, ':zero': 0, ':now': timestamp}
+        )
+    except Exception as e:
+        print(f"Error updating session search quality count: {e}")
+
+    return {
+        'statusCode': 200,
+        'headers': headers,
+        'body': json.dumps({
+            'quality_id': quality_id,
             'success': True
         })
     }

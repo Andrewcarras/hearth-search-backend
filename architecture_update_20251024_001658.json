@@ -1,0 +1,1210 @@
+{
+  "timestamp": "2025-10-24T00:16:58.967246",
+  "range": "3000-3100",
+  "results": [
+    {
+      "zpid": "453169659",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453170835",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": null,
+        "conf": 0.8
+      }
+    },
+    {
+      "zpid": "453216632",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453230122",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453300411",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453323833",
+      "status": "updated",
+      "old": {
+        "style": "mid_century_modern"
+      },
+      "new": {
+        "style": "mid_century_modern",
+        "specific": "mid_century_ranch",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453328294",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "modern",
+        "specific": "mid_century_modern",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453357619",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453366914",
+      "status": "updated",
+      "old": {
+        "style": "cabin"
+      },
+      "new": {
+        "style": "cabin",
+        "specific": null,
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453375144",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453377323",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "modern",
+        "specific": "contemporary",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453393832",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453455404",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453463474",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "modern",
+        "specific": "contemporary",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453466343",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453470676",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453471103",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453510572",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453513310",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "modern",
+        "specific": "contemporary",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453516274",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "modern",
+        "specific": "contemporary",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453517424",
+      "status": "updated",
+      "old": {
+        "style": "contemporary"
+      },
+      "new": {
+        "style": "modern",
+        "specific": "contemporary",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453517924",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "contemporary",
+        "specific": null,
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453517925",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453518220",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "modern",
+        "specific": "contemporary",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453519983",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453523321",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453575099",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453581921",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": null,
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453608369",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453609181",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453615404",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": null,
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453629044",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453829840",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453843142",
+      "status": "updated",
+      "old": {
+        "style": "contemporary"
+      },
+      "new": {
+        "style": "contemporary",
+        "specific": "mid_century_modern",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453843751",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453845825",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453859972",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453896292",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453896301",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453896304",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453896306",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453896309",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453896365",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453896369",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453896371",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453899494",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "modern",
+        "specific": null,
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453899816",
+      "status": "updated",
+      "old": {
+        "style": "cabin"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453910266",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "mid_century_modern",
+        "specific": "mid_century_ranch",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "453934898",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453934901",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": null,
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "453974764",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454040729",
+      "status": "updated",
+      "old": {
+        "style": "craftsman"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454040745",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454093706",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454123119",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454201407",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "industrial",
+        "specific": null,
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "454207164",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454273181",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "industrial",
+        "specific": null,
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "454277322",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454521330",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454576738",
+      "status": "updated",
+      "old": {
+        "style": "farmhouse"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454592535",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454641877",
+      "status": "updated",
+      "old": {
+        "style": "craftsman"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454717612",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "contemporary",
+        "specific": "mid_century_modern",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "454826454",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454828723",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454833364",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": null,
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454855540",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454872081",
+      "status": "updated",
+      "old": {
+        "style": "traditional"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": null,
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454872481",
+      "status": "updated",
+      "old": {
+        "style": "traditional"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454873228",
+      "status": "updated",
+      "old": {
+        "style": "craftsman"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": null,
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454882292",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": null,
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454882926",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "454892392",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454894611",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454898681",
+      "status": "updated",
+      "old": {
+        "style": "craftsman"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454921136",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454922829",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454927993",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454958466",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "454978036",
+      "status": "updated",
+      "old": {
+        "style": "contemporary"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455009049",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455050837",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "contemporary",
+        "specific": "mid_century_modern",
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "455055222",
+      "status": "updated",
+      "old": {
+        "style": "traditional"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455063817",
+      "status": "updated",
+      "old": {
+        "style": "contemporary"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455071746",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455118762",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": null,
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455130776",
+      "status": "updated",
+      "old": {
+        "style": "craftsman"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455137344",
+      "status": "updated",
+      "old": {
+        "style": "mid_century_modern"
+      },
+      "new": {
+        "style": "mid_century_modern",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455185044",
+      "status": "updated",
+      "old": {
+        "style": "mobile_home"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455220681",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455226125",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "contemporary",
+        "specific": null,
+        "conf": 0.9
+      }
+    },
+    {
+      "zpid": "455233538",
+      "status": "updated",
+      "old": {
+        "style": "mediterranean"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455238985",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455240827",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455243541",
+      "status": "updated",
+      "old": {
+        "style": "mobile_home"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455245546",
+      "status": "updated",
+      "old": {
+        "style": "ranch"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455246369",
+      "status": "updated",
+      "old": {
+        "style": "traditional"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455248983",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "ranch",
+        "specific": "mid_century_ranch",
+        "conf": 0.85
+      }
+    },
+    {
+      "zpid": "455270538",
+      "status": "updated",
+      "old": {
+        "style": "modern"
+      },
+      "new": {
+        "style": "modern",
+        "specific": "mid_century_modern",
+        "conf": 0.9
+      }
+    }
+  ],
+  "summary": {
+    "updated": 100
+  },
+  "cost": 0.11249999999999999
+}
