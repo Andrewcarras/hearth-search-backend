@@ -818,6 +818,91 @@ Return strict JSON:
         }
 
 
+def enhance_query_for_architecture(
+    original_query: str,
+    architecture_style: str,
+    mapped_styles: List[str]
+) -> str:
+    """
+    Enhance short architectural queries with context for better search.
+
+    Uses LLM to expand short queries like "arts and crafts" into
+    "arts and crafts craftsman style architecture exterior design home"
+    to improve embedding quality and BM25 keyword matching.
+
+    Args:
+        original_query: User's original query (e.g., "arts and crafts")
+        architecture_style: Extracted style (e.g., "arts_and_crafts")
+        mapped_styles: Mapped styles from our taxonomy (e.g., ["craftsman"])
+
+    Returns:
+        Enhanced query string optimized for hybrid search
+    """
+    from common import brt, LLM_MODEL_ID
+
+    # Build style context
+    style_info = f"{architecture_style} (maps to: {', '.join(mapped_styles)})" if mapped_styles else architecture_style
+
+    prompt = f"""You are optimizing a real estate search query for a hybrid search system that combines:
+- BM25 keyword search on property descriptions
+- Semantic similarity on text embeddings
+- Visual similarity on image embeddings
+
+The user searched for: "{original_query}"
+
+This query is about architectural style: {style_info}
+
+TASK: Enhance the query to improve search relevance WITHOUT changing user intent.
+
+RULES:
+1. Keep original query terms intact at the start
+2. Add 4-6 architectural keywords that:
+   - Clarify this is about HOME ARCHITECTURE
+   - Include the mapped style name(s)
+   - Add visual descriptors for the style
+   - Include architectural terminology
+
+3. Prioritize keywords that appear in property descriptions:
+   - General: "architecture", "style", "exterior", "design", "home", "house"
+   - For historical styles: "period", "classic", "historical"
+   - For the specific style: add 2-3 distinctive visual features
+
+4. Target length: 8-12 words total
+5. Return ONLY the enhanced query, no explanation
+
+EXAMPLES:
+- "arts and crafts" → "arts and crafts craftsman style architecture handcrafted details tapered columns home"
+- "craftsman" → "craftsman style architecture exposed beams tapered columns exterior design home"
+- "modern" → "modern contemporary architecture clean lines minimalist design large windows home"
+- "second empire" → "second empire victorian mansard roof architecture historical period exterior home"
+- "ranch" → "ranch style architecture single story rambler open floor plan home"
+
+Enhanced query:"""
+
+    try:
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 128,
+            "temperature": 0,  # Deterministic
+            "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+        }
+
+        resp = brt.invoke_model(modelId=LLM_MODEL_ID, body=json.dumps(body))
+        raw = resp["body"].read().decode("utf-8")
+        parsed = json.loads(raw)
+        enhanced = parsed["content"][0]["text"].strip()
+
+        # Remove quotes if LLM added them
+        enhanced = enhanced.strip('"\'')
+
+        logger.info(f"Query enhanced: '{original_query}' → '{enhanced}'")
+        return enhanced
+
+    except Exception as e:
+        logger.warning(f"Query enhancement failed: {e}, using original query")
+        return original_query
+
+
 def calculate_multi_query_image_score(inner_hits: Dict, sub_query_embeddings: List[Dict]) -> float:
     """
     Score property images using multiple sub-query embeddings with greedy diversification.
@@ -1422,9 +1507,27 @@ def handler(event, context):
     else:
         logger.info("Semantic search required - filtering for valid embeddings")
 
+    # Query enhancement for short architectural queries
+    # Enhance query before embedding generation to improve semantic search
+    query_for_embedding = q  # Default: use original query
+    if architecture_style and style_mapping_info:
+        # Only enhance short queries (< 5 words) to avoid over-optimization
+        word_count = len(q.split())
+        if word_count < 5:
+            logger.info(f"Short architectural query detected ({word_count} words), attempting enhancement")
+            t_enhance = time.time()
+            query_for_embedding = enhance_query_for_architecture(
+                original_query=q,
+                architecture_style=architecture_style,
+                mapped_styles=style_mapping_info['mapped_styles']
+            )
+            timing_data["query_enhancement_ms"] = (time.time() - t_enhance) * 1000
+        else:
+            logger.info(f"Query length {word_count} words - skipping enhancement")
+
     # CRITICAL FIX: Use multimodal embedding to match image embedding space
     t0 = time.time()
-    q_vec = embed_text_multimodal(q)
+    q_vec = embed_text_multimodal(query_for_embedding)
     timing_data["embedding_generation_ms"] = (time.time() - t0) * 1000
     timing_data["bedrock_embedding_calls"] = 1
     filter_clauses = _filters_to_bool(hard_filters, require_embeddings=require_embeddings)["bool"]["filter"]
@@ -1494,7 +1597,7 @@ def handler(event, context):
                 "should": [
                     {
                         "multi_match": {
-                            "query": q,
+                            "query": query_for_embedding,  # Use enhanced query for BM25 keyword matching
                             "fields": [
                                 f"description^{desc_boost}",           # Original Zillow description
                                 f"visual_features_text^{visual_boost}", # AI-generated from image analysis
