@@ -2014,7 +2014,8 @@ def handler(event, context):
         if include_nearby:
             result = enrich_with_nearby_places(result)
 
-        final.append((rrf_score * boost, result))
+        # Append with complete score including all boost factors for proper sorting
+        final.append((rrf_score * boost * first_image_boost, result))
 
     final.sort(key=lambda x: x[0], reverse=True)
     results = [x[1] for x in final[:size]]
