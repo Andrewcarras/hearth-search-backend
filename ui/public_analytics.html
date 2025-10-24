@@ -280,6 +280,37 @@
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            border: 2px solid #667eea;
+        }
+
+        .stat-card.active {
+            border: 2px solid #667eea;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+        }
+
+        .stat-card.active::after {
+            content: '✓';
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
         }
 
         .stat-card h3 {
@@ -591,39 +622,39 @@
         <!-- Search Quality Tab -->
         <div id="search-quality" class="tab-content">
             <div class="table-card" style="margin-bottom: 20px;">
-                <h2>👥 User Search Quality Ratings</h2>
+                <h2>👥 User Search Quality Ratings <span style="font-size: 0.7em; color: #999; font-weight: normal;">(Click cards to filter)</span></h2>
                 <div class="stats-grid">
-                    <div class="stat-card">
+                    <div class="stat-card" onclick="filterUserRatings('all')" data-filter="all">
                         <h3>Total Ratings</h3>
                         <div class="stat-value" id="totalUserRatings">0</div>
                         <div class="stat-label">From "Rate This Search"</div>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card" onclick="filterUserRatings('avg')" data-filter="avg">
                         <h3>Average Rating</h3>
                         <div class="stat-value" id="avgUserRating">0</div>
                         <div class="stat-label">Out of 5 stars</div>
                     </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);" onclick="filterUserRatings(5)" data-filter="5">
                         <h3>⭐⭐⭐⭐⭐</h3>
                         <div class="stat-value" id="rating5Count">0</div>
                         <div class="stat-label">Excellent</div>
                     </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #8BC34A 0%, #7CB342 100%);">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #8BC34A 0%, #7CB342 100%);" onclick="filterUserRatings(4)" data-filter="4">
                         <h3>⭐⭐⭐⭐</h3>
                         <div class="stat-value" id="rating4Count">0</div>
                         <div class="stat-label">Good</div>
                     </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #FFC107 0%, #FFB300 100%);">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #FFC107 0%, #FFB300 100%);" onclick="filterUserRatings(3)" data-filter="3">
                         <h3>⭐⭐⭐</h3>
                         <div class="stat-value" id="rating3Count">0</div>
                         <div class="stat-label">Average</div>
                     </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);" onclick="filterUserRatings(2)" data-filter="2">
                         <h3>⭐⭐</h3>
                         <div class="stat-value" id="rating2Count">0</div>
                         <div class="stat-label">Poor</div>
                     </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);" onclick="filterUserRatings(1)" data-filter="1">
                         <h3>⭐</h3>
                         <div class="stat-value" id="rating1Count">0</div>
                         <div class="stat-label">Very Poor</div>
@@ -710,23 +741,29 @@
 
         <!-- Feedback Tab -->
         <div id="feedback" class="tab-content">
+            <h2 style="margin-bottom: 15px;">Property Feedback <span style="font-size: 0.7em; color: #999; font-weight: normal;">(Click cards to filter)</span></h2>
             <div class="stats-grid">
-                <div class="stat-card">
+                <div class="stat-card" onclick="filterFeedback('all')" data-filter="all">
+                    <h3>All Feedback</h3>
+                    <div class="stat-value" id="allFeedbackCount">0</div>
+                    <div class="stat-label">Total responses</div>
+                </div>
+                <div class="stat-card" onclick="filterFeedback('up')" data-filter="up" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);">
                     <h3>Thumbs Up</h3>
                     <div class="stat-value" id="thumbsUpCount">0</div>
                     <div class="stat-label" id="thumbsUpPercent">0%</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="filterFeedback('down')" data-filter="down" style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);">
                     <h3>Thumbs Down</h3>
                     <div class="stat-value" id="thumbsDownCount">0</div>
                     <div class="stat-label" id="thumbsDownPercent">0%</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="filterFeedback('with_text')" data-filter="with_text">
                     <h3>With Comments</h3>
                     <div class="stat-value" id="feedbackWithText">0</div>
                     <div class="stat-label">Detailed feedback</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="filterFeedback('with_categories')" data-filter="with_categories">
                     <h3>With Categories</h3>
                     <div class="stat-value" id="feedbackWithCategories">0</div>
                     <div class="stat-label">Issue types selected</div>
@@ -894,6 +931,95 @@
         const PASSWORD_SESSION_KEY = 'hearth_demo_auth'; // Shared with main demo
         let charts = {};
         let refreshTimer = null;
+
+        // Global data storage for filtering
+        let allUserRatings = [];
+        let allFeedback = [];
+        let allSearches = [];
+
+        // Filter Functions
+        function filterUserRatings(filter) {
+            // Remove active class from all cards in this section
+            document.querySelectorAll('#search-quality .stat-card').forEach(card => {
+                card.classList.remove('active');
+            });
+
+            // Add active class to clicked card
+            event.currentTarget.classList.add('active');
+
+            const tbody = document.querySelector('#userRatingsTable tbody');
+            tbody.innerHTML = '';
+
+            let filteredRatings = allUserRatings;
+
+            if (filter !== 'all' && filter !== 'avg') {
+                filteredRatings = allUserRatings.filter(r => r.rating === filter);
+            }
+
+            if (filteredRatings.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">No ratings match this filter</td></tr>';
+                return;
+            }
+
+            filteredRatings.forEach(rating => {
+                const row = tbody.insertRow();
+                const stars = '⭐'.repeat(rating.rating);
+                const categories = rating.feedback_categories?.join(', ') || '-';
+                row.innerHTML = `
+                    <td>${formatTime(rating.timestamp)}</td>
+                    <td>${escapeHtml(rating.search_query)}</td>
+                    <td style="font-size: 1.2em;">${stars} (${rating.rating})</td>
+                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(rating.feedback_text || '-')}</td>
+                    <td>${escapeHtml(categories)}</td>
+                    <td>${rating.total_results}</td>
+                    <td>${rating.device_type}</td>
+                `;
+            });
+        }
+
+        function filterFeedback(filter) {
+            // Remove active class from all cards in this section
+            document.querySelectorAll('#feedback .stat-card').forEach(card => {
+                card.classList.remove('active');
+            });
+
+            // Add active class to clicked card
+            event.currentTarget.classList.add('active');
+
+            const tbody = document.querySelector('#feedbackTable tbody');
+            tbody.innerHTML = '';
+
+            let filteredFeedback = allFeedback;
+
+            if (filter === 'up') {
+                filteredFeedback = allFeedback.filter(f => f.rating === 'up');
+            } else if (filter === 'down') {
+                filteredFeedback = allFeedback.filter(f => f.rating === 'down');
+            } else if (filter === 'with_text') {
+                filteredFeedback = allFeedback.filter(f => f.feedback_text && f.feedback_text.trim().length > 0);
+            } else if (filter === 'with_categories') {
+                filteredFeedback = allFeedback.filter(f => f.categories && f.categories.length > 0);
+            }
+
+            if (filteredFeedback.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No feedback matches this filter</td></tr>';
+                return;
+            }
+
+            filteredFeedback.forEach(fb => {
+                const row = tbody.insertRow();
+                const ratingEmoji = fb.rating === 'up' ? '👍' : '👎';
+                const categories = fb.categories?.join(', ') || '-';
+                row.innerHTML = `
+                    <td>${formatTime(fb.timestamp)}</td>
+                    <td style="font-size: 1.3em;">${ratingEmoji}</td>
+                    <td>${fb.zpid}</td>
+                    <td>${escapeHtml(fb.search_query || '-')}</td>
+                    <td>${escapeHtml(categories)}</td>
+                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(fb.feedback_text || '-')}</td>
+                `;
+            });
+        }
 
         // Password Protection
         function checkPassword() {
@@ -1118,6 +1244,9 @@
                 const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/search-quality-ratings`);
                 const data = await response.json();
 
+                // Store data globally for filtering
+                allUserRatings = data.recent_ratings || [];
+
                 // Update stats
                 document.getElementById('totalUserRatings').textContent = data.total_ratings || 0;
                 document.getElementById('avgUserRating').textContent = data.avg_rating?.toFixed(1) || 0;
@@ -1127,16 +1256,16 @@
                 document.getElementById('rating2Count').textContent = data.rating_breakdown?.poor || 0;
                 document.getElementById('rating1Count').textContent = data.rating_breakdown?.very_poor || 0;
 
-                // Load user ratings table
+                // Load user ratings table (show all by default)
                 const tbody = document.querySelector('#userRatingsTable tbody');
                 tbody.innerHTML = '';
 
-                if (!data.recent_ratings || data.recent_ratings.length === 0) {
+                if (allUserRatings.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">No user ratings yet</td></tr>';
                     return;
                 }
 
-                data.recent_ratings.forEach(rating => {
+                allUserRatings.forEach(rating => {
                     const row = tbody.insertRow();
                     const stars = '⭐'.repeat(rating.rating);
                     const categories = rating.feedback_categories?.join(', ') || '-';
@@ -1209,6 +1338,8 @@
             const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/feedback-details`);
             const data = await response.json();
 
+            const total = (data.thumbs_up || 0) + (data.thumbs_down || 0);
+            document.getElementById('allFeedbackCount').textContent = total;
             document.getElementById('thumbsUpCount').textContent = data.thumbs_up || 0;
             document.getElementById('thumbsUpPercent').textContent = `${data.thumbs_up_percent || 0}%`;
             document.getElementById('thumbsDownCount').textContent = data.thumbs_down || 0;
@@ -1224,15 +1355,18 @@
             const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/all-feedback`);
             const data = await response.json();
 
+            // Store data globally for filtering
+            allFeedback = data.feedback || [];
+
             const tbody = document.querySelector('#feedbackTable tbody');
             tbody.innerHTML = '';
 
-            if (!data.feedback || data.feedback.length === 0) {
+            if (allFeedback.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No feedback yet</td></tr>';
                 return;
             }
 
-            data.feedback.forEach(fb => {
+            allFeedback.forEach(fb => {
                 const row = tbody.insertRow();
                 const rating = fb.rating === 'up' ? '👍' : '👎';
                 const categories = fb.categories ?
