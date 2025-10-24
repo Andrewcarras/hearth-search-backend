@@ -14,7 +14,7 @@ NUMPY_LAYER="arn:aws:lambda:us-east-1:692859949078:layer:scikit-numpy:2"
 # Environment variables for both Lambdas
 ENV_VARS="Variables={
     OS_HOST=search-hearth-opensearch-llfelt5zzkf2d7eead2ck6jm5a.us-east-1.es.amazonaws.com,
-    OS_INDEX=listings,
+    OS_INDEX=listings-v2,
     TEXT_EMBED_MODEL=amazon.titan-embed-text-v2:0,
     IMAGE_EMBED_MODEL=amazon.titan-embed-image-v1,
     LLM_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0,
