@@ -22,6 +22,7 @@ aws s3 cp ui/test_knn_image.html s3://demo-hearth-data/ui/test_knn_image.html
 aws s3 cp ui/multi_query_comparison.html s3://demo-hearth-data/ui/multi_query_comparison.html
 aws s3 cp ui/analytics.html s3://demo-hearth-data/ui/analytics.html
 aws s3 cp ui/analytics.js s3://demo-hearth-data/ui/analytics.js
+aws s3 cp ui/style_detector.html s3://demo-hearth-data/ui/style_detector.html
 
 # Deploy to EC2 via SSM
 COMMAND_ID=$(aws ssm send-command \
@@ -39,6 +40,7 @@ COMMAND_ID=$(aws ssm send-command \
         "sudo aws s3 cp s3://demo-hearth-data/ui/multi_query_comparison.html /usr/share/nginx/html/multi_query_comparison.html",
         "sudo aws s3 cp s3://demo-hearth-data/ui/analytics.html /usr/share/nginx/html/analytics.html",
         "sudo aws s3 cp s3://demo-hearth-data/ui/analytics.js /usr/share/nginx/html/analytics.js",
+        "sudo aws s3 cp s3://demo-hearth-data/ui/style_detector.html /usr/share/nginx/html/style_detector.html",
         "sudo nginx -s reload",
         "echo UI deployed successfully"
     ]' \

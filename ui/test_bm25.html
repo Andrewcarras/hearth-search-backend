@@ -13,7 +13,7 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #f7f8fa;
             min-height: 100vh;
             padding: 20px;
         }
@@ -36,7 +36,7 @@
 
         .nav-menu a {
             text-decoration: none;
-            color: #667eea;
+            color: #006aff;
             font-weight: 500;
             padding: 8px 16px;
             border-radius: 5px;
@@ -48,7 +48,7 @@
         }
 
         .nav-menu a.active {
-            background: #667eea;
+            background: #006aff;
             color: white;
         }
 
@@ -111,7 +111,7 @@
         }
 
         .button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #f7f8fa;
             color: white;
             border: none;
             padding: 12px 30px;
@@ -151,7 +151,7 @@
         }
 
         .result-rank {
-            background: #667eea;
+            background: #006aff;
             color: white;
             padding: 5px 15px;
             border-radius: 20px;
@@ -161,7 +161,7 @@
         .result-score {
             font-size: 20px;
             font-weight: 700;
-            color: #667eea;
+            color: #006aff;
         }
 
         .result-description {
@@ -231,7 +231,7 @@
         }
 
         .term-tag {
-            background: #667eea;
+            background: #006aff;
             color: white;
             padding: 4px 12px;
             border-radius: 15px;
@@ -240,7 +240,11 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="header">
+        <div class="header-content">
+            <h1>BM25 Text Matching Test</h1>
+            <p>Test BM25 (Best Matching 25) algorithm for keyword-based text matching on property descriptions</p>
+        </div>
         <nav class="nav-menu">
             <a href="search.html">Main Search</a>
             <a href="test_bm25.html" class="active">BM25 Test</a>
@@ -248,15 +252,12 @@
             <a href="test_knn_image.html">kNN Image Test</a>
             <a href="admin.html">Admin Lookup</a>
             <a href="crud.html">CRUD Manager</a>
-            <a href="analytics.html">Analytics</a>
-        
-            <a href="public_analytics.html">Public Testing</a>
+            <a href="analytics.html">Analytics Dashboard</a>
+            <a href="style_detector.html">Style Detector</a>
         </nav>
+    </div>
 
-        <div class="header">
-            <h1>BM25 Text Matching Test</h1>
-            <p class="subtitle">Test BM25 (Best Matching 25) algorithm for keyword-based text matching on property descriptions</p>
-        </div>
+    <div class="container">
 
         <div class="test-section">
             <div class="info-box">

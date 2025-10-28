@@ -835,23 +835,24 @@
 
         <!-- Properties Tab -->
         <div id="properties" class="tab-content">
+            <h2 style="margin-bottom: 15px;">Property Performance <span style="font-size: 0.7em; color: #999; font-weight: normal;">(Click cards to filter)</span></h2>
             <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>Properties Viewed</h3>
+                <div class="stat-card" onclick="filterProperties('all')" data-filter="all">
+                    <h3>All Properties</h3>
                     <div class="stat-value" id="propertiesViewed">0</div>
                     <div class="stat-label">Unique ZPIDs</div>
                 </div>
-                <div class="stat-card">
-                    <h3>Properties with Feedback</h3>
+                <div class="stat-card" onclick="filterProperties('with_feedback')" data-filter="with_feedback">
+                    <h3>With Feedback</h3>
                     <div class="stat-value" id="propertiesWithFeedback">0</div>
                     <div class="stat-label">Rated properties</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="filterProperties('highest_rated')" data-filter="highest_rated" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);">
                     <h3>Highest Rated</h3>
                     <div class="stat-value" id="highestRated">-</div>
                     <div class="stat-label">Best ZPID</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="filterProperties('most_viewed')" data-filter="most_viewed" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                     <h3>Most Viewed</h3>
                     <div class="stat-value" id="mostViewed">-</div>
                     <div class="stat-label">Popular ZPID</div>
@@ -878,23 +879,24 @@
 
         <!-- Issues Tab -->
         <div id="issues" class="tab-content">
+            <h2 style="margin-bottom: 15px;">Bug Reports <span style="font-size: 0.7em; color: #999; font-weight: normal;">(Click cards to filter)</span></h2>
             <div class="stats-grid">
-                <div class="stat-card">
+                <div class="stat-card" onclick="filterIssues('all')" data-filter="all">
                     <h3>Total Issues</h3>
                     <div class="stat-value" id="issuesTotal">0</div>
                     <div class="stat-label">Bug reports</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="filterIssues('search_error')" data-filter="search_error" style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);">
                     <h3>Search Errors</h3>
                     <div class="stat-value" id="issuesSearchError">0</div>
                     <div class="stat-label">Search not working</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="filterIssues('wrong_results')" data-filter="wrong_results" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);">
                     <h3>Wrong Results</h3>
                     <div class="stat-value" id="issuesWrongResults">0</div>
                     <div class="stat-label">Quality issues</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="filterIssues('ui_bug')" data-filter="ui_bug" style="background: linear-gradient(135deg, #FFC107 0%, #FFB300 100%);">
                     <h3>UI Bugs</h3>
                     <div class="stat-value" id="issuesUIBug">0</div>
                     <div class="stat-label">Display issues</div>
@@ -934,6 +936,8 @@
         // Global data storage for filtering
         let allUserRatings = [];
         let allFeedback = [];
+        let allProperties = [];
+        let allIssues = [];
         let allSearches = [];
 
         // Filter Functions
@@ -1016,6 +1020,95 @@
                     <td>${escapeHtml(fb.search_query || '-')}</td>
                     <td>${escapeHtml(categories)}</td>
                     <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(fb.feedback_text || '-')}</td>
+                `;
+            });
+        }
+
+        function filterProperties(filter) {
+            // Remove active class from all cards in this section
+            document.querySelectorAll('#properties .stat-card').forEach(card => {
+                card.classList.remove('active');
+            });
+
+            // Add active class to clicked card
+            event.currentTarget.classList.add('active');
+
+            const tbody = document.querySelector('#propertiesTable tbody');
+            tbody.innerHTML = '';
+
+            let filteredProperties = allProperties;
+
+            if (filter === 'with_feedback') {
+                filteredProperties = allProperties.filter(p => (p.thumbs_up || 0) + (p.thumbs_down || 0) > 0);
+            } else if (filter === 'highest_rated') {
+                // Sort by net score (thumbs_up - thumbs_down), take top properties
+                filteredProperties = [...allProperties].sort((a, b) => {
+                    const scoreA = (a.thumbs_up || 0) - (a.thumbs_down || 0);
+                    const scoreB = (b.thumbs_up || 0) - (b.thumbs_down || 0);
+                    return scoreB - scoreA;
+                }).slice(0, 10); // Top 10 highest rated
+            } else if (filter === 'most_viewed') {
+                // Sort by appearances
+                filteredProperties = [...allProperties].sort((a, b) =>
+                    (b.appearances || 0) - (a.appearances || 0)
+                ).slice(0, 10); // Top 10 most viewed
+            }
+
+            if (filteredProperties.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No properties match this filter</td></tr>';
+                return;
+            }
+
+            filteredProperties.forEach(prop => {
+                const row = tbody.insertRow();
+                const netScore = (prop.thumbs_up || 0) - (prop.thumbs_down || 0);
+                const issues = prop.common_issues ? prop.common_issues.join(', ') : '-';
+
+                row.innerHTML = `
+                    <td style="font-family: monospace;">${prop.zpid}</td>
+                    <td>${prop.appearances || 0}</td>
+                    <td style="color: #4CAF50;">${prop.thumbs_up || 0}</td>
+                    <td style="color: #f44336;">${prop.thumbs_down || 0}</td>
+                    <td style="font-weight: bold; color: ${netScore >= 0 ? '#4CAF50' : '#f44336'};">${netScore > 0 ? '+' : ''}${netScore}</td>
+                    <td>${issues}</td>
+                `;
+            });
+        }
+
+        function filterIssues(filter) {
+            // Remove active class from all cards in this section
+            document.querySelectorAll('#issues .stat-card').forEach(card => {
+                card.classList.remove('active');
+            });
+
+            // Add active class to clicked card
+            event.currentTarget.classList.add('active');
+
+            const tbody = document.querySelector('#issuesTable tbody');
+            tbody.innerHTML = '';
+
+            let filteredIssues = allIssues;
+
+            if (filter !== 'all') {
+                filteredIssues = allIssues.filter(issue => issue.issue_type === filter);
+            }
+
+            if (filteredIssues.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No issues match this filter</td></tr>';
+                return;
+            }
+
+            filteredIssues.forEach(issue => {
+                const row = tbody.insertRow();
+                const errorCount = issue.console_errors?.length || 0;
+
+                row.innerHTML = `
+                    <td>${formatTime(issue.timestamp)}</td>
+                    <td><span class="issue-type issue-${issue.issue_type}">${issue.issue_type?.replace('_', ' ') || 'unknown'}</span></td>
+                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(issue.description || '-')}</td>
+                    <td>${escapeHtml(issue.search_query || '-')}</td>
+                    <td style="color: ${errorCount > 0 ? '#f44336' : '#999'};">${errorCount}</td>
+                    <td style="font-family: monospace; font-size: 11px;">${issue.session_id?.substring(0, 12) || '-'}</td>
                 `;
             });
         }
@@ -1441,15 +1534,18 @@
             const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/property-performance`);
             const data = await response.json();
 
+            // Store data globally for filtering
+            allProperties = data.properties || [];
+
             const tbody = document.querySelector('#propertiesTable tbody');
             tbody.innerHTML = '';
 
-            if (!data.properties || data.properties.length === 0) {
+            if (allProperties.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No property data yet</td></tr>';
                 return;
             }
 
-            data.properties.forEach(prop => {
+            allProperties.forEach(prop => {
                 const row = tbody.insertRow();
                 const netScore = (prop.thumbs_up || 0) - (prop.thumbs_down || 0);
                 const issues = prop.common_issues ? prop.common_issues.join(', ') : '-';
@@ -1483,15 +1579,18 @@
             const response = await fetch(`${ANALYTICS_ENDPOINT}/analytics/all-issues`);
             const data = await response.json();
 
+            // Store data globally for filtering
+            allIssues = data.issues || [];
+
             const tbody = document.querySelector('#issuesTable tbody');
             tbody.innerHTML = '';
 
-            if (!data.issues || data.issues.length === 0) {
+            if (allIssues.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">No issues reported yet</td></tr>';
                 return;
             }
 
-            data.issues.forEach(issue => {
+            allIssues.forEach(issue => {
                 const row = tbody.insertRow();
                 const errorCount = issue.console_errors?.length || 0;
 
